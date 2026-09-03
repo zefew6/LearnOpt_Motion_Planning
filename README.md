@@ -235,25 +235,14 @@ simulation.
 Select the planner and controller near the top of `uav_ac/main.py`:
 
 ```python
-PLANNER = "gcs"          # "gcopter", "gcs", or "mini_snap"
-CONTROLLER = "mpc"       # "mpc" or "cascaded"
-VISUALIZE = False        # False or True convex region visualize
+PLANNER = "gcs"          # "gcopter", "gcs", or "mini_snap" for motion planner selection
+CONTROLLER = "mpc"       # "mpc" or "cascaded" for controller selection
+VISUALIZE = False        # "False" or "True"  for convex region visualization
 ```
 
 The GCS planner uses `gcs_building.xml`. GCOPTER and Minimum Snap use
 `lab_course.xml`.
 
-
-## Coordinate convention
-
-Planning and control use the aerospace NED/FRD convention:
-
-- `x`: north/forward
-- `y`: east/right
-- `z`: down; altitude is represented by a negative `z`
-
-The MuJoCo adapter converts between this convention and MuJoCo's ENU/FLU
-world and body conventions.
 
 ## Repository structure
 
