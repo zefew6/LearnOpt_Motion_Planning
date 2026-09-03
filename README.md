@@ -65,9 +65,7 @@ https://github.com/user-attachments/assets/0cb63fd2-9fe3-4f56-8253-874900b20b00
 
 ### FIRI
 
-FIRI (Fast Iterative Regional Inflation) converts obstacle-free seed points or
-path segments into large convex regions that can be used as a safe flight
-corridor. Each region is stored in half-space form,
+FIRI constructs collision-free convex regions around seed points or path segments to form a safe flight corridor. Each region is represented in half-space form,
 
 ```math
 \mathcal{P}
@@ -78,52 +76,14 @@ corridor. Each region is stored in half-space form,
 A\mathbf{x}\le \mathbf{b}
 \right\}.
 ```
-FIRI alternates between two operations:
 
-1. **Restrictive Inflation (RsI):** construct separating half-spaces that exclude
-   obstacles while keeping the prescribed seed set inside the region.
-2. **Maximum-Volume Inscribed Ellipsoid (MVIE):** enlarge an ellipsoid inside the
-   current polytope and use it to guide the next inflation step.
-
-For an ellipsoid
-
-```math
-\mathcal{E}(C,\mathbf{d})
-=
-\left\{
-C\mathbf{u}+\mathbf{d}
-\mid
-\|\mathbf{u}\|_2\le 1
-\right\},
-```
-contained in a polytope
-$\mathcal{P}=\{\mathbf{x}\mid \mathbf{a}_j^\top\mathbf{x}\le b_j\}$,
-the containment constraints can be written as
-
-```math
-\|C^\top\mathbf{a}_j\|_2
-+
-\mathbf{a}_j^\top\mathbf{d}
-\le b_j,
-\qquad \forall j.
-```
-The resulting overlapping convex polytopes form the safe flight corridor used
-by the trajectory optimizers.
+The algorithm alternates between obstacle-separating half-space construction and maximum-volume inscribed ellipsoid (MVIE) optimization. The resulting overlapping polytopes are used as geometric constraints for trajectory optimization.
 
 ![FIRI corridor overview](docs/firi_corridor_overview.png)
 
-![FIRI corridor top view](docs/firi_corridor_top.png)
-
-![FIRI corridor side view](docs/firi_corridor_side.png)
-
 ### GCOPTER / MINCO
 
-GCOPTER performs continuous trajectory optimization inside the convex corridor.
-Its key component is MINCO, a sparse polynomial trajectory representation that
-eliminates the full set of polynomial coefficients and exposes only a compact
-set of spatial and temporal decision variables.
-
-For segment $i$, a polynomial trajectory can be written as
+GCOPTER optimizes smooth multicopter trajectories inside the convex corridor using the MINCO representation. For segment $i$,
 
 ```math
 \mathbf{p}_i(t)
@@ -132,28 +92,23 @@ C_i^\top\boldsymbol{\beta}(t),
 \qquad
 \boldsymbol{\beta}(t)
 =
-[1,t,\ldots,t^{2s-1}]^\top ,
-\qquad
-t\in[0,T_i].
+[1,t,\ldots,t^{2s-1}]^\top .
 ```
-MINCO exploits the optimality conditions of the unconstrained control-effort
-problem to recover the coefficients from the intermediate states and segment
-durations,
+
+MINCO recovers the polynomial coefficients from compact spatial and temporal variables,
 
 ```math
 C
 =
 \mathcal{M}(\mathbf{q},\mathbf{T}),
 ```
-so the optimizer works with the much smaller variable set
-$(\mathbf{q},\mathbf{T})$ rather than directly optimizing every polynomial
-coefficient. In this project, the implemented planner uses the $s=3$ MINCO
-variant, giving piecewise quintic trajectories.
 
-A representative GCOPTER objective is
+so the optimizer works directly with $(\mathbf{q},\mathbf{T})$. This project uses the $s=3$ variant, corresponding to piecewise quintic trajectories.
+
+A representative objective is
 
 ```math
-J(\mathbf{q},\mathbf{T})
+J
 =
 \int_{0}^{T_\Sigma}
 \left\|
@@ -163,37 +118,23 @@ J(\mathbf{q},\mathbf{T})
 \rho T_\Sigma
 +
 J_{\mathrm{pen}},
-\qquad
-T_\Sigma=\sum_i T_i .
 ```
-The first term penalizes control effort, the second trades trajectory duration
-against smoothness, and $J_{\mathrm{pen}}$ collects violations of state-input
-constraints. In the implementation, velocity, acceleration, thrust, tilt-angle,
-and body-rate constraints are evaluated along the trajectory and introduced
-through smooth integrated penalties.
 
-Geometric feasibility is handled through smooth mappings that keep the spatial
-decision variables inside the corresponding convex corridor. Segment durations
-are parameterized to remain positive. The resulting unconstrained nonlinear
-problem is optimized with L-BFGS.
-
-Compared with a waypoint-only minimum-snap baseline, GCOPTER jointly reshapes
-the trajectory and reallocates segment time while accounting for both corridor
-geometry and multicopter feasibility.
+where $J_{\mathrm{pen}}$ includes geometric and multicopter feasibility penalties. The resulting unconstrained nonlinear problem is optimized with L-BFGS.
 
 ### GCS
 
-Graph of Convex Sets (GCS) treats each collision-free convex region as a graph
-vertex and feasible transitions between overlapping regions as graph edges,
+Graph of Convex Sets (GCS) represents each collision-free convex region as a graph vertex,
 
 ```math
 G=(V,E),
 \qquad
 v\in V
 \longleftrightarrow
-\mathcal{X}_v\subset\mathbb{R}^n .
+\mathcal{X}_v .
 ```
-A trajectory segment inside a region is represented with a Bézier curve,
+
+A trajectory segment inside region $\mathcal{X}_v$ is represented by a Bézier curve,
 
 ```math
 \mathbf{r}_v(\tau)
@@ -201,62 +142,25 @@ A trajectory segment inside a region is represented with a Bézier curve,
 \sum_{k=0}^{d}
 B_{k,d}(\tau)\mathbf{P}_{v,k},
 \qquad
-\tau\in[0,1],
+\mathbf{P}_{v,k}\in\mathcal{X}_v .
 ```
-where $B_{k,d}$ are Bernstein basis polynomials. Because a Bézier curve lies in
-the convex hull of its control points, imposing
 
-```math
-\mathbf{P}_{v,k}\in\mathcal{X}_v
-```
-guarantees that the entire segment remains inside the convex region.
-
-Discrete route selection can be described with edge variables $z_e$. The graph
-flow constraints have the form
-
-```math
-\sum_{e\in\delta^{+}(v)} z_e
--
-\sum_{e\in\delta^{-}(v)} z_e
-=
-\begin{cases}
-1, & v=s,\\
--1, & v=t,\\
-0, & \text{otherwise},
-\end{cases}
-```
-with $z_e\in\{0,1\}$ in the mixed-integer formulation. GCS applies perspective
-reformulations and relaxes these variables to obtain a tight convex relaxation;
-a discrete path is then recovered by rounding, followed by a convex restriction
-on that path.
-
-Therefore, GCS couples
-
-1. discrete selection of a sequence of convex regions;
-2. continuous Bézier control-point optimization;
-3. region-membership, connection, and smoothness constraints; and
-4. convex trajectory costs
-
-within one optimization framework.
-
-The example in this repository uses a two-storey MuJoCo building maze and a
-convex cover of its collision-free volume.
+Because a Bézier curve lies in the convex hull of its control points, the region constraint guarantees that the whole segment remains inside the convex set. GCS uses convex relaxation to jointly handle discrete region selection and continuous trajectory optimization.
 
 ### Nonlinear MPC
 
-Trajectory tracking is formulated as a finite-horizon nonlinear optimal-control
-problem. Using the discrete dynamics
+Trajectory tracking is formulated as a finite-horizon nonlinear optimal-control problem with
 
 ```math
 \mathbf{x}_{k+1}
 =
 f_d(\mathbf{x}_k,\mathbf{u}_k),
 ```
-the controller repeatedly solves
+
+and objective
 
 ```math
 \min_{\mathbf{u}_{0:N-1}}
-\;
 \sum_{k=0}^{N-1}
 \left(
 \|\mathbf{x}_k-\mathbf{x}^{\mathrm{ref}}_k\|_Q^2
@@ -264,32 +168,16 @@ the controller repeatedly solves
 \|\mathbf{u}_k-\mathbf{u}^{\mathrm{ref}}_k\|_R^2
 \right)
 +
-\|\mathbf{x}_N-\mathbf{x}^{\mathrm{ref}}_N\|_{Q_f}^2 ,
+\|\mathbf{x}_N-\mathbf{x}^{\mathrm{ref}}_N\|_{Q_f}^2 .
 ```
-subject to the vehicle dynamics and the controller's state/input bounds. Only
-the first optimized control is applied before the problem is solved again at the
-next control step.
 
-The implementation uses **acados** as the nonlinear optimal-control solver and
-adds terminal feedback for improved tracking robustness.
+The controller is implemented with **acados** and applies the first optimized input in a receding-horizon manner. Terminal feedback is added to improve tracking robustness.
 
 ### Planned: Biconvex Minimum-Time Planning
 
-The planned biconvex planner targets smooth minimum-time trajectories around
-convex obstacles while supporting derivative constraints of arbitrary order.
-The original method reformulates the duration and derivative constraints through
-a change of variables and enforces collision avoidance with time-varying
-separating hyperplanes.
+The planned biconvex planner targets smooth minimum-time trajectories around convex obstacles with derivative constraints. It alternates between optimizing obstacle-separating hyperplanes and optimizing the trajectory with those hyperplanes fixed.
 
-Its computation alternates between two convex subproblems:
-
-1. optimize maximum-margin separating planes for the obstacles currently
-   intersected by the trajectory;
-2. optimize the smooth trajectory while holding those planes fixed.
-
-This produces an anytime biconvex algorithm that can start from a simple
-collision-free polygonal path without first constructing a full convex
-decomposition of free space.
+This yields an anytime biconvex optimization procedure that can start from a collision-free polygonal path without requiring a complete convex decomposition of the free space.
 
 
 ## Setup and running
@@ -349,31 +237,12 @@ Select the planner and controller near the top of `uav_ac/main.py`:
 ```python
 PLANNER = "gcs"          # "gcopter", "gcs", or "mini_snap"
 CONTROLLER = "mpc"       # "mpc" or "cascaded"
+VISUALIZE = False        # False or True convex region visualize
 ```
 
 The GCS planner uses `gcs_building.xml`. GCOPTER and Minimum Snap use
 `lab_course.xml`.
 
-Run the wind-disturbance environment:
-
-```bash
-uv run python -m uav_ac.wind
-```
-
-The controller used by the wind example is selected through `CONTROLLER` in
-`uav_ac/wind.py`.
-
-Run the planning tests:
-
-```bash
-uv run --extra dev pytest -q tests/unit/planning -o addopts=
-```
-
-Run the complete test suite with coverage:
-
-```bash
-uv run --extra dev pytest -q -p pytest_cov.plugin
-```
 
 ## Coordinate convention
 
