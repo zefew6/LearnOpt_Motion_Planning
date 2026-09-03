@@ -33,24 +33,24 @@ the FIRI figures below.
 
 ### GCOPTER + Cascaded Controller
 
-<!-- Replace the URL below with the GitHub user-attachments URL of gcopter_cascaded.mp4 -->
-https://github.com/user-attachments/assets/GCOPTER_VIDEO_ID
+<!-- To embed the video inline, replace the link below with the real GitHub user-attachments URL. -->
+[Watch video](docs/videos/gcopter_cascaded.mp4)
 
 **Planner:** FIRI + GCOPTER  
 **Controller:** Cascaded controller
 
 ### Minimum Snap + Cascaded Controller
 
-<!-- Replace the URL below with the GitHub user-attachments URL of minisnap_cascaded.mp4 -->
-https://github.com/user-attachments/assets/MINISNAP_VIDEO_ID
+<!-- To embed the video inline, replace the link below with the real GitHub user-attachments URL. -->
+[Watch video](docs/videos/minisnap_cascaded.mp4)
 
 **Planner:** Minimum Snap baseline  
 **Controller:** Cascaded controller
 
 ### GCS + MPC
 
-<!-- Replace the URL below with the GitHub user-attachments URL of gcs_mpc.mp4 -->
-https://github.com/user-attachments/assets/GCS_VIDEO_ID
+<!-- To embed the video inline, replace the link below with the real GitHub user-attachments URL. -->
+[Watch video](docs/videos/gcs_mpc.mp4)
 
 **Planner:** GCS  
 **Controller:** Nonlinear MPC
@@ -63,7 +63,7 @@ FIRI (Fast Iterative Regional Inflation) converts obstacle-free seed points or
 path segments into large convex regions that can be used as a safe flight
 corridor. Each region is stored in half-space form,
 
-$$
+```math
 \mathcal{P}
 =
 \left\{
@@ -71,8 +71,7 @@ $$
 \mid
 A\mathbf{x}\le \mathbf{b}
 \right\}.
-$$
-
+```
 FIRI alternates between two operations:
 
 1. **Restrictive Inflation (RsI):** construct separating half-spaces that exclude
@@ -82,7 +81,7 @@ FIRI alternates between two operations:
 
 For an ellipsoid
 
-$$
+```math
 \mathcal{E}(C,\mathbf{d})
 =
 \left\{
@@ -90,20 +89,18 @@ C\mathbf{u}+\mathbf{d}
 \mid
 \|\mathbf{u}\|_2\le 1
 \right\},
-$$
-
+```
 contained in a polytope
 $\mathcal{P}=\{\mathbf{x}\mid \mathbf{a}_j^\top\mathbf{x}\le b_j\}$,
 the containment constraints can be written as
 
-$$
+```math
 \|C^\top\mathbf{a}_j\|_2
 +
 \mathbf{a}_j^\top\mathbf{d}
 \le b_j,
 \qquad \forall j.
-$$
-
+```
 The resulting overlapping convex polytopes form the safe flight corridor used
 by the trajectory optimizers.
 
@@ -122,7 +119,7 @@ set of spatial and temporal decision variables.
 
 For segment $i$, a polynomial trajectory can be written as
 
-$$
+```math
 \mathbf{p}_i(t)
 =
 C_i^\top\boldsymbol{\beta}(t),
@@ -132,18 +129,16 @@ C_i^\top\boldsymbol{\beta}(t),
 [1,t,\ldots,t^{2s-1}]^\top ,
 \qquad
 t\in[0,T_i].
-$$
-
+```
 MINCO exploits the optimality conditions of the unconstrained control-effort
 problem to recover the coefficients from the intermediate states and segment
 durations,
 
-$$
+```math
 C
 =
 \mathcal{M}(\mathbf{q},\mathbf{T}),
-$$
-
+```
 so the optimizer works with the much smaller variable set
 $(\mathbf{q},\mathbf{T})$ rather than directly optimizing every polynomial
 coefficient. In this project, the implemented planner uses the $s=3$ MINCO
@@ -151,7 +146,7 @@ variant, giving piecewise quintic trajectories.
 
 A representative GCOPTER objective is
 
-$$
+```math
 J(\mathbf{q},\mathbf{T})
 =
 \int_{0}^{T_\Sigma}
@@ -164,8 +159,7 @@ J(\mathbf{q},\mathbf{T})
 J_{\mathrm{pen}},
 \qquad
 T_\Sigma=\sum_i T_i .
-$$
-
+```
 The first term penalizes control effort, the second trades trajectory duration
 against smoothness, and $J_{\mathrm{pen}}$ collects violations of state-input
 constraints. In the implementation, velocity, acceleration, thrust, tilt-angle,
@@ -186,38 +180,35 @@ geometry and multicopter feasibility.
 Graph of Convex Sets (GCS) treats each collision-free convex region as a graph
 vertex and feasible transitions between overlapping regions as graph edges,
 
-$$
+```math
 G=(V,E),
 \qquad
 v\in V
 \longleftrightarrow
 \mathcal{X}_v\subset\mathbb{R}^n .
-$$
-
+```
 A trajectory segment inside a region is represented with a Bézier curve,
 
-$$
+```math
 \mathbf{r}_v(\tau)
 =
 \sum_{k=0}^{d}
 B_{k,d}(\tau)\mathbf{P}_{v,k},
 \qquad
 \tau\in[0,1],
-$$
-
+```
 where $B_{k,d}$ are Bernstein basis polynomials. Because a Bézier curve lies in
 the convex hull of its control points, imposing
 
-$$
+```math
 \mathbf{P}_{v,k}\in\mathcal{X}_v
-$$
-
+```
 guarantees that the entire segment remains inside the convex region.
 
 Discrete route selection can be described with edge variables $z_e$. The graph
 flow constraints have the form
 
-$$
+```math
 \sum_{e\in\delta^{+}(v)} z_e
 -
 \sum_{e\in\delta^{-}(v)} z_e
@@ -227,8 +218,7 @@ $$
 -1, & v=t,\\
 0, & \text{otherwise},
 \end{cases}
-$$
-
+```
 with $z_e\in\{0,1\}$ in the mixed-integer formulation. GCS applies perspective
 reformulations and relaxes these variables to obtain a tight convex relaxation;
 a discrete path is then recovered by rounding, followed by a convex restriction
@@ -251,15 +241,14 @@ convex cover of its collision-free volume.
 Trajectory tracking is formulated as a finite-horizon nonlinear optimal-control
 problem. Using the discrete dynamics
 
-$$
+```math
 \mathbf{x}_{k+1}
 =
 f_d(\mathbf{x}_k,\mathbf{u}_k),
-$$
-
+```
 the controller repeatedly solves
 
-$$
+```math
 \min_{\mathbf{u}_{0:N-1}}
 \;
 \sum_{k=0}^{N-1}
@@ -270,8 +259,7 @@ $$
 \right)
 +
 \|\mathbf{x}_N-\mathbf{x}^{\mathrm{ref}}_N\|_{Q_f}^2 ,
-$$
-
+```
 subject to the vehicle dynamics and the controller's state/input bounds. Only
 the first optimized control is applied before the problem is solved again at the
 next control step.
