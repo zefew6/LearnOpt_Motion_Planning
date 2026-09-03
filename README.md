@@ -1,11 +1,10 @@
-## 3D UAV simulation and autonomous control for path tracking
+## LearnOpt Motion Planning
+Learning and Optimization for Robot Motion Planning and Control.
+
+This repository documents my exploration and implementation of interesting methods at the intersection of learning and optimization, with a focus on robot motion planning and control.
 
 This project is developed on top of
-[Mdhvince/UAV-Autonomous-control](https://github.com/Mdhvince/UAV-Autonomous-control).
-The upstream repository provides the original MuJoCo quadrotor simulation and
-basic trajectory-tracking foundation. This version extends it with
-geometry-aware planning, model-predictive control, and a wind-disturbance
-environment.
+[Mdhvince/UAV-Autonomous-control](https://github.com/Mdhvince/UAV-Autonomous-control), which provides the original MuJoCo quadrotor simulation and basic trajectory-tracking framework. LearnOpt extends it with optimization-based motion planning, model-predictive control, wind-disturbance simulation, and, progressively, learning-based planning and control methods.
 
 ## Current work and future work
 
