@@ -1,0 +1,45 @@
+# IDE and editor files
+.idea/
+.vscode/
+.junie/
+
+# Python environments, caches and test reports
+venv/
+.venv/
+uav/
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+*.html
+
+# Notebooks and local notes
+*ipynb
+*.ipynb_checkpoints/
+notes*
+
+# Build and runtime artifacts
+c_generated_code/
+*_ocp.json
+quadrotor_wrench_nmpc_ocp.json
+cache/
+logs/
+raw*
+deprecated/
+
+# Local scripts and sample applications
+*.sh
+*/app.py
+
+# External projects and integrations
+rl/
+AirSim/
+crazyflie-lib-python/
+crazyflie/
+
+# Media and downloaded content
+MJDATA.TXT
+MUJOCO_LOG.TXT
+youtube/
+
+# Python Code

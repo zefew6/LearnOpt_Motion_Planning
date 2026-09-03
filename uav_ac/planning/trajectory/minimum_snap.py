@@ -1,0 +1,397 @@
+"""Minimum-snap trajectory generation for waypoint paths."""
+
+from typing import List, Set
+
+import numpy as np
+
+
+class MinimumSnap:
+    # Extra time granted to the first and last splines. They start and end at rest,
+    # so at constant time allocation they would concentrate the strongest
+    # accelerations (hence the largest commanded tilts) of the whole trajectory.
+    START_END_TIME_FACTOR = 1.5
+    MIN_HORIZONTAL_SPEED_FOR_YAW = 1e-3
+
+    def __init__(self, path, obstacles, velocity=1.0, dt=0.01):
+        """
+        :param path: list of waypoints to generate the trajectory from
+        :param obstacles: list of obstacles to avoid
+        :param velocity: velocity of the trajectory (avg)
+        :param dt: time step between each point of the generated trajectory
+        """
+        self.coord_obstacles = obstacles
+        self.waypoints = path
+        self.velocity = velocity
+        self.dt = dt
+
+        self.times = []  # will hold the time between segment based on the velocity
+        self.spline_id = []  # identify on which spline the newly generated point belongs to
+        self.nb_splines = None  # number of splines in the trajectory
+        self.n_coeffs = 8  # number of boundary conditions per spline to respect minimum snap
+
+        self.positions = []  # will hold the desired positions of the trajectory
+        self.velocities = []  # will hold the desired velocities of the trajectory
+        self.accelerations = []  # will hold the desired accelerations of the trajectory
+        self.yaws = []  # will hold the desired yaws of the trajectory
+        self.jerks = []  # will hold the desired jerks of the trajectory
+        self.snap = []  # will hold the desired snap of the trajectory
+
+        self.full_trajectory = None  # will hold the full trajectory
+        self.row_counter = 0  # keep track of the current row being filled in the A matrix
+        self.A = None
+        self.b = None
+        self.coeffs = None  # will hold the coefficients of the trajectory
+
+    def reset(self):
+        self.times = []
+        self.spline_id = []
+        self.nb_splines = None
+        self.positions = []
+        self.velocities = []
+        self.accelerations = []
+        self.yaws = []
+        self.jerks = []
+        self.snap = []
+        self.full_trajectory = None
+        self.row_counter = 0
+        self.A = None
+        self.b = None
+        self.coeffs = None
+
+    def get_trajectory(self):
+        self._generate_collision_free_trajectory()
+        return self.full_trajectory
+
+    def _generate_collision_free_trajectory(self):
+        """
+        Generate a collision-free trajectory. The trajectory is generated in two steps:
+        1. Generate a minimum snap trajectory
+        2. Correct the trajectory to avoid collision with obstacles:
+        - if the trajectory goes through an obstacle, create a mid-point in the spline that goes through the obstacle
+        """
+        # self.obstacle_edges = []
+
+        if self.coord_obstacles is not None:
+            # create a collision free minimal snap path
+            for coord in self.coord_obstacles:
+                self.reset()
+                # Generate a minimum snap trajectory and check if there is collision with the current obstacle
+                traj = self._generate_trajectory()
+
+                # create mid-point in splines that goes through an obstacle
+                id_spline_to_correct = {1}
+                while len(id_spline_to_correct) > 0:
+
+                    id_spline_to_correct = set([])
+                    for n, point in enumerate(traj[:, :3]):
+                        if MinimumSnap.is_collision_cuboid(*point, coord):
+                            spline_id = traj[n, -1]
+                            id_spline_to_correct.add(spline_id + 1)
+
+                    if len(id_spline_to_correct) > 0:
+                        self.reset()
+                        new_waypoints = MinimumSnap.insert_midpoints_at_indexes(self.waypoints, id_spline_to_correct)
+                        self.waypoints = new_waypoints
+                        traj = self._generate_trajectory()
+        else:
+            _ = self._generate_trajectory()
+
+    def _generate_trajectory(self, method="lstsq"):
+        self._compute_spline_parameters(method)
+
+        for it in range(self.nb_splines):
+            timeT = self.times[it]
+
+            # here we generate the trajectory for each spline from t=0 to t=timeT at a rate of dt (unit: s)
+            for t in np.arange(0.0, timeT, self.dt):
+                position = self.polynom(self.n_coeffs, order=0, t=t) @ self.coeffs[
+                                                                       it * self.n_coeffs: self.n_coeffs * (it + 1)]
+                velocity = self.polynom(self.n_coeffs, order=1, t=t) @ self.coeffs[
+                                                                       it * self.n_coeffs: self.n_coeffs * (it + 1)]
+                acceleration = self.polynom(self.n_coeffs, order=2, t=t) @ self.coeffs[
+                                                                           it * self.n_coeffs: self.n_coeffs * (it + 1)]
+                # jerk = self.polynom(8, order=3, t=t) @ self.coeffs[it*self.n_coeffs : self.n_coeffs*(it+1)]
+                # snap = self.polynom(8, order=4, t=t) @ self.coeffs[it*self.n_coeffs : self.n_coeffs*(it+1)]
+
+                self.positions.append(position)
+                self.velocities.append(velocity)
+                self.accelerations.append(acceleration)
+                self.spline_id.append(np.array([it]))
+                # self.jerks.append(jerk)
+                # self.snap.append(snap)
+
+        self.yaws = self._calculate_yaws(np.asarray(self.velocities))[:, np.newaxis]
+        self.full_trajectory = np.hstack(
+            (self.positions, self.velocities, self.accelerations, self.yaws, self.spline_id))
+        return self.full_trajectory
+
+    @staticmethod
+    def _calculate_yaws(velocities: np.ndarray) -> np.ndarray:
+        horizontal_speeds = np.linalg.norm(velocities[:, :2], axis=1)
+        valid_indices = np.flatnonzero(horizontal_speeds >= MinimumSnap.MIN_HORIZONTAL_SPEED_FOR_YAW)
+        if len(valid_indices) == 0:
+            return np.zeros(len(velocities))
+
+        valid_yaws = np.unwrap(np.arctan2(velocities[valid_indices, 1], velocities[valid_indices, 0]))
+        previous_valid_indices = np.searchsorted(valid_indices, np.arange(len(velocities)), side="right") - 1
+        previous_valid_indices = np.clip(previous_valid_indices, 0, len(valid_indices) - 1)
+        return valid_yaws[previous_valid_indices]
+
+    def _compute_spline_parameters(self, method):
+        self._create_polynom_matrices()
+        cost_matrix = self._create_snap_cost_matrix()
+        constraint_count = self.A.shape[0]
+        optimality_system = np.block([
+            [cost_matrix, self.A.T],
+            [self.A, np.zeros((constraint_count, constraint_count))],
+        ])
+        right_hand_side = np.vstack((np.zeros((cost_matrix.shape[0], self.b.shape[1])), self.b))
+
+        if method == "lstsq":
+            solution = np.linalg.lstsq(optimality_system, right_hand_side, rcond=None)[0]
+        else:
+            solution = np.linalg.solve(optimality_system, right_hand_side)
+
+        self.coeffs = solution[:cost_matrix.shape[0]]
+
+    def _create_snap_cost_matrix(self):
+        cost_matrix = np.zeros((self.n_coeffs * self.nb_splines, self.n_coeffs * self.nb_splines))
+
+        for spline_index, duration in enumerate(self.times):
+            block_start = spline_index * self.n_coeffs
+            for row in range(4, self.n_coeffs):
+                row_factor = row * (row - 1) * (row - 2) * (row - 3)
+                for column in range(4, self.n_coeffs):
+                    column_factor = column * (column - 1) * (column - 2) * (column - 3)
+                    exponent = row + column - 7
+                    cost_matrix[block_start + row, block_start + column] = (
+                        row_factor * column_factor * duration ** exponent / exponent
+                    )
+
+        return cost_matrix
+
+    def _create_polynom_matrices(self):
+        """Populate matrices A and b with the constraints/boundary conditions"""
+        self._setup()
+        self._generate_position_constraints()
+        self._generate_start_and_goal_constraints()
+        self._generate_continuity_constraints()
+
+    def _generate_continuity_constraints(self):
+        """
+        This function populates the A and b matrices with constraints on intermediate splines to ensure
+        continuity, hence smoothness.
+
+        - Constraints up to the sixth derivative at t=0 should be the same at t=T. For example, no change of velocity
+        between the end of a spline (polyT) and the start of the next spline (poly0)
+
+        We have one constraint for each derivative(6).
+        """
+
+        N_SPLINES = self.nb_splines
+
+        for s in range(1, N_SPLINES):
+            timeT = self.times[s - 1]
+            for k in [1, 2, 3, 4]:  # , 5, 6]:
+                poly0 = -1 * MinimumSnap.polynom(self.n_coeffs, order=k, t=0)
+                polyT = MinimumSnap.polynom(self.n_coeffs, order=k, t=timeT)
+                poly = np.hstack((polyT, poly0))  # (end of seg) - (start of seg) must be 0. so no change of vel/acc/...
+                self.A[self.row_counter, (s - 1) * self.n_coeffs:self.n_coeffs * (s + 1)] = poly
+                self.row_counter += 1
+
+    def _generate_start_and_goal_constraints(self):
+        """
+        This function populates the A and b matrices with constraints on the starting and ending splines.
+
+        - Starting spline constraint: Velocity/Acceleration/Jerk should be 0
+        - Ending spline constraint: Velocity/Acceleration/Jerk should be 0
+
+        We have 1 constraint for each derivative(3) and for 2 splines. So 3 constraints per splines. In total,
+        we have 6 constraints.
+        """
+
+        N_SPLINES = self.nb_splines
+
+        # CONSTRAINTS FOR THE VERY FIRST SEGMENT at t=0
+        for k in [1, 2, 3]:
+            poly = MinimumSnap.polynom(self.n_coeffs, order=k, t=0)
+            self.A[self.row_counter, 0:self.n_coeffs] = poly
+            self.row_counter += 1
+
+        # CONSTRAINTS FOR THE VERY LAST SEGMENT at t=T
+        for k in [1, 2, 3]:
+            poly = MinimumSnap.polynom(self.n_coeffs, order=k, t=self.times[-1])
+            self.A[self.row_counter, (N_SPLINES - 1) * self.n_coeffs:self.n_coeffs * N_SPLINES] = poly
+            self.row_counter += 1
+
+    def _generate_position_constraints(self):
+        """
+        This function populates the A and b matrices with constraints on positions.
+
+        - The first position constraint is on every start of splines : every start of splines should
+        be at a particular waypoint (Last waypoint is excluded since it is not a start of spline)
+        - The second position constraint is on every end of splines : every end of splines should
+        be at a particular waypoint (First waypoint is excluded since it is not an end of spline)
+
+        If the number of splines is denoted by m, we have m constraints at t=0 (start of spline) and m constraints at
+        t=T (emd of spline). So 2m constraints for position
+        """
+
+        N_SPLINES = self.nb_splines
+
+        # at t=0 - FOR ALL START OF SEGMENTS
+        poly = MinimumSnap.polynom(self.n_coeffs, order=0, t=0)
+        for i in range(N_SPLINES):
+            wp0 = self.waypoints[i]
+            self.A[self.row_counter, i * self.n_coeffs: self.n_coeffs * (i + 1)] = poly
+            self.b[self.row_counter, :] = wp0
+            self.row_counter += 1
+
+        # at t=T - FOR ALL END OF SEGMENTS                                                     
+        for i in range(N_SPLINES):
+            wpT = self.waypoints[i + 1]
+            timeT = self.times[i]
+            poly = MinimumSnap.polynom(self.n_coeffs, order=0, t=timeT)
+            self.A[self.row_counter, i * self.n_coeffs:self.n_coeffs * (i + 1)] = poly
+            self.b[self.row_counter, :] = wpT
+            self.row_counter += 1
+
+    @staticmethod
+    def polynom(n_coeffs, order, t):
+        """
+        This function returns a polynom of n_coeffs n and order k evaluated at t.
+        :param n_coeffs: number of unknown coefficients (degree of the polynom + 1)
+        :param order: order of the polynom (k=1: velocity; k=2: acceleration; k=3: jerk; k=4: snap)
+        :param t: time at which the polynom is evaluated
+        :return: the polynom evaluated at t
+        """
+
+        polynomial = np.zeros(n_coeffs)  # polynomial is an array of coefficients
+        derivative = np.zeros(n_coeffs)  # derivative is an array of the polynomial's derivatives
+
+        # Initialisation
+        for i in range(n_coeffs):
+            derivative[i] = i
+            polynomial[i] = 1
+
+        # compute derivative
+        for _ in range(order):
+            for i in range(n_coeffs):
+                polynomial[i] = polynomial[i] * derivative[i]
+                if derivative[i] > 0:
+                    derivative[i] = derivative[i] - 1
+
+        # compute polynom
+        for i in range(n_coeffs):
+            polynomial[i] = polynomial[i] * t ** derivative[i]
+
+        return polynomial.T
+
+    def _setup(self):
+        self._generate_waypoints()
+        self._generate_time_per_spline()
+        self._init_matrices()
+
+    def _init_matrices(self):
+        """
+        This function initializes the A and b matrices with zeros.
+        For 1 spline, we have 8 unknown coefficients (c7, c6, c5, c4, c3, c2, c1, c0).
+        Regarding the constraints, let's denote the number of waypoints by m:
+        - m-1 constraints for position at t=0 (start of spline, last waypoint is excluded)
+        - m-1 constraints for position at t=T (end of spline, first waypoint is excluded)
+        - 1 constraint for velocity at t=0, acceleration at t=0, jerk at t=0 (3 constraints)
+        - 1 constraint for velocity at t=T, acceleration at t=T, jerk at t=T (3 constraints)
+        - m-2 constraints for continuity of each derivative (1...4) (first and last waypoints are excluded) - (m-2)*4
+
+        Total number of constraints: 2(m-1) + 6 + 4(m-2)
+        expected number of unknown coefficients: 8 * m-1 or 8 * number of splines
+        """
+        constraint_count = 2 * self.nb_splines + 6 + 4 * (self.nb_splines - 1)
+        self.A = np.zeros((constraint_count, self.n_coeffs * self.nb_splines))
+        self.b = np.zeros((constraint_count, len(self.waypoints[0])))
+
+    def _generate_time_per_spline(self):
+        """
+        This function computes the time required to travel between each pair of waypoints given the velocity.
+        """
+        for i in range(self.nb_splines):
+            distance = np.linalg.norm(self.waypoints[i + 1] - self.waypoints[i])
+            time = distance / self.velocity
+            is_boundary_spline = i in (0, self.nb_splines - 1)
+            if is_boundary_spline:
+                time *= MinimumSnap.START_END_TIME_FACTOR
+            self.times.append(time)
+
+    def _generate_waypoints(self):
+        # while waiting for the algorithm to generate them
+        self.nb_splines = self.waypoints.shape[0] - 1
+
+    @staticmethod
+    def is_collision_cuboid(x: float, y: float, z: float, cuboid_params: np.ndarray) -> bool:
+        """
+        Checks if a point (x, y, z) collides or intersects with a given cuboid.
+
+        This method checks if the provided point is within the bounds of the cuboid,
+        indicating a collision or intersection.
+
+        Parameters
+        ----------
+        x : float
+            The x-coordinate of the point.
+        y : float
+            The y-coordinate of the point.
+        z : float
+            The z-coordinate of the point.
+        cuboid_params : np.ndarray
+            A 1D array containing six elements array([x_min, x_max, y_min, y_max, z_min, z_max])
+            that represent the bounds of the cuboid.
+
+        Returns
+        -------
+        bool
+            Return True if the point collides with the cuboid. False otherwise.
+        """
+        x_min, x_max, y_min, y_max, z_min, z_max = cuboid_params
+        x_collision = x_min <= x <= x_max
+        y_collision = y_min <= y <= y_max
+        z_collision = z_min <= z <= z_max
+
+        return x_collision and y_collision and z_collision
+
+    @staticmethod
+    def insert_midpoints_at_indexes(points: np.ndarray, indexes: List[int] | Set[int]) -> np.ndarray:
+        """
+        Inserts midpoints in `points` numpy array at specified `indexes`.
+
+        This method calculates midpoint between two points in an array and inserts these midpoints at
+        the specified indexes. The calculation of midpoint between two points `p1` and `p2` is done by
+        `(p1 + p2) / 2`. Midpoints will only be inserted at the positions specified in `indexes`.
+
+        Parameters
+        ----------
+        points : np.ndarray
+            A numpy array of points/coordinates where midpoints will be inserted.
+        indexes : List[int]
+            A list of integer indexes specifying where in `points` array to insert the midpoints.
+
+        Returns
+        -------
+        np.ndarray
+            A new numpy array with inserted midpoints at specified indexes.
+        """
+        result = []
+        i = 0
+        while i < len(points):
+            if i in indexes:
+                p1 = points[i - 1]
+                p2 = points[i]
+                midpoint = (p1 + p2) / 2
+                result.extend([midpoint])
+
+            result.append(points[i])
+            i += 1
+        return np.array(result)
+
+
+if __name__ == "__main__":
+    pass

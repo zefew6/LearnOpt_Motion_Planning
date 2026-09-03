@@ -1,0 +1,2 @@
+ERROR Thu Aug 27 14:33:01 2026: could not initialize GLFW
+

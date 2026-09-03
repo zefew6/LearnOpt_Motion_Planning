@@ -1,0 +1,188 @@
+<mujoco model="uav_gcs_two_storey_building">
+  <compiler angle="radian" autolimits="true"/>
+  <option timestep="0.001" gravity="0 0 -9.81" integrator="Euler"/>
+  <size nuser_site="1"/>
+  <statistic center="12 -7 3" extent="15"/>
+
+  <custom>
+    <numeric name="planning_bounds" data="0 0 -6 24 14 0"/>
+    <numeric name="rotor_force_coefficient" data="1"/>
+    <numeric name="rotor_drag_to_thrust" data="0.016"/>
+    <numeric name="rotor_thrust_limits" data="0.1 4.5"/>
+    <numeric name="motor_time_constants" data="0.0125 0.025"/>
+    <numeric name="flight_limits" data="3 2 3 12 0.7"/>
+  </custom>
+
+  <visual>
+    <global azimuth="45" elevation="-32"/>
+    <map znear="0.01" zfar="100"/>
+  </visual>
+
+  <asset>
+    <texture name="floor_grid" type="2d" builtin="checker" width="512" height="512"
+             rgb1="0.54 0.51 0.46" rgb2="0.39 0.37 0.34"/>
+    <material name="floor" texture="floor_grid" texrepeat="12 7" texuniform="true"/>
+    <material name="outer_wall" rgba="0.72 0.75 0.77 0.22"/>
+    <material name="inner_wall" rgba="0.82 0.79 0.72 0.52"/>
+    <material name="slab" rgba="0.46 0.48 0.50 0.42"/>
+    <material name="stair" rgba="0.56 0.51 0.44 1"/>
+    <material name="ceiling" rgba="0.68 0.72 0.75 0.05"/>
+    <material name="drone_orange" rgba="1.0 0.28 0.02 1" emission="0.42"
+              specular="0.75" shininess="0.65"/>
+    <material name="drone_halo" rgba="1.0 0.38 0.01 0.20" emission="0.30"/>
+    <material name="drone_beacon" rgba="1.0 0.82 0.02 1" emission="1.0"/>
+    <material name="navigation_red" rgba="1.0 0.02 0.01 1" emission="0.85"/>
+    <material name="navigation_green" rgba="0.02 1.0 0.08 1" emission="0.85"/>
+  </asset>
+
+  <worldbody>
+    <light name="sun" pos="10 -5 16" dir="0.1 -0.2 -1" directional="true"/>
+    <light name="floor_1_light" pos="17 -5 2.7" dir="0 0 -1"/>
+    <light name="floor_2_light" pos="8 -10 5.7" dir="0 0 -1"/>
+    <geom name="ground" type="plane" size="30 20 0.1" material="floor"/>
+
+    <!-- The second-floor slab has exactly one opening: the southwest stairwell. -->
+    <geom name="obstacle_floor_2_east" type="box" pos="14.6 -7 3.05"
+          size="9.4 7 0.12" material="slab"/>
+    <geom name="obstacle_floor_2_northwest" type="box" pos="2.6 -4.7 3.05"
+          size="2.6 4.7 0.12" material="slab"/>
+
+    <!-- Two-storey exterior shell. -->
+    <geom name="obstacle_outer_north" type="box" pos="12 -0.15 3"
+          size="12 0.15 3" material="outer_wall"/>
+    <geom name="obstacle_outer_south" type="box" pos="12 -13.85 3"
+          size="12 0.15 3" material="outer_wall"/>
+    <geom name="obstacle_outer_west" type="box" pos="0.15 -7 3"
+          size="0.15 7 3" material="outer_wall"/>
+    <geom name="obstacle_outer_east" type="box" pos="23.85 -7 3"
+          size="0.15 7 3" material="outer_wall"/>
+    <geom name="obstacle_ceiling" type="box" pos="12 -7 6.15"
+          size="12 7 0.15" material="ceiling"/>
+
+    <!-- First-floor maze walls. Staggered openings force an east-west zigzag. -->
+    <geom name="obstacle_f1_maze_h00" type="box" pos="4.65 -4.8 1.5"
+          size="4.35 0.10 1.5" material="inner_wall"/>
+    <geom name="obstacle_f1_maze_h01" type="box" pos="18.35 -4.8 1.5"
+          size="5.35 0.10 1.5" material="inner_wall"/>
+    <geom name="obstacle_f1_maze_h10" type="box" pos="9.4 -8.7 1.5"
+          size="9.1 0.10 1.5" material="inner_wall"/>
+    <geom name="obstacle_f1_maze_h11" type="box" pos="23.1 -8.7 1.5"
+          size="0.6 0.10 1.5" material="inner_wall"/>
+    <geom name="obstacle_f1_maze_v00" type="box" pos="17.8 -0.65 1.5"
+          size="0.10 0.35 1.5" material="inner_wall"/>
+    <geom name="obstacle_f1_maze_v01" type="box" pos="17.8 -4.05 1.5"
+          size="0.10 0.55 1.5" material="inner_wall"/>
+    <geom name="obstacle_f1_maze_v10" type="box" pos="13.0 -4.85 1.5"
+          size="0.10 1.35 1.5" material="inner_wall"/>
+    <geom name="obstacle_f1_maze_v20" type="box" pos="18.5 -9.015 1.5"
+          size="0.10 0.115 1.5" material="inner_wall"/>
+    <geom name="obstacle_f1_maze_v21" type="box" pos="18.5 -12.65 1.5"
+          size="0.10 1.05 1.5" material="inner_wall"/>
+    <geom name="obstacle_f1_maze_v31" type="box" pos="5.8 -12.65 1.5"
+          size="0.10 1.05 1.5" material="inner_wall"/>
+
+    <!-- The second floor uses a different maze pattern rather than copying floor one. -->
+    <geom name="obstacle_f2_maze_h00" type="box" pos="2.2 -8.7 4.5"
+          size="1.9 0.10 1.5" material="inner_wall"/>
+    <geom name="obstacle_f2_maze_h01" type="box" pos="13.6 -8.7 4.5"
+          size="5.7 0.10 1.5" material="inner_wall"/>
+    <geom name="obstacle_f2_maze_h10" type="box" pos="6.35 -5.0 4.5"
+          size="6.05 0.10 1.5" material="inner_wall"/>
+    <geom name="obstacle_f2_maze_h11" type="box" pos="17.8 -5.0 4.5"
+          size="1.4 0.10 1.5" material="inner_wall"/>
+    <geom name="obstacle_f2_maze_v00" type="box" pos="8.0 -5.35 4.5"
+          size="0.10 0.15 1.5" material="inner_wall"/>
+    <geom name="obstacle_f2_maze_v01" type="box" pos="8.0 -10.85 4.5"
+          size="0.10 2.85 1.5" material="inner_wall"/>
+    <geom name="obstacle_f2_maze_v10" type="box" pos="16.5 -0.75 4.5"
+          size="0.10 0.45 1.5" material="inner_wall"/>
+    <geom name="obstacle_f2_maze_v11" type="box" pos="16.5 -4.6 4.5"
+          size="0.10 0.40 1.5" material="inner_wall"/>
+    <geom name="obstacle_f2_maze_v20" type="box" pos="19.5 -6.5 4.5"
+          size="0.10 2.3 1.5" material="inner_wall"/>
+
+    <!-- Physical staircase rising southward through the southwest opening. -->
+    <geom name="obstacle_stair_00" type="box" pos="2.6 -9.70 0.175"
+          size="1.6 0.22 0.175" material="stair"/>
+    <geom name="obstacle_stair_01" type="box" pos="2.6 -10.15 0.35"
+          size="1.6 0.22 0.35" material="stair"/>
+    <geom name="obstacle_stair_02" type="box" pos="2.6 -10.60 0.525"
+          size="1.6 0.22 0.525" material="stair"/>
+    <geom name="obstacle_stair_03" type="box" pos="2.6 -11.05 0.70"
+          size="1.6 0.22 0.70" material="stair"/>
+    <geom name="obstacle_stair_04" type="box" pos="2.6 -11.50 0.875"
+          size="1.6 0.22 0.875" material="stair"/>
+    <geom name="obstacle_stair_05" type="box" pos="2.6 -11.95 1.05"
+          size="1.6 0.22 1.05" material="stair"/>
+    <geom name="obstacle_stair_06" type="box" pos="2.6 -12.40 1.225"
+          size="1.6 0.22 1.225" material="stair"/>
+    <geom name="obstacle_stair_07" type="box" pos="2.6 -12.85 1.40"
+          size="1.6 0.22 1.40" material="stair"/>
+
+    <!-- A single guide records the intended building topology; it does not create regions. -->
+    <site name="gcs_route_00_00" pos="22 -2 0.021" size="0.01" rgba="0 0 0 0"/>
+    <site name="gcs_route_00_01" pos="22 -2 1.2" size="0.01" rgba="0 0 0 0"/>
+    <site name="gcs_route_00_02" pos="15 -2.25 1.4" size="0.01" rgba="0 0 0 0"/>
+    <site name="gcs_route_00_03" pos="11 -5 1.5" size="0.01" rgba="0 0 0 0"/>
+    <site name="gcs_route_00_04" pos="16.3 -7.35 1.5" size="0.01" rgba="0 0 0 0"/>
+    <site name="gcs_route_00_05" pos="20.5 -9.25 1.5" size="0.01" rgba="0 0 0 0"/>
+    <site name="gcs_route_00_06" pos="11.75 -10.45 1.5" size="0.01" rgba="0 0 0 0"/>
+    <site name="gcs_route_00_07" pos="4.5 -9.35 1.6" size="0.01" rgba="0 0 0 0"/>
+    <site name="gcs_route_00_08" pos="2.6 -11.2 2.8" size="0.01" rgba="0 0 0 0"/>
+    <site name="gcs_route_00_09" pos="3.3 -11.25 4.4" size="0.01" rgba="0 0 0 0"/>
+    <site name="gcs_route_00_10" pos="6 -8 4.4" size="0.01" rgba="0 0 0 0"/>
+    <site name="gcs_route_00_11" pos="10.25 -6.8 4.4" size="0.01" rgba="0 0 0 0"/>
+    <site name="gcs_route_00_12" pos="14.4 -4.65 4.4" size="0.01" rgba="0 0 0 0"/>
+    <site name="gcs_route_00_13" pos="18.5 -2.75 4.4" size="0.01" rgba="0 0 0 0"/>
+    <site name="gcs_route_00_14" pos="21.7 -6.85 4.4" size="0.01" rgba="0 0 0 0"/>
+    <site name="gcs_route_00_15" pos="22 -12 4.4" size="0.01" rgba="0 0 0 0"/>
+
+    <site name="waypoint_00" type="sphere" pos="22 -2 1.2" size="0.07"
+          rgba="1 0.85 0.1 0.75"/>
+    <site name="goal" type="sphere" pos="22 -12 4.4" size="0.25"
+          rgba="0.1 0.9 0.2 0.9"/>
+    <geom name="drone_tracking_beacon" type="sphere" pos="22 -2 6.6" size="0.25"
+          material="drone_beacon" contype="0" conaffinity="0"/>
+
+    <replicate count="200">
+      <geom name="trajectory_segment" type="capsule" pos="0 0 -20" size="0.025 0.01"
+            contype="0" conaffinity="0" rgba="1 0.25 0.05 0"/>
+    </replicate>
+    <replicate count="200">
+      <geom name="actual_trajectory_segment" type="capsule" pos="0 0 -20" size="0.015 0.01"
+            contype="0" conaffinity="0" rgba="0.1 0.4 1 0"/>
+    </replicate>
+
+    <body name="quadrotor" pos="22 -2 0.021">
+      <freejoint name="quadrotor_freejoint"/>
+      <inertial pos="0 0 0" mass="0.5" diaginertia="0.0023 0.0023 0.0046"/>
+      <geom name="body" type="box" size="0.08 0.05 0.02" rgba="0.08 0.12 0.16 1"/>
+      <!-- Oversized visual shell; collision and inertia still use the small body above. -->
+      <geom name="drone_visual_shell" type="ellipsoid" pos="0 0 0.04"
+            size="0.19 0.14 0.06" material="drone_orange"
+            contype="0" conaffinity="0"/>
+      <geom name="drone_visibility_halo" type="sphere" pos="0 0 0.06" size="0.23"
+            material="drone_halo" contype="0" conaffinity="0"/>
+      <geom name="arm_0" type="capsule" fromto="-0.120208 0.120208 0 0.120208 -0.120208 0"
+            size="0.008" contype="0" conaffinity="0" rgba="0.25 0.25 0.28 1"/>
+      <geom name="arm_1" type="capsule" fromto="-0.120208 -0.120208 0 0.120208 0.120208 0"
+            size="0.008" contype="0" conaffinity="0" rgba="0.25 0.25 0.28 1"/>
+      <geom name="rotor_visual_0" type="cylinder" pos="0.120208 0.120208 0.02" size="0.085 0.003"
+            contype="0" conaffinity="0" rgba="1.0 0.62 0.06 0.82"/>
+      <geom name="rotor_visual_1" type="cylinder" pos="0.120208 -0.120208 0.02" size="0.085 0.003"
+            contype="0" conaffinity="0" rgba="1.0 0.62 0.06 0.82"/>
+      <geom name="rotor_visual_2" type="cylinder" pos="-0.120208 -0.120208 0.02" size="0.085 0.003"
+            contype="0" conaffinity="0" rgba="1.0 0.62 0.06 0.82"/>
+      <geom name="rotor_visual_3" type="cylinder" pos="-0.120208 0.120208 0.02" size="0.085 0.003"
+            contype="0" conaffinity="0" rgba="1.0 0.62 0.06 0.82"/>
+      <geom name="navigation_light_red" type="sphere" pos="0 0.17 0.08" size="0.028"
+            material="navigation_red" contype="0" conaffinity="0"/>
+      <geom name="navigation_light_green" type="sphere" pos="0 -0.17 0.08" size="0.028"
+            material="navigation_green" contype="0" conaffinity="0"/>
+      <site name="rotor_0" pos="0.120208 0.120208 0" size="0.008" user="1" rgba="0 0.7 1 1"/>
+      <site name="rotor_1" pos="0.120208 -0.120208 0" size="0.008" user="-1" rgba="0 0.7 1 1"/>
+      <site name="rotor_2" pos="-0.120208 -0.120208 0" size="0.008" user="1" rgba="0 0.7 1 1"/>
+      <site name="rotor_3" pos="-0.120208 0.120208 0" size="0.008" user="-1" rgba="0 0.7 1 1"/>
+    </body>
+  </worldbody>
+</mujoco>

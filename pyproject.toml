@@ -1,0 +1,22 @@
+[project]
+name = "uav-autonomous-control"
+version = "0.1.0"
+description = "3D UAV simulation and autonomous control: RRT* path planning, minimum snap trajectories and a cascaded flight controller"
+requires-python = ">=3.13"
+dependencies = [
+    "acados-template",
+    "casadi>=3.8.0",
+    "cvxpy>=1.9.1",
+    "mujoco>=3.3.7",
+    "numpy>=2.3.4",
+    "scipy>=1.18.1",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-cov>=6.0",
+]
+
+[tool.uv.sources]
+acados-template = { path = "../../acados/interfaces/acados_template", editable = true }
