@@ -1,6 +1,9 @@
 [run]
 omit = */__init__.py
        */main.py
+       */control/mpc_controller.py
+       */record_experiments.py
+       */simulation/recording.py
 
 [report]
 exclude_lines =
