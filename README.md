@@ -297,14 +297,42 @@ decomposition of free space.
 ### Requirements
 
 - Python 3.13 or newer
-- [`uv`](https://docs.astral.sh/uv/)
+- [`uv`](https://docs.astral.sh/uv/) (recommended; a standard virtual environment and pip also work)
 - MuJoCo 3.3 or newer
+- FFmpeg (only required for recording videos)
 
-Install the environment from the repository root:
+Install uv, then create the project environment from the repository root:
 
 ```bash
-uv sync
+uv sync --extra dev
 ```
+
+The default installation includes the planners, MuJoCo simulation, CasADi, and
+the cascaded controller. MPC requires the optional acados toolchain and is not
+installed by the command above.
+
+### Optional MPC setup
+
+MPC needs a locally built acados installation. Follow the official
+[`acados installation instructions`](https://docs.acados.org/installation/index.html)
+or download the source from the
+[`acados GitHub repository`](https://github.com/acados/acados), including its
+submodules. After building acados, set `ACADOS_SOURCE_DIR` and install its
+Python interface into the active project environment:
+
+```bash
+export ACADOS_SOURCE_DIR=/path/to/acados
+export LD_LIBRARY_PATH="$ACADOS_SOURCE_DIR/lib:${LD_LIBRARY_PATH:-}"
+uv pip install -e "$ACADOS_SOURCE_DIR/interfaces/acados_template"
+```
+
+Verify the optional dependency before selecting MPC:
+
+```bash
+uv run python -c "from acados_template import AcadosOcpSolver; print('acados is ready')"
+```
+
+If acados is not installed, select `CONTROLLER = "cascaded"` instead of MPC.
 
 Run the main MuJoCo simulation:
 
@@ -338,7 +366,13 @@ The controller used by the wind example is selected through `CONTROLLER` in
 Run the planning tests:
 
 ```bash
-uv run pytest tests/unit/planning
+uv run --extra dev pytest -q tests/unit/planning -o addopts=
+```
+
+Run the complete test suite with coverage:
+
+```bash
+uv run --extra dev pytest -q -p pytest_cov.plugin
 ```
 
 ## Coordinate convention

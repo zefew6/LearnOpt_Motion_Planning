@@ -1,10 +1,13 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project]
-name = "uav-autonomous-control"
+name = "LearnOpt-Motion-Planning"
 version = "0.1.0"
 description = "3D UAV simulation and autonomous control: RRT* path planning, minimum snap trajectories and a cascaded flight controller"
 requires-python = ">=3.13"
 dependencies = [
-    # "acados-template",
     "casadi>=3.8.0",
     "cvxpy>=1.9.1",
     "mujoco>=3.3.7",
@@ -13,15 +16,16 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-mpc = [
-    "acados-template",
-]
-
-[dependency-groups]
 dev = [
     "pytest>=8.3",
     "pytest-cov>=6.0",
 ]
 
-[tool.uv.sources]
-acados-template = { path = "../../acados/interfaces/acados_template", editable = true }
+[tool.setuptools.packages.find]
+include = ["uav_ac*"]
+
+[tool.setuptools.package-data]
+uav_ac = [
+    "config.ini",
+    "simulation/models/*.xml",
+]
