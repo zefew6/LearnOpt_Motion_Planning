@@ -10,6 +10,9 @@ uav/
 __pycache__/
 *.pyc
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pyright/
 .coverage
 *.html
 
@@ -24,8 +27,14 @@ c_generated_code/
 quadrotor_wrench_nmpc_ocp.json
 cache/
 logs/
+*.log
+*.tmp
+*.bak
 raw*
 deprecated/
+build/
+dist/
+*.egg-info/
 
 # Local scripts and sample applications
 *.sh

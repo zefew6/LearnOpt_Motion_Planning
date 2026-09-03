@@ -50,18 +50,20 @@ Do not use `git reset --hard`, `git checkout --`, or broad deletion to clean the
 workspace. Do not modify coordinate conventions, public controller APIs, or unrelated
 planners/controllers without an explicit request.
 
-## Dependencies: acados is required for MPC
+## Dependencies: acados is an optional local dependency for MPC
 
 Base requirements are Python 3.13+, `uv`, MuJoCo 3.3+, and FFmpeg for recording.
-Install the Python environment with:
+Install the base Python environment with:
 
 ```bash
 uv sync --group dev
 ```
 
-MPC additionally requires CasADi and acados. The current `pyproject.toml` expects the
-acados Python template at the repository-relative path `../../acados/interfaces/acados_template`.
-Keep that sibling layout, or update `pyproject.toml` for the local installation.
+MPC additionally requires CasADi and a locally built acados installation. CasADi is
+part of the base project dependencies. The acados source tree is declared as the
+optional `mpc` extra because its path is machine-specific and is not available in
+CI. The default development environment does not install it. After building acados,
+install the MPC extra from the repository root:
 
 Typical acados setup on a new machine:
 
@@ -74,12 +76,40 @@ cmake --build build -j
 export ACADOS_SOURCE_DIR=/path/to/acados
 export LD_LIBRARY_PATH="$ACADOS_SOURCE_DIR/lib:${LD_LIBRARY_PATH:-}"
 cd /path/to/LearnOpt-Motion-Planning
-uv sync --group dev
+UV_PROJECT_ENVIRONMENT="$PWD/uav" uv sync --group dev --extra mpc
 ```
 
-Before running MPC or GCS-MPC recording, verify that `casadi` and
-`acados_template` import successfully. If acados is missing, explain the installation
-blocker; do not silently substitute the cascaded controller.
+The checked-in `pyproject.toml` assumes the standard sibling layout
+`../../acados/interfaces/acados_template`. If acados is stored elsewhere, update
+the `tool.uv.sources.acados-template` path locally before syncing the `mpc` extra.
+
+Use one project environment consistently. This checkout currently uses `uav/`; make
+that choice explicit for `uv` commands:
+
+```bash
+export UV_PROJECT_ENVIRONMENT="$PWD/uav"
+uv sync --group dev --extra mpc
+```
+
+The default `uv` project environment is `.venv` when `UV_PROJECT_ENVIRONMENT` is not
+set. Do not mix an activated `(uav)` shell with commands that silently target `.venv`.
+Confirm the interpreter with `python -c "import sys; print(sys.executable)"`.
+Do not assume that an `acados_template` directory on `PYTHONPATH` is a complete
+installation: its runtime dependencies include `Deprecated`, `numpy`, `scipy`,
+`casadi`, `matplotlib`, and `cython`.
+
+Verify the actual imports before running MPC or GCS-MPC recording:
+
+```bash
+ACADOS_SOURCE_DIR=/path/to/acados \
+LD_LIBRARY_PATH="$ACADOS_SOURCE_DIR/lib:${LD_LIBRARY_PATH:-}" \
+UV_PROJECT_ENVIRONMENT="$PWD/uav" uv run python -c \
+  "import casadi; from acados_template import AcadosOcpSolver; print(casadi.__version__)"
+```
+
+If acados is missing, report the installation blocker; do not silently substitute the
+cascaded controller. After a later base `uv sync` that removes the local interface,
+repeat `uv sync --group dev --extra mpc`.
 
 MPC generates local artifacts in `c_generated_code/` and `*_ocp.json`. They are ignored
 by Git and may be regenerated after a directory or environment change.
@@ -88,22 +118,22 @@ by Git and may be regenerated after a directory or environment change.
 
 ```bash
 # Interactive simulation
-uv run python -m uav_ac.main
+UV_PROJECT_ENVIRONMENT="$PWD/uav" uv run python -m uav_ac.main
 
 # Wind-disturbance simulation
-uv run python -m uav_ac.wind
+UV_PROJECT_ENVIRONMENT="$PWD/uav" uv run python -m uav_ac.wind
 
 # GCS-MPC offscreen recording
 MUJOCO_GL=egl MPLCONFIGDIR=/tmp/mpl \
-  uv run python -m uav_ac.record_experiments \
+  UV_PROJECT_ENVIRONMENT="$PWD/uav" uv run python -m uav_ac.record_experiments \
   --experiment gcs-mpc --output-dir docs/videos
 
 # Planning tests
-uv run python -m pytest -q tests/unit/planning -o addopts=
+UV_PROJECT_ENVIRONMENT="$PWD/uav" uv run python -m pytest -q tests/unit/planning -o addopts=
 
-# Full tests; disable unrelated auto-loaded ROS pytest plugins
+# Full tests; disable unrelated auto-loaded ROS pytest plugins while keeping coverage
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
-  uv run python -m pytest -q -o addopts=
+  UV_PROJECT_ENVIRONMENT="$PWD/uav" uv run python -m pytest -q -p pytest_cov.plugin
 ```
 
 Generated videos, FIRI images, MuJoCo logs, Python environments/caches, and acados

@@ -12,6 +12,11 @@ dependencies = [
     "scipy>=1.18.1",
 ]
 
+[project.optional-dependencies]
+mpc = [
+    "acados-template",
+]
+
 [dependency-groups]
 dev = [
     "pytest>=8.3",
@@ -19,4 +24,4 @@ dev = [
 ]
 
 [tool.uv.sources]
-# acados-template = { path = "../../acados/interfaces/acados_template", editable = true }
+acados-template = { path = "../../acados/interfaces/acados_template", editable = true }

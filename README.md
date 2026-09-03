@@ -36,7 +36,7 @@ the FIRI figures below.
 <!-- To embed the video inline, replace the link below with the real GitHub user-attachments URL. -->
 [Watch video](docs/videos/gcopter_cascaded.mp4)
 
-https://github.com/user-attachments/assets/bba68e1c-c61f-4ca4-8f51-0023d9bb6baf
+https://github.com/user-attachments/assets/61953890-fc11-4b02-940f-620df92ea1de
 
 **Planner:** FIRI + GCOPTER  
 **Controller:** Cascaded controller
@@ -46,7 +46,7 @@ https://github.com/user-attachments/assets/bba68e1c-c61f-4ca4-8f51-0023d9bb6baf
 <!-- To embed the video inline, replace the link below with the real GitHub user-attachments URL. -->
 [Watch video](docs/videos/minisnap_cascaded.mp4)
 
-https://github.com/user-attachments/assets/9577ae10-fcef-4651-a194-e1081d483aec
+https://github.com/user-attachments/assets/5323852f-ee30-4675-a685-e28c2b7eb43c
 
 **Planner:** Minimum Snap baseline  
 **Controller:** Cascaded controller
@@ -56,7 +56,7 @@ https://github.com/user-attachments/assets/9577ae10-fcef-4651-a194-e1081d483aec
 <!-- To embed the video inline, replace the link below with the real GitHub user-attachments URL. -->
 [Watch video](docs/videos/gcs_mpc.mp4)
 
-https://github.com/user-attachments/assets/963147b2-71ac-4242-9ae7-1ec44c2c17db
+https://github.com/user-attachments/assets/0cb63fd2-9fe3-4f56-8253-874900b20b00
 
 **Planner:** GCS  
 **Controller:** Nonlinear MPC

@@ -28,6 +28,30 @@ EXPERIMENTS: dict[ExperimentName, tuple[str, str]] = {
     "gcs-mpc": ("gcs", "mpc"),
 }
 
+RECORDING_FOVY = 45.0
+GCS_RECORDING_LOOKAT = (12.0, -7.0, 3.0)
+GCS_RECORDING_AZIMUTH = -5.0
+GCS_RECORDING_ELEVATION = -5.0
+DEFAULT_RECORDING_AZIMUTH = 45.0
+DEFAULT_RECORDING_ELEVATION = -32.0
+
+
+def _recording_camera(
+        model,
+        *,
+        lookat: tuple[float, float, float] | None = None,
+        azimuth: float = DEFAULT_RECORDING_AZIMUTH,
+        elevation: float = DEFAULT_RECORDING_ELEVATION,
+) -> object:
+    """Return the fixed camera used by a comparison video."""
+    camera = default_camera(model)
+    model.vis.global_.fovy = RECORDING_FOVY
+    if lookat is not None:
+        camera.lookat[:] = lookat
+    camera.azimuth = azimuth
+    camera.elevation = elevation
+    return camera
+
 
 def record_experiment(
         experiment: ExperimentName,
@@ -69,14 +93,16 @@ def record_experiment(
     total_seconds = trajectory_seconds + hold_seconds
     max_steps = max(1, int(round(total_seconds / simulation.quad.dt)))
     output_path = Path(output_path)
-    camera = None
-    if experiment == "gcs-mpc":
-        camera = default_camera(simulation.model)
-        simulation.model.vis.global_.fovy = 45.0
-        camera.lookat[:] = (12.0, -7.0, 3.0)
-        camera.azimuth = -5.0
-        camera.elevation = -5.0
-        camera.distance = 2.2 * simulation.model.stat.extent
+    camera = (
+        _recording_camera(
+            simulation.model,
+            lookat=GCS_RECORDING_LOOKAT,
+            azimuth=GCS_RECORDING_AZIMUTH,
+            elevation=GCS_RECORDING_ELEVATION,
+        )
+        if experiment == "gcs-mpc"
+        else _recording_camera(simulation.model)
+    )
     print(
         f"Recording {experiment}: {trajectory_seconds:.2f} s flight + "
         f"{hold_seconds:.2f} s terminal hold -> {output_path}")
