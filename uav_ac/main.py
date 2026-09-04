@@ -28,7 +28,7 @@ from uav_ac.simulation.mujoco_sim import (
 PlannerName = Literal["mini_snap", "gcopter", "gcs"]
 ControllerName = Literal["cascaded", "mpc"]
 VISUALIZE: bool = False
-PLANNER: PlannerName = "gcs"
+PLANNER: PlannerName = "gcopter"
 CONTROLLER: ControllerName = "mpc"
 
 
