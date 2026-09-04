@@ -13,7 +13,7 @@ This project is developed on top of
 - [x] Plan through a graph of convex regions with GCS
 - [x] Implement an acados-based nonlinear MPC trajectory-tracking controller
 - [x] Build a deterministic wind-disturbance simulation environment
-- [ ] Implement a reinforcement-learning controller for trajectory tracking
+- [x] Implement a PPO reinforcement-learning controller for trajectory tracking
 - [ ] Implement a differentiable MPC trajectory-tracking controller with reinforcement learning under wind disturbance
 - [ ] Implement motion-planning diffusion
 - [ ] Implement Biconvex Optimization for Smooth Minimum-Time Trajectories around Convex Obstacles
@@ -183,7 +183,7 @@ This yields an anytime biconvex optimization procedure that can start from a col
 
 ### Requirements
 
-- Python 3.13 or newer
+- Python 3.13
 - [`uv`](https://docs.astral.sh/uv/) (recommended; a standard virtual environment and pip also work)
 - MuJoCo 3.3 or newer
 - FFmpeg (only required for recording videos)
@@ -198,30 +198,65 @@ The default installation includes the planners, MuJoCo simulation, CasADi, and
 the cascaded controller. MPC requires the optional acados toolchain and is not
 installed by the command above.
 
-### Optional MPC setup
-
-MPC needs a locally built acados installation. Follow the official
-[`acados installation instructions`](https://docs.acados.org/installation/index.html)
-or download the source from the
-[`acados GitHub repository`](https://github.com/acados/acados), including its
-submodules. After building acados, set `ACADOS_SOURCE_DIR` and install its
-Python interface into the active project environment:
+For PPO trajectory-tracking training and evaluation, install the RL extra in
+the same Python 3.13 environment:
 
 ```bash
-export ACADOS_SOURCE_DIR=/path/to/acados
+uv sync --extra dev --extra rl --python 3.13
+```
+
+Training uses a 100 Hz policy over the existing 1 kHz MuJoCo dynamics. Edit
+`configs/ppo_trajectory.yaml` for hyperparameters; artifacts are written below
+the ignored `runs/ppo_trajectory/` directory.
+
+```bash
+uv run --extra rl python -m uav_ac.rl.training \
+  --config configs/ppo_trajectory.yaml \
+  --run-dir runs/ppo_trajectory/<run-id>
+uv run --extra rl python -m uav_ac.rl.evaluate runs/ppo_trajectory/<run-id> --mode metrics
+```
+
+Use `--mode interactive` or `--mode record --output evaluation.mp4` for
+visual evaluation. Add `--resume <checkpoint.zip>` to continue training.
+
+### Optional: MPC Controller
+
+The MPC controller requires a locally built installation of [acados](https://github.com/acados/acados).
+
+Follow the official [acados installation instructions](https://docs.acados.org/installation/index.html), or clone the repository with its submodules and build it locally.
+
+After installation, set `ACADOS_SOURCE_DIR` to the **actual path of your acados source directory**. For example, if acados is installed at `~/acados`:
+
+```bash
+export ACADOS_SOURCE_DIR="$HOME/acados"
 export LD_LIBRARY_PATH="$ACADOS_SOURCE_DIR/lib:${LD_LIBRARY_PATH:-}"
+
 uv pip install -e "$ACADOS_SOURCE_DIR/interfaces/acados_template"
 ```
 
-Verify the optional dependency before selecting MPC:
+> Replace `$HOME/acados` with the actual location of your acados installation if it is installed elsewhere.
+
+Verify that the Python interface is available:
 
 ```bash
 uv run python -c "from acados_template import AcadosOcpSolver; print('acados is ready')"
 ```
 
-If acados is not installed, select `CONTROLLER = "cascaded"` instead of MPC.
+Then select:
 
-Run the main MuJoCo simulation:
+```python
+CONTROLLER = "mpc"
+```
+
+If acados is not installed, use the default cascaded controller instead:
+
+```python
+CONTROLLER = "cascaded"
+```
+
+### Run
+
+Run the MuJoCo simulation from the repository root:
 
 ```bash
 uv run python -m uav_ac.main
@@ -235,12 +270,18 @@ Select the planner and controller near the top of `uav_ac/main.py`:
 
 ```python
 PLANNER = "gcs"          # "gcopter", "gcs", or "mini_snap" for motion planner selection
-CONTROLLER = "mpc"       # "mpc" or "cascaded" for controller selection
+CONTROLLER = "mpc"       # "mpc", "cascaded", or "rl" for controller selection
 VISUALIZE = False        # "False" or "True"  for convex region visualization
 ```
 
 The GCS planner uses `gcs_building.xml`. GCOPTER and Minimum Snap use
 `lab_course.xml`.
+
+For `CONTROLLER = "rl"`, select GCOPTER and name the trained run:
+
+```bash
+UAV_AC_RL_RUN=runs/ppo_trajectory/<run-id> uv run python -m uav_ac.main
+```
 
 
 ## Repository structure

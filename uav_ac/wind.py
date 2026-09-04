@@ -77,8 +77,8 @@ def _reset_wind_control(
 
 
 def main(
-        steady_force: tuple[float, float, float] = (1.8, 1.30, 1.9),
-        gust_force: tuple[float, float, float] = (1.76, 1.92, 1.4),
+        steady_force: tuple[float, float, float] = (0.5*10, 0.3*10, 0.4),
+        gust_force: tuple[float, float, float] = (0.2, 0.1, 0.2),
         angular_frequency: tuple[float, float, float] = (0.73, 1.37, 0.91),
         phase: tuple[float, float, float] = (0.0, 0.4, 1.1),
 ) -> None:

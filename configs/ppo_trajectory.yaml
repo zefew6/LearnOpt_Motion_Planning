@@ -1,0 +1,27 @@
+# PPO trajectory-tracking training configuration.
+# Run from the repository root with:
+#   uv run --extra rl python -m uav_ac.rl.training --config configs/ppo_trajectory.yaml
+
+seed: 42
+device: cuda              # use cpu when CUDA is unavailable
+n_envs: 24                  # increase to keep the CPU/GPU pipeline busy
+total_timesteps: 10000000
+steps_per_action: 10         # 10 x 1 kHz physics steps = 100 Hz control
+evaluation_interval: 100000
+checkpoint_interval: 250000
+
+ppo:
+  n_steps: 4096             # rollout steps collected per environment
+  batch_size: 4096
+  n_epochs: 10
+  gamma: 0.995
+  gae_lambda: 0.95
+  learning_rate_start: 0.0003
+  learning_rate_end: 0.00003
+  clip_range: 0.2
+  ent_coef: 0.001
+  max_grad_norm: 0.5
+  activation: relu
+  net_arch:
+    pi: [512, 512]
+    vf: [512, 512]

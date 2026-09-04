@@ -26,10 +26,10 @@ from uav_ac.simulation.mujoco_sim import (
 
 
 PlannerName = Literal["mini_snap", "gcopter", "gcs"]
-ControllerName = Literal["cascaded", "mpc"]
+ControllerName = Literal["cascaded", "mpc", "rl"]
 VISUALIZE: bool = False
 PLANNER: PlannerName = "gcopter"
-CONTROLLER: ControllerName = "mpc"
+CONTROLLER: ControllerName = "rl"
 
 
 def _trajectory_after_takeoff(
@@ -108,6 +108,19 @@ def _build_controller(controller_name: ControllerName, quad, trajectory_dt: floa
                 nlp_solver_type="SQP_RTI",
             ),
         )
+
+    if controller_name == "rl":
+        run_dir = os.environ.get(
+            "UAV_AC_RL_RUN",
+            "runs/ppo_trajectory/exp01",
+        )
+        if not run_dir:
+            raise ValueError(
+                "the rl controller requires UAV_AC_RL_RUN to name a training run")
+        # Loading SB3 and Torch is deferred until RL is explicitly selected.
+        from uav_ac.control.rl_controller import RLController
+
+        return RLController.from_run(run_dir, quad, device="cpu")
 
     raise ValueError(f"unsupported controller: {controller_name}")
 

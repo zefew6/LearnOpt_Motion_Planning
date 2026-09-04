@@ -27,6 +27,7 @@ c_generated_code/
 quadrotor_wrench_nmpc_ocp.json
 cache/
 logs/
+runs/
 *.log
 *.tmp
 *.bak
@@ -42,6 +43,8 @@ dist/
 
 # External projects and integrations
 rl/
+!uav_ac/rl/
+!uav_ac/rl/**
 AirSim/
 crazyflie-lib-python/
 crazyflie/

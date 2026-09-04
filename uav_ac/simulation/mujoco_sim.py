@@ -54,11 +54,17 @@ def mujoco_to_ned_state(
 class MujocoSimulation:
     """Simulate the quadrotor rigid-body dynamics and collisions with MuJoCo."""
 
-    def __init__(self, model_path: str | Path = DEFAULT_SCENE_PATH):
+    def __init__(
+            self,
+            model_path: str | Path = DEFAULT_SCENE_PATH,
+            *,
+            record_actual_trajectory: bool = True,
+    ):
         """
         Load the vehicle, mission and obstacle geometry from a MuJoCo scene.
 
         :param model_path: MJCF scene containing the required quadrotor and mission data
+        :param record_actual_trajectory: update the blue flown-path geometry while stepping
         """
         specification = mujoco.MjSpec.from_file(str(model_path))
         add_corridor_mesh_pool(specification)
@@ -92,6 +98,7 @@ class MujocoSimulation:
         self._external_force_world = np.zeros(3)
         self._actual_trajectory_positions = []
         self._next_actual_trajectory_sample_time = 0.0
+        self._record_actual_trajectory_enabled = bool(record_actual_trajectory)
 
         mujoco.mj_forward(self.model, self.data)
         self._sync_quad_state()
@@ -137,6 +144,46 @@ class MujocoSimulation:
     def set_external_force_world(self, force: np.ndarray) -> None:
         """Set a persistent world-frame disturbance force applied at the vehicle COM."""
         self._external_force_world = _vector(force, 3, "external_force_world").copy()
+
+    def reset(
+            self,
+            state_ned: np.ndarray | None = None,
+            motor_speeds: np.ndarray | None = None,
+    ) -> np.ndarray:
+        """Reset all MuJoCo and adapter state, optionally to an NED/FRD snapshot.
+
+        ``state_ned`` uses the same 13-element layout as :attr:`Quad.X`.
+        ``motor_speeds`` contains the four physical rotor speeds in rad/s.  The
+        returned state is a copy, so callers cannot mutate the simulation by
+        retaining it.
+        """
+        if state_ned is not None:
+            state_ned = _vector(state_ned, 13, "state_ned")
+            quaternion_norm = np.linalg.norm(state_ned[3:7])
+            if quaternion_norm == 0.0:
+                raise ValueError("MuJoCo state_ned quaternion cannot be zero")
+            state_ned = state_ned.copy()
+            state_ned[3:7] /= quaternion_norm
+
+        if motor_speeds is None:
+            motor_speeds = np.zeros(4)
+        else:
+            motor_speeds = _vector(motor_speeds, 4, "motor_speeds")
+            maximum_speed = np.sqrt(self.quad.max_thrust / self.quad.kf)
+            if np.any(motor_speeds < 0.0) or np.any(motor_speeds > maximum_speed + 1.0e-9):
+                raise ValueError("MuJoCo motor_speeds must be within physical rotor limits")
+            motor_speeds = np.clip(motor_speeds, 0.0, maximum_speed)
+
+        mujoco.mj_resetData(self.model, self.data)
+        if state_ned is not None:
+            self.data.qpos[:3] = ENU_TO_NED @ state_ned[:3]
+            self.data.qpos[3:7] = state_ned[3:7] * np.array([1.0, 1.0, -1.0, -1.0])
+            self.data.qvel[:3] = ENU_TO_NED @ state_ned[7:10]
+            self.data.qvel[3:6] = ENU_TO_NED @ state_ned[10:13]
+        mujoco.mj_forward(self.model, self.data)
+        self._reset_runtime_state(motor_speeds)
+        self._record_collisions()
+        return self.quad.X.copy()
 
     def get_planning_obstacle_points(
             self,
@@ -364,19 +411,22 @@ class MujocoSimulation:
             self.model.vis.global_.offheight = old_offheight
         return recorder.frame_count
 
-    def _reset_runtime_state(self) -> None:
-        self.quad.omega.fill(0.0)
-        self.quad.omega_command.fill(0.0)
+    def _reset_runtime_state(self, motor_speeds: np.ndarray | None = None) -> None:
+        motor_speeds = np.zeros(4) if motor_speeds is None else motor_speeds
+        self.quad.omega[:] = motor_speeds
+        self.quad.omega_command[:] = motor_speeds
         self.data.qfrc_applied.fill(0.0)
         self._external_force_world.fill(0.0)
         self._collision_detected = False
-        self._has_taken_off = False
+        self._has_taken_off = self.data.xpos[self._body_id, 2] >= TAKEOFF_HEIGHT
         self._actual_trajectory_positions.clear()
         self._next_actual_trajectory_sample_time = 0.0
         self.model.geom_rgba[self._actual_trajectory_segment_ids, 3] = 0.0
         self._sync_quad_state()
 
     def _record_actual_trajectory(self) -> None:
+        if not self._record_actual_trajectory_enabled:
+            return
         takeoff_waypoint = self.mission_waypoints[1]
         if self.quad.z > takeoff_waypoint[2]:
             return

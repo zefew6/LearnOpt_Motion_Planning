@@ -175,6 +175,65 @@ def test_mujoco_simulation_should_hover_with_weight_balanced_by_rotors(simulatio
     assert quad.velocity == pytest.approx(np.zeros(3), abs=1e-6)
 
 
+def test_mujoco_simulation_reset_should_restore_an_ned_state_and_motor_snapshot(simulation):
+    # Arrange
+    state = np.array([
+        2.0, 6.0, -1.5,
+        np.cos(0.2), np.sin(0.2), 0.0, 0.0,
+        0.3, -0.4, 0.2,
+        0.1, -0.2, 0.3,
+    ])
+    motor_speeds = np.full(4, 0.75)
+
+    # Act
+    restored = simulation.reset(state, motor_speeds)
+
+    # Assert
+    assert restored == pytest.approx(state)
+    assert simulation.quad.X == pytest.approx(state)
+    assert simulation.quad.omega == pytest.approx(motor_speeds)
+    assert simulation.quad.omega_command == pytest.approx(motor_speeds)
+
+
+def test_mujoco_simulation_reset_should_clear_all_runtime_state(simulation):
+    # Arrange
+    simulation.quad.omega[:] = 1.0
+    simulation.quad.omega_command[:] = 2.0
+    simulation.data.qfrc_applied[:] = 3.0
+    simulation._external_force_world[:] = 4.0
+    simulation._collision_detected = True
+    simulation._actual_trajectory_positions.append(np.ones(3))
+    simulation.model.geom("actual_trajectory_segment000").rgba[3] = 0.9
+
+    # Act
+    simulation.reset()
+
+    # Assert
+    assert simulation.data.time == pytest.approx(0.0)
+    assert simulation.quad.omega == pytest.approx(np.zeros(4))
+    assert simulation.quad.omega_command == pytest.approx(np.zeros(4))
+    assert simulation.data.qfrc_applied == pytest.approx(np.zeros(simulation.model.nv))
+    assert simulation._external_force_world == pytest.approx(np.zeros(3))
+    assert simulation.collision_detected is False
+    assert simulation._actual_trajectory_positions == []
+    assert simulation.model.geom("actual_trajectory_segment000").rgba[3] == pytest.approx(0.0)
+
+
+def test_mujoco_simulation_can_disable_actual_trajectory_recording():
+    # Arrange
+    simulation = MujocoSimulation(record_actual_trajectory=False)
+    simulation.data.qpos[2] = 1.3
+    mujoco.mj_forward(simulation.model, simulation.data)
+    simulation._sync_quad_state()
+
+    # Act
+    for _ in range(60):
+        simulation.step()
+
+    # Assert
+    assert simulation._actual_trajectory_positions == []
+
+
 def test_mujoco_simulation_should_apply_persistent_external_world_force(simulation):
     # Arrange
     force_world = np.array([0.2, -0.3, 0.1])
