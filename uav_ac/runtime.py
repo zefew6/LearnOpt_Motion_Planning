@@ -73,7 +73,7 @@ def plan_trajectory(
 
 
 def sample_open_field_mission(simulation: MujocoSimulation, seed: int | None) -> np.ndarray:
-    from uav_ac.rl.trajectory_bank import sample_open_field_waypoints
+    from uav_ac.rl.common.trajectory_bank import sample_open_field_waypoints
 
     rng = np.random.default_rng(seed)
     patterns = ("s_curve", "arc", "zigzag", "random_turns", "climb_dive")

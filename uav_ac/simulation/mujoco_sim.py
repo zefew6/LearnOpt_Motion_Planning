@@ -396,6 +396,7 @@ class MujocoSimulation:
             width: int = 1280,
             height: int = 720,
             camera: mujoco.MjvCamera | None = None,
+            update_camera: Callable[[mujoco.MjvCamera], None] | None = None,
     ) -> int:
         """Run a fixed-duration experiment and save an offscreen MP4 recording.
 
@@ -418,6 +419,8 @@ class MujocoSimulation:
         camera = default_camera(self.model) if camera is None else camera
 
         def render_frame() -> np.ndarray:
+            if update_camera is not None:
+                update_camera(camera)
             renderer.update_scene(self.data, camera=camera)
             return renderer.render()
 

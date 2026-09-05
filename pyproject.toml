@@ -30,4 +30,6 @@ include = ["uav_ac*"]
 uav_ac = [
     "config.ini",
     "simulation/models/*.xml",
+    "rl/acmpc/vendor/LICENSE.mit",
+    "rl/acmpc/vendor/SOURCE.md",
 ]

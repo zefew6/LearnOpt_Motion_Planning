@@ -58,8 +58,14 @@ class MujocoTrajectoryTrackingEnv(gym.Env[np.ndarray, np.ndarray]):
             curriculum_progress: float = 0.0,
             split: str = "train",
             wind_config: RandomWindConfig | None = None,
+            observation_mode: str = "mlp",
+            mpc_horizon_steps: int = 20,
     ):
         super().__init__()
+        if observation_mode not in {"mlp", "acmpc"}:
+            raise ValueError("unknown observation mode")
+        self.observation_mode = observation_mode
+        self.mpc_horizon_steps = mpc_horizon_steps
         if steps_per_action < 1:
             raise ValueError("steps_per_action must be positive")
 
@@ -99,6 +105,9 @@ class MujocoTrajectoryTrackingEnv(gym.Env[np.ndarray, np.ndarray]):
             dtype=np.float32,
         )
         self._curriculum_progress = 0.0
+        if observation_mode == "acmpc":
+            from ..acmpc.observation import observation_space
+            self.observation_space = observation_space(mpc_horizon_steps)
         self.set_training_progress(curriculum_progress)
         self._reference_index = 0
         self._start_index = 0
@@ -166,8 +175,7 @@ class MujocoTrajectoryTrackingEnv(gym.Env[np.ndarray, np.ndarray]):
         self._episode_position_squared_error = 0.0
         self._episode_metric_steps = 0
         self._reset_wind(options)
-        observation = encode_observation(
-            self.quad, self._reference(), self._previous_action)
+        observation = self._observation()
         return observation, self._info(self._metrics(), success=False)
 
     def step(
@@ -180,6 +188,21 @@ class MujocoTrajectoryTrackingEnv(gym.Env[np.ndarray, np.ndarray]):
         action = np.clip(action, -1.0, 1.0).astype(np.float32)
         previous_action = self._previous_action.copy()
         command = action_to_command(action, self.quad)
+        return self._advance(action, previous_action, command)
+
+    def step_wrench(self, command):
+        """Evaluate a native MPC command through the same plant/reward loop.
+
+        Reward action penalties use the bounded normalized representation;
+        physical execution retains the native command and rotor allocation.
+        """
+        from uav_ac.rl.acmpc.metrics import command_to_action
+        action = command_to_action(command, self.quad)
+        return self._advance(action, self._previous_action.copy(), command)
+
+    def _advance(self, action, previous_action, command):
+        from uav_ac.rl.acmpc.metrics import allocation_scale
+        actuator_scale = allocation_scale(command, self.quad)
 
         finite_state = True
         for _ in range(self.steps_per_action):
@@ -220,8 +243,8 @@ class MujocoTrajectoryTrackingEnv(gym.Env[np.ndarray, np.ndarray]):
 
         self._previous_action = action
         observation = (
-            encode_observation(self.quad, self._reference(), self._previous_action)
-            if finite_state else np.zeros(OBSERVATION_SIZE, dtype=np.float32)
+            self._observation()
+            if finite_state else self._zero_observation()
         )
         info = self._info(
             metrics,
@@ -235,7 +258,19 @@ class MujocoTrajectoryTrackingEnv(gym.Env[np.ndarray, np.ndarray]):
                 if self._episode_metric_steps else float("inf")
             ),
         )
+        info["allocation_scale"] = actuator_scale
         return observation, float(reward), bool(terminated), truncated, info
+
+    def _observation(self):
+        if self.observation_mode == "acmpc":
+            from ..acmpc.observation import encode_mpc_observation
+            return encode_mpc_observation(self.quad, self._reference(), self._previous_action, self.mpc_horizon_steps)
+        return encode_observation(self.quad, self._reference(), self._previous_action)
+
+    def _zero_observation(self):
+        if isinstance(self.observation_space, gym.spaces.Dict):
+            return {key: np.zeros(space.shape, dtype=space.dtype) for key, space in self.observation_space.spaces.items()}
+        return np.zeros(OBSERVATION_SIZE, dtype=np.float32)
 
     @staticmethod
     def _validate_trajectory(trajectory: np.ndarray) -> None:

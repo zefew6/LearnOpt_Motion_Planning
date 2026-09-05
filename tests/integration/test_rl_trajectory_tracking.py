@@ -10,7 +10,7 @@ from uav_ac.control.rl_controller import (
     RL_CONFIG_VERSION,
     quad_parameters,
 )
-from uav_ac.rl.environment import MujocoTrajectoryTrackingEnv
+from uav_ac.rl.common.environment import MujocoTrajectoryTrackingEnv
 from uav_ac.simulation.mujoco_sim import MujocoSimulation
 
 

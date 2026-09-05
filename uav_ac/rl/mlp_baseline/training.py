@@ -30,8 +30,8 @@ from uav_ac.control.rl_controller import (
 from uav_ac.simulation.mujoco_sim import OPEN_FIELD_SCENE_PATH, MujocoSimulation
 from uav_ac.simulation.wind_disturb import RandomWindConfig
 
-from .environment import MujocoTrajectoryTrackingEnv
-from .trajectory_bank import (
+from ..common.environment import MujocoTrajectoryTrackingEnv
+from ..common.trajectory_bank import (
     TRAJECTORY_BANK_DIRECTORY,
     TRAJECTORY_BANK_SCHEMA_VERSION,
     TrajectoryBank,
@@ -45,10 +45,12 @@ DEFAULT_SEED = 42
 DEFAULT_STEPS_PER_ACTION = 10
 EVALUATION_INTERVAL = 100_000
 CHECKPOINT_INTERVAL = 250_000
-DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[2] / "configs" / "ppo_trajectory.yaml"
+DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[3] / "configs" / "ppo_trajectory.yaml"
 
 
 DEFAULT_TRAINING_CONFIG: dict[str, Any] = {
+    "policy_type": "mlp",
+    "trajectory_bank_path": None,
     "seed": DEFAULT_SEED,
     "device": "cuda",
     "n_envs": DEFAULT_ENVIRONMENTS,
@@ -136,6 +138,11 @@ def load_training_config(config_path: str | Path | None = None) -> dict[str, Any
 
 
 def _validate_training_config(settings: dict[str, Any]) -> None:
+    if settings["policy_type"] not in {"mlp", "acmpc"}:
+        raise ValueError("policy_type must be mlp or acmpc")
+    if settings["policy_type"] == "acmpc":
+        from ..acmpc.solver import MPCSettings
+        MPCSettings(**settings.get("mpc", {}))
     ppo = settings["ppo"]
     required_positive = (
         "total_timesteps", "n_envs", "steps_per_action",
@@ -224,6 +231,12 @@ class EpisodeMetricsCallback(BaseCallback):
 
     def _on_step(self) -> bool:
         infos = self.locals.get("infos", ())
+        mpc = getattr(self.model.policy, "mpc", None)
+        if mpc is not None:
+            for name in ("failures", "retries", "max_residual", "seconds"):
+                self.logger.record_mean(f"mpc/{name}", mpc.last_diagnostics.get(name, 0.))
+            if infos:
+                self.logger.record_mean("mpc/allocation_scale", float(np.mean([info.get("allocation_scale", 1.) for info in infos])))
         dones = self.locals.get("dones", ())
         for index, info in enumerate(infos):
             if index >= len(dones) or not dones[index]:
@@ -289,6 +302,8 @@ class TrajectoryBankEvaluationCallback(BaseCallback):
             panel_size: int,
             perturb_initial_state: bool,
             seed: int,
+            observation_mode: str = "mlp",
+            mpc_horizon_steps: int = 20,
     ):
         super().__init__(verbose=0)
         self.run_dir = run_dir
@@ -305,6 +320,8 @@ class TrajectoryBankEvaluationCallback(BaseCallback):
             perturb_initial_state=self.perturb_initial_state,
             curriculum_progress=1.0,
             split="validation",
+            observation_mode=observation_mode,
+            mpc_horizon_steps=mpc_horizon_steps,
             wind_config=wind_config,
         )
 
@@ -312,13 +329,25 @@ class TrajectoryBankEvaluationCallback(BaseCallback):
         if self.n_calls % self.eval_freq != 0:
             return True
         episodes = []
-        for panel_index, trajectory_id in enumerate(self.panel_ids):
-            for windy in (False, True):
-                episodes.append(self._evaluate_episode(
-                    int(trajectory_id),
-                    self.seed + 2 * panel_index + int(windy),
-                    windy,
-                ))
+        if self.environment.observation_mode == "acmpc":
+            from ..acmpc.benchmark import collect_panel
+            cases = [dict(trajectory_id=int(trajectory_id), seed=self.seed+2*index+int(windy),
+                wind_enabled=windy, perturbation_scale=1. if self.perturb_initial_state else 0.)
+                for index,trajectory_id in enumerate(self.panel_ids) for windy in (False,True)]
+            envs = [MujocoTrajectoryTrackingEnv(self.environment.trajectory_bank,
+                model_path=OPEN_FIELD_SCENE_PATH,steps_per_action=self.environment.steps_per_action,
+                split="validation",observation_mode="acmpc",mpc_horizon_steps=self.environment.mpc_horizon_steps,
+                curriculum_progress=1., wind_config=self.environment.wind_config) for _ in cases]
+            try:
+                episodes = collect_panel(self.model, envs, cases)
+            finally:
+                for env in envs:
+                    env.close()
+        else:
+            for panel_index, trajectory_id in enumerate(self.panel_ids):
+                for windy in (False, True):
+                    episodes.append(self._evaluate_episode(
+                        int(trajectory_id), self.seed + 2 * panel_index + int(windy), windy))
         success_rate = float(np.mean([episode["success"] for episode in episodes]))
         rmses = [episode["position_rmse"] for episode in episodes if episode["success"]]
         mean_rmse = float(np.mean(rmses)) if rmses else float("inf")
@@ -397,12 +426,17 @@ def prepare_assets(
 ) -> tuple[TrajectoryBank, dict[str, Any]]:
     """Generate or load the strict MPC-validated trajectory bank."""
     settings = DEFAULT_TRAINING_CONFIG if settings is None else settings
-    bank = generate_trajectory_bank(
-        run_dir / TRAJECTORY_BANK_DIRECTORY,
-        settings["trajectory_bank"],
-        steps_per_action=steps_per_action,
-        seed=seed,
-    )
+    external = settings.get("trajectory_bank_path")
+    if external:
+        from ..common.trajectory_bank import trajectory_bank_fingerprint
+        bank = TrajectoryBank.load(Path(external))
+        expected = trajectory_bank_fingerprint(settings["trajectory_bank"], steps_per_action=steps_per_action)
+        if bank.metadata.get("fingerprint") != expected:
+            raise ValueError("external trajectory bank fingerprint does not match configuration")
+    else:
+        bank = generate_trajectory_bank(
+            run_dir / TRAJECTORY_BANK_DIRECTORY,
+            settings["trajectory_bank"], steps_per_action=steps_per_action, seed=seed)
     simulation = MujocoSimulation(OPEN_FIELD_SCENE_PATH, record_actual_trajectory=False)
     return bank, quad_parameters(simulation.quad)
 
@@ -414,6 +448,8 @@ def make_environment_factory(
         rank: int,
         steps_per_action: int,
         wind_settings: dict[str, Any],
+        observation_mode: str = "mlp",
+        mpc_horizon_steps: int = 20,
 ) -> Callable[[], gym.Env]:
     """Create one picklable, memory-mapped training worker."""
     def factory() -> gym.Env:
@@ -426,6 +462,8 @@ def make_environment_factory(
             curriculum_progress=0.0,
             split="train",
             wind_config=RandomWindConfig(**wind_settings),
+            observation_mode=observation_mode,
+            mpc_horizon_steps=mpc_horizon_steps,
         )
         return Monitor(
             environment,
@@ -457,10 +495,19 @@ def train(
     device = str(settings["device"] if device is None else device)
     steps_per_action = int(settings["steps_per_action"])
     ppo = settings["ppo"]
+    policy_type = settings["policy_type"]
+    mpc_settings = {}
+    if policy_type == "acmpc":
+        from ..acmpc.solver import MPCSettings
+        mpc_settings = asdict(MPCSettings(**settings.get("mpc", {})))
+        torch.set_num_threads(int(settings.get("torch_threads", 1)))
     if total_timesteps < 1 or n_envs < 1:
         raise ValueError("total_timesteps and n_envs must be positive")
 
     run_dir = Path(run_dir)
+    if policy_type == "acmpc" and (run_dir / RL_CONFIG_FILENAME).exists() and resume is None:
+        raise ValueError("ACMPC run already exists; use --resume or a new run directory")
+    resumed_model = PPO.load(resume, device=device) if resume is not None else None
     run_dir.mkdir(parents=True, exist_ok=True)
     monitor_dir = run_dir / "monitor"
     checkpoint_dir = run_dir / "checkpoints"
@@ -479,12 +526,15 @@ def train(
         perturb_initial_state=False,
         split="train",
         wind_config=wind_config,
+        observation_mode=policy_type,
+        mpc_horizon_steps=mpc_settings.get("horizon_steps", 20),
     )
     check_env(environment_check, warn=True)
     environment_check.close()
 
     configuration = {
-        "schema_version": RL_CONFIG_VERSION,
+        "schema_version": 2 if policy_type == "acmpc" else RL_CONFIG_VERSION,
+        "policy_type": policy_type,
         "asset_schema_version": TRAJECTORY_BANK_SCHEMA_VERSION,
         "planner": "gcopter",
         "scene": OPEN_FIELD_SCENE_PATH.name,
@@ -496,7 +546,7 @@ def train(
         "control_dt": physical_parameters["physics_dt"] * steps_per_action,
         "steps_per_action": steps_per_action,
         "quad_parameters": physical_parameters,
-        "trajectory_bank_directory": TRAJECTORY_BANK_DIRECTORY,
+        "trajectory_bank_directory": str(Path(settings["trajectory_bank_path"]).resolve()) if settings.get("trajectory_bank_path") else TRAJECTORY_BANK_DIRECTORY,
         "trajectory_splits": settings["trajectory_bank"]["splits"],
         "wind": asdict(wind_config),
         "seed": seed,
@@ -520,17 +570,31 @@ def train(
         "evaluation_interval": int(settings["evaluation_interval"]),
         "checkpoint_interval": int(settings["checkpoint_interval"]),
     }
+    if policy_type == "acmpc":
+        from ..acmpc.solver import SOLVER_VERSION
+        if not np.isclose(mpc_settings["dt"], configuration["control_dt"]):
+            raise ValueError("MPC dt must equal environment control_dt")
+        configuration.update(mpc=mpc_settings, observation_version=1, solver_version=SOLVER_VERSION)
+        if resumed_model is not None:
+            if (getattr(resumed_model.policy, "mpc_settings", None) != mpc_settings
+                    or getattr(resumed_model.policy, "quad_parameters", None) != physical_parameters):
+                raise ValueError("resume checkpoint is incompatible with ACMPC configuration")
+            for name in ("n_steps", "batch_size", "n_epochs", "gamma", "gae_lambda", "ent_coef", "max_grad_norm"):
+                if not np.isclose(getattr(resumed_model, name), ppo[name]):
+                    raise ValueError(f"resume checkpoint has incompatible PPO {name}")
     with (run_dir / RL_CONFIG_FILENAME).open("w", encoding="utf-8") as file:
         json.dump(configuration, file, indent=2, sort_keys=True)
         file.write("\n")
 
     factories = [
         make_environment_factory(
-            run_dir / TRAJECTORY_BANK_DIRECTORY,
+            Path(configuration["trajectory_bank_directory"]) if settings.get("trajectory_bank_path") else run_dir / TRAJECTORY_BANK_DIRECTORY,
             monitor_dir,
             rank=rank,
             steps_per_action=steps_per_action,
             wind_settings=settings["wind"],
+            observation_mode=policy_type,
+            mpc_horizon_steps=mpc_settings.get("horizon_steps", 20),
         )
         for rank in range(n_envs)
     ]
@@ -539,10 +603,17 @@ def train(
         if n_envs == 1 else SubprocVecEnv(factories, start_method="spawn")
     )
     if resume is None:
+        policy_class = "MlpPolicy"
+        extra_policy_kwargs = {}
+        if policy_type == "acmpc":
+            from ..acmpc.policy import ACMPCPolicy
+            policy_class = ACMPCPolicy
+            extra_policy_kwargs = {"quad_parameters": physical_parameters, "mpc_settings": mpc_settings, "log_std_init": -2.0}
         model = PPO(
-            "MlpPolicy",
+            policy_class,
             vector_environment,
             policy_kwargs={
+                **extra_policy_kwargs,
                 "activation_fn": torch.nn.ReLU,
                 "net_arch": {
                     "pi": [int(width) for width in ppo["net_arch"]["pi"]],
@@ -569,8 +640,11 @@ def train(
         )
         reset_num_timesteps = True
     else:
-        model = PPO.load(resume, env=vector_environment, device=device)
+        model = resumed_model
+        model.set_env(vector_environment)
         reset_num_timesteps = False
+    if policy_type == "acmpc":
+        model.policy.solver_strict = True
 
     callbacks = CallbackList([
         CurriculumCallback(),
@@ -584,6 +658,8 @@ def train(
             panel_size=int(settings["evaluation"]["panel_size"]),
             perturb_initial_state=bool(settings["evaluation"]["perturb_initial_state"]),
             seed=seed + 10_000,
+            observation_mode=policy_type,
+            mpc_horizon_steps=mpc_settings.get("horizon_steps", 20),
         ),
         CheckpointCallback(
             save_freq=max(int(settings["checkpoint_interval"]) // n_envs, 1),
@@ -601,6 +677,12 @@ def train(
         model.save(run_dir / "final_model")
         if not (run_dir / "best_model.zip").is_file():
             model.save(run_dir / "best_model")
+    except Exception as error:
+        if policy_type == "acmpc":
+            model.save(run_dir / "interrupted_model")
+            diagnostic = dict(model.policy.mpc.last_diagnostics, error=str(error), timesteps=model.num_timesteps)
+            (run_dir / "solver_failure.json").write_text(json.dumps(diagnostic, indent=2), encoding="utf-8")
+        raise
     finally:
         vector_environment.close()
     return run_dir
@@ -634,7 +716,7 @@ def main() -> None:
             steps_per_action=int(settings["steps_per_action"]),
             seed=seed,
         )
-        print(f"Trajectory bank: {arguments.run_dir / TRAJECTORY_BANK_DIRECTORY} ({len(bank)} trajectories)")
+        print(f"Trajectory bank: {settings.get('trajectory_bank_path') or arguments.run_dir / TRAJECTORY_BANK_DIRECTORY} ({len(bank)} trajectories)")
         return
     output = train(
         arguments.run_dir,

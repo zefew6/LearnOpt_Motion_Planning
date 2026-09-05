@@ -9,11 +9,11 @@ __all__ = ["MujocoTrajectoryTrackingEnv", "TrajectoryBank"]
 
 def __getattr__(name: str):
     if name == "MujocoTrajectoryTrackingEnv":
-        from .environment import MujocoTrajectoryTrackingEnv
+        from .common.environment import MujocoTrajectoryTrackingEnv
 
         return MujocoTrajectoryTrackingEnv
     if name == "TrajectoryBank":
-        from .trajectory_bank import TrajectoryBank
+        from .common.trajectory_bank import TrajectoryBank
 
         return TrajectoryBank
     raise AttributeError(name)

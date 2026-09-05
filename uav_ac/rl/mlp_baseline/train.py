@@ -1,4 +1,4 @@
-"""Compatibility entry point for PPO training (use :mod:`uav_ac.rl.training`)."""
+"""Train the configured RL policy."""
 
 from .training import load_training_config, main, prepare_assets, train
 

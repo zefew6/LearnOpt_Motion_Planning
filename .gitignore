@@ -58,3 +58,4 @@ MUJOCO_LOG.TXT
 youtube/
 
 # Python Code
+**/__pycache__/

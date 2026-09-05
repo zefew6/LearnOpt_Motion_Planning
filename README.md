@@ -15,6 +15,7 @@ This project is developed on top of
 - [x] Build a deterministic wind-disturbance simulation environment
 - [x] Implement a PPO reinforcement-learning controller for trajectory tracking
 - [ ] Implement a differentiable MPC trajectory-tracking controller with reinforcement learning under wind disturbance
+  - SB3 AC-MPC implementation and short-run workflow: [documentation](uav_ac/rl/acmpc/acmpc.md).
 - [ ] Implement motion-planning diffusion
 - [ ] Implement Biconvex Optimization for Smooth Minimum-Time Trajectories around Convex Obstacles
 
@@ -30,30 +31,21 @@ orange curve is the planned trajectory and the blue curve is the actual flight
 path. Convex regions are not drawn in the videos; they are shown separately in
 the FIRI figures below.
 
-### GCOPTER + Cascaded Controller
+### GCOPTER + MPC
 
-<!-- To embed the video inline, replace the link below with the real GitHub user-attachments URL. -->
-[Watch video](docs/videos/gcopter_cascaded.mp4)
-
-https://github.com/user-attachments/assets/61953890-fc11-4b02-940f-620df92ea1de
+https://github.com/user-attachments/assets/b8622729-85a3-48b4-996e-c6940f82b589
 
 **Planner:** FIRI + GCOPTER  
-**Controller:** Cascaded controller
+**Controller:** MPC
 
-### Minimum Snap + Cascaded Controller
+### Minimum Snap + Cascaded
 
-<!-- To embed the video inline, replace the link below with the real GitHub user-attachments URL. -->
-[Watch video](docs/videos/minisnap_cascaded.mp4)
-
-https://github.com/user-attachments/assets/5323852f-ee30-4675-a685-e28c2b7eb43c
+https://github.com/user-attachments/assets/21c21263-08e6-4232-9e44-911eec212278
 
 **Planner:** Minimum Snap baseline  
-**Controller:** Cascaded controller
+**Controller:** Cascaded
 
 ### GCS + MPC
-
-<!-- To embed the video inline, replace the link below with the real GitHub user-attachments URL. -->
-[Watch video](docs/videos/gcs_mpc.mp4)
 
 https://github.com/user-attachments/assets/0cb63fd2-9fe3-4f56-8253-874900b20b00
 
@@ -203,13 +195,13 @@ validation and 20 test trajectories. Edit `configs/ppo_trajectory.yaml` for
 trajectory, wind, and PPO settings.
 
 ```bash
-uv run python -m uav_ac.rl.training \
+uv run python -m uav_ac.rl.mlp_baseline.training \
   --config configs/ppo_trajectory.yaml \
   --run-dir runs/ppo_trajectory/<run-id> --prepare-only
-uv run python -m uav_ac.rl.training \
+uv run python -m uav_ac.rl.mlp_baseline.training \
   --config configs/ppo_trajectory.yaml \
   --run-dir runs/ppo_trajectory/<run-id>
-uv run python -m uav_ac.rl.evaluate runs/ppo_trajectory/<run-id> --mode metrics
+uv run python -m uav_ac.rl.mlp_baseline.evaluate runs/ppo_trajectory/<run-id> --mode metrics
 ```
 
 Use `--mode interactive --trajectory-id ID --wind random` or `--mode record`

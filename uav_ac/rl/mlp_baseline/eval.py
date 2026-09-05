@@ -1,4 +1,4 @@
-"""Compatibility entry point for evaluation (use :mod:`uav_ac.rl.evaluate`)."""
+"""Evaluate the configured RL policy."""
 
 from .evaluate import evaluate_metrics, main, record_run, run_interactive
 

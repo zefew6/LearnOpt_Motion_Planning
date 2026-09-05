@@ -167,6 +167,8 @@ class RLController:
             *,
             control_dt: float,
             steps_per_action: int,
+            observation_mode: str = "mlp",
+            mpc_horizon_steps: int = 20,
     ):
         if control_dt <= 0.0 or not np.isfinite(control_dt):
             raise ValueError("control_dt must be positive and finite")
@@ -174,7 +176,11 @@ class RLController:
             raise ValueError("steps_per_action must be positive")
         if not np.isclose(control_dt, quad.dt * steps_per_action):
             raise ValueError("control_dt must equal quad.dt * steps_per_action")
+        if observation_mode not in {"mlp", "acmpc"} or mpc_horizon_steps < 2:
+            raise ValueError("invalid RL observation mode or MPC horizon")
         self.policy = policy
+        self.observation_mode = observation_mode
+        self.mpc_horizon_steps = mpc_horizon_steps
         self.control_dt = float(control_dt)
         self.steps_per_action = int(steps_per_action)
         self._quad = quad
@@ -197,6 +203,9 @@ class RLController:
             return self._command
 
         observation = encode_observation(quad, reference, self._previous_action)
+        if self.observation_mode == "acmpc":
+            from uav_ac.rl.acmpc.observation import encode_mpc_observation
+            observation = encode_mpc_observation(quad, reference, self._previous_action, self.mpc_horizon_steps)
         prediction = self.policy.predict(
             observation,
             state=self._policy_state,
@@ -243,9 +252,24 @@ class RLController:
                 "RL deployment requires the 'rl' extra: uv sync --extra rl"
             ) from error
         policy = PPO.load(model_path, device=device)
-        if policy.observation_space.shape != (OBSERVATION_SIZE,):
+        is_acmpc = config.get("policy_type", "mlp") == "acmpc"
+        if is_acmpc:
+            from uav_ac.rl.acmpc.observation import observation_space
+            from uav_ac.rl.acmpc.policy import ACMPCPolicy
+            from uav_ac.rl.acmpc.solver import SOLVER_VERSION
+            if not isinstance(policy.policy, ACMPCPolicy):
+                raise ValueError("ACMPC run must contain an ACMPCPolicy")
+            if config.get("solver_version") != SOLVER_VERSION:
+                raise ValueError("incompatible ACMPC solver version")
+            if policy.policy.mpc_settings != config["mpc"]:
+                raise ValueError("ACMPC checkpoint settings do not match run metadata")
+            if policy.policy.quad_parameters != config["quad_parameters"]:
+                raise ValueError("ACMPC checkpoint physical parameters do not match run metadata")
+            if policy.observation_space != observation_space(config["mpc"]["horizon_steps"]):
+                raise ValueError("ACMPC observation space is incompatible")
+        elif policy.observation_space.shape != (OBSERVATION_SIZE,):
             raise ValueError("loaded RL model has an incompatible observation space")
-        if not (np.allclose(policy.observation_space.low, -OBSERVATION_CLIP)
+        if not is_acmpc and not (np.allclose(policy.observation_space.low, -OBSERVATION_CLIP)
                 and np.allclose(policy.observation_space.high, OBSERVATION_CLIP)):
             raise ValueError("loaded RL model observation bounds are incompatible")
         if policy.action_space.shape != (ACTION_SIZE,):
@@ -258,6 +282,8 @@ class RLController:
             quad,
             control_dt=float(config["control_dt"]),
             steps_per_action=int(config["steps_per_action"]),
+            observation_mode=config.get("policy_type", "mlp"),
+            mpc_horizon_steps=config.get("mpc", {}).get("horizon_steps", 20),
         )
 
 
@@ -274,8 +300,17 @@ def _validate_run_config(config: dict[str, Any], quad: Quad) -> None:
     missing = sorted(required - config.keys())
     if missing:
         raise ValueError(f"RL configuration is missing: {', '.join(missing)}")
-    if int(config["schema_version"]) != RL_CONFIG_VERSION:
+    if int(config["schema_version"]) not in {RL_CONFIG_VERSION, 2}:
         raise ValueError("unsupported RL configuration schema")
+    if config.get("policy_type", "mlp") not in {"mlp", "acmpc"}:
+        raise ValueError("unsupported policy type")
+    if config.get("policy_type") == "acmpc":
+        if config["schema_version"] != 2 or config.get("observation_version") != 1:
+            raise ValueError("unsupported ACMPC observation schema")
+        from uav_ac.rl.acmpc.solver import MPCSettings
+        settings = MPCSettings(**config["mpc"])
+        if not np.isclose(settings.dt, config["control_dt"]):
+            raise ValueError("MPC timing does not match control period")
     if int(config["observation_dim"]) != OBSERVATION_SIZE:
         raise ValueError("RL configuration observation dimension is incompatible")
     if config["action_shape"] != [ACTION_SIZE]:

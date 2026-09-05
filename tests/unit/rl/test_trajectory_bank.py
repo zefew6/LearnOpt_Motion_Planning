@@ -1,9 +1,9 @@
 import numpy as np
 import pytest
 
-from uav_ac.rl.assets import ideal_initialization_library
-from uav_ac.rl.training import DEFAULT_TRAINING_CONFIG
-from uav_ac.rl.trajectory_bank import (
+from uav_ac.rl.common.assets import ideal_initialization_library
+from uav_ac.rl.mlp_baseline.training import DEFAULT_TRAINING_CONFIG
+from uav_ac.rl.common.trajectory_bank import (
     TrajectoryBank,
     _retime_trajectory,
     sample_open_field_waypoints,

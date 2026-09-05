@@ -1,0 +1,26 @@
+# Same trajectory generation, reward, wind and GAE defaults as ppo_trajectory.yaml.
+policy_type: acmpc
+trajectory_bank_path: runs/ppo_trajectory/multitraj01/trajectory_bank
+seed: 42
+device: cpu
+torch_threads: 1
+n_envs: 4
+total_timesteps: 8192
+steps_per_action: 10
+evaluation_interval: 2048
+checkpoint_interval: 2048
+evaluation:
+  panel_size: 2
+  perturb_initial_state: true
+mpc:
+  horizon_steps: 20
+  dt: 0.01
+  iterations: 1
+  retry_iterations: 1
+  tolerance: 0.0001
+  chunk_size: 32
+  terminal_scale: 4.0
+ppo:
+  n_steps: 128
+  batch_size: 64
+  n_epochs: 3

@@ -20,9 +20,9 @@ from uav_ac.simulation.mujoco_sim import (
 )
 from uav_ac.simulation.wind_disturb import RandomWindConfig, sample_gusting_crosswind
 
-from .assets import InitializationLibrary
-from .environment import MujocoTrajectoryTrackingEnv
-from .trajectory_bank import TrajectoryBank
+from ..common.assets import InitializationLibrary
+from ..common.environment import MujocoTrajectoryTrackingEnv
+from ..common.trajectory_bank import TrajectoryBank
 
 
 EvaluationMode = Literal["metrics", "interactive", "record"]
@@ -73,6 +73,8 @@ def evaluate_metrics(
         curriculum_progress=1.0,
         split=split if is_bank else "train",
         wind_config=wind_config,
+        observation_mode=config.get("policy_type", "mlp"),
+        mpc_horizon_steps=config.get("mpc", {}).get("horizon_steps", 20),
     )
     model = PPO.load(run_dir / "best_model.zip", device=device)
     if is_bank:

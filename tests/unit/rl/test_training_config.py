@@ -1,6 +1,6 @@
 import pytest
 
-from uav_ac.rl.training import load_training_config
+from uav_ac.rl.mlp_baseline.training import load_training_config
 
 
 def test_training_config_should_load_editable_yaml_values(tmp_path):

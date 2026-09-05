@@ -2,9 +2,9 @@ import numpy as np
 import pytest
 from gymnasium.utils.env_checker import check_env
 
-from uav_ac.rl.environment import MujocoTrajectoryTrackingEnv
-from uav_ac.rl.assets import ideal_initialization_library
-from uav_ac.rl.trajectory_bank import TrajectoryBank
+from uav_ac.rl.common.environment import MujocoTrajectoryTrackingEnv
+from uav_ac.rl.common.assets import ideal_initialization_library
+from uav_ac.rl.common.trajectory_bank import TrajectoryBank
 from uav_ac.simulation.mujoco_sim import ENU_TO_NED, OPEN_FIELD_SCENE_PATH, MujocoSimulation
 from uav_ac.simulation.wind_disturb import RandomWindConfig
 
