@@ -1,4 +1,4 @@
-"""Reusable wind-disturbance models for flight simulation."""
+"""Reusable deterministic and randomized wind disturbances."""
 
 from dataclasses import dataclass
 
@@ -36,4 +36,68 @@ class GustingCrosswind:
         return steady + amplitude * np.sin(frequency * time + phase)
 
 
-__all__ = ["GustingCrosswind"]
+@dataclass(frozen=True)
+class RandomWindConfig:
+    """Episode-level distribution for force disturbances in the NED frame."""
+
+    probability: float = 0.5
+    steady_horizontal_max: float = 1.0
+    gust_horizontal_max: float = 0.5
+    gust_vertical_max: float = 0.1
+    angular_frequency_min: float = 0.3
+    angular_frequency_max: float = 1.5
+    curriculum_fraction: float = 0.3
+
+    def __post_init__(self) -> None:
+        if not 0.0 <= self.probability <= 1.0:
+            raise ValueError("wind probability must be in [0, 1]")
+        non_negative = (
+            self.steady_horizontal_max,
+            self.gust_horizontal_max,
+            self.gust_vertical_max,
+            self.angular_frequency_min,
+            self.angular_frequency_max,
+            self.curriculum_fraction,
+        )
+        if not np.all(np.isfinite(non_negative)) or np.any(np.asarray(non_negative) < 0.0):
+            raise ValueError("wind limits must be finite and non-negative")
+        if self.angular_frequency_max < self.angular_frequency_min:
+            raise ValueError("wind maximum frequency must not be below its minimum")
+
+
+def sample_gusting_crosswind(
+        rng: np.random.Generator,
+        config: RandomWindConfig,
+        *,
+        scale: float = 1.0,
+) -> GustingCrosswind:
+    """Sample one repeatable episode wind field from ``rng``."""
+    if not np.isfinite(scale) or not 0.0 <= scale <= 1.0:
+        raise ValueError("wind scale must be in [0, 1]")
+    steady_angle = rng.uniform(-np.pi, np.pi)
+    steady_magnitude = rng.uniform(0.0, config.steady_horizontal_max) * scale
+    steady = steady_magnitude * np.array([
+        np.cos(steady_angle), np.sin(steady_angle), 0.0])
+
+    gust_angle = rng.uniform(-np.pi, np.pi)
+    gust_magnitude = rng.uniform(0.0, config.gust_horizontal_max) * scale
+    gust = np.array([
+        abs(gust_magnitude * np.cos(gust_angle)),
+        abs(gust_magnitude * np.sin(gust_angle)),
+        rng.uniform(0.0, config.gust_vertical_max) * scale,
+    ])
+    frequencies = rng.uniform(
+        config.angular_frequency_min,
+        config.angular_frequency_max,
+        size=3,
+    )
+    phases = rng.uniform(-np.pi, np.pi, size=3)
+    return GustingCrosswind(
+        steady_force=tuple(steady),
+        gust_force=tuple(gust),
+        angular_frequency=tuple(frequencies),
+        phase=tuple(phases),
+    )
+
+
+__all__ = ["GustingCrosswind", "RandomWindConfig", "sample_gusting_crosswind"]

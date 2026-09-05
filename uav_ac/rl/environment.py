@@ -19,8 +19,15 @@ from uav_ac.control.rl_controller import (
 )
 from uav_ac.control.trajectory_controller import TrajectoryReference
 from uav_ac.simulation.mujoco_sim import DEFAULT_SCENE_PATH, MujocoSimulation
+from uav_ac.simulation.mujoco_sim import ENU_TO_NED
+from uav_ac.simulation.wind_disturb import (
+    GustingCrosswind,
+    RandomWindConfig,
+    sample_gusting_crosswind,
+)
 
 from .assets import InitializationLibrary, ideal_initialization_library
+from .trajectory_bank import TrajectoryBank
 
 
 MAX_POSITION_ERROR = 2.5
@@ -41,7 +48,7 @@ class MujocoTrajectoryTrackingEnv(gym.Env[np.ndarray, np.ndarray]):
 
     def __init__(
             self,
-            trajectory: np.ndarray,
+            trajectory: np.ndarray | TrajectoryBank,
             initialization_library: InitializationLibrary | None = None,
             *,
             model_path: str | Path = DEFAULT_SCENE_PATH,
@@ -49,16 +56,13 @@ class MujocoTrajectoryTrackingEnv(gym.Env[np.ndarray, np.ndarray]):
             random_start: bool = True,
             perturb_initial_state: bool = True,
             curriculum_progress: float = 0.0,
+            split: str = "train",
+            wind_config: RandomWindConfig | None = None,
     ):
         super().__init__()
-        trajectory = np.asarray(trajectory, dtype=float)
-        if (trajectory.ndim != 2 or trajectory.shape[1] < 10
-                or len(trajectory) == 0 or not np.all(np.isfinite(trajectory))):
-            raise ValueError("trajectory must have finite shape (n, m), n >= 1 and m >= 10")
         if steps_per_action < 1:
             raise ValueError("steps_per_action must be positive")
 
-        self.trajectory = trajectory
         self.simulation = MujocoSimulation(
             model_path, record_actual_trajectory=False)
         self.quad = self.simulation.quad
@@ -66,12 +70,25 @@ class MujocoTrajectoryTrackingEnv(gym.Env[np.ndarray, np.ndarray]):
         self.control_dt = self.quad.dt * self.steps_per_action
         self.random_start = bool(random_start)
         self.perturb_initial_state = bool(perturb_initial_state)
-        self.initialization_library = (
-            ideal_initialization_library(trajectory, self.quad)
-            if initialization_library is None else initialization_library
-        )
-        if len(self.initialization_library.states) != len(trajectory):
-            raise ValueError("initialization library must contain one snapshot per trajectory row")
+        self.wind_config = wind_config
+        self.trajectory_bank = trajectory if isinstance(trajectory, TrajectoryBank) else None
+        self._requested_split = split
+        if self.trajectory_bank is None:
+            trajectory_array = np.asarray(trajectory, dtype=float)
+            self._trajectory_indices = np.array([0], dtype=np.int64)
+            self._single_initialization_library = initialization_library
+        else:
+            if initialization_library is not None:
+                raise ValueError("initialization_library is stored inside a TrajectoryBank")
+            trajectory_array = self.trajectory_bank.trajectory(
+                int(self.trajectory_bank.indices(split)[0]))
+            self._trajectory_indices = self.trajectory_bank.indices(split)
+            self._single_initialization_library = None
+        self._validate_trajectory(trajectory_array)
+        self.trajectory = trajectory_array
+        self._trajectory_id = int(self._trajectory_indices[0])
+        self._trajectory_metadata: dict[str, Any] = {}
+        self._activate_trajectory(self._trajectory_id)
 
         self.action_space = gym.spaces.Box(
             low=-1.0, high=1.0, shape=(ACTION_SIZE,), dtype=np.float32)
@@ -89,6 +106,10 @@ class MujocoTrajectoryTrackingEnv(gym.Env[np.ndarray, np.ndarray]):
         self._previous_action = np.zeros(ACTION_SIZE, dtype=np.float32)
         self._episode_position_squared_error = 0.0
         self._episode_metric_steps = 0
+        self._wind: GustingCrosswind | None = None
+        self._wind_enabled = False
+        self._current_wind_force_ned = np.zeros(3)
+        self._maximum_wind_force = 0.0
 
     def set_training_progress(self, progress: float) -> None:
         """Set completed-training fraction used by the 30% perturbation ramp."""
@@ -100,6 +121,13 @@ class MujocoTrajectoryTrackingEnv(gym.Env[np.ndarray, np.ndarray]):
     def perturbation_scale(self) -> float:
         return min(self._curriculum_progress / 0.30, 1.0)
 
+    @property
+    def wind_scale(self) -> float:
+        if self.wind_config is None:
+            return 0.0
+        fraction = self.wind_config.curriculum_fraction
+        return 1.0 if fraction == 0.0 else min(self._curriculum_progress / fraction, 1.0)
+
     def reset(
             self,
             *,
@@ -108,6 +136,7 @@ class MujocoTrajectoryTrackingEnv(gym.Env[np.ndarray, np.ndarray]):
     ) -> tuple[np.ndarray, dict[str, Any]]:
         super().reset(seed=seed)
         options = {} if options is None else options
+        self._activate_trajectory(self._select_trajectory_id(options))
         start_index = self._select_start_index(options)
         perturbation_scale = float(options.get(
             "perturbation_scale",
@@ -136,6 +165,7 @@ class MujocoTrajectoryTrackingEnv(gym.Env[np.ndarray, np.ndarray]):
         self._previous_action = np.zeros(ACTION_SIZE, dtype=np.float32)
         self._episode_position_squared_error = 0.0
         self._episode_metric_steps = 0
+        self._reset_wind(options)
         observation = encode_observation(
             self.quad, self._reference(), self._previous_action)
         return observation, self._info(self._metrics(), success=False)
@@ -153,6 +183,7 @@ class MujocoTrajectoryTrackingEnv(gym.Env[np.ndarray, np.ndarray]):
 
         finite_state = True
         for _ in range(self.steps_per_action):
+            self._apply_wind()
             self.quad.set_propeller_speed(command.thrust, command.moment)
             self.simulation.step()
             finite_state = self._state_is_valid()
@@ -205,6 +236,79 @@ class MujocoTrajectoryTrackingEnv(gym.Env[np.ndarray, np.ndarray]):
             ),
         )
         return observation, float(reward), bool(terminated), truncated, info
+
+    @staticmethod
+    def _validate_trajectory(trajectory: np.ndarray) -> None:
+        if (trajectory.ndim != 2 or trajectory.shape[1] < 10
+                or len(trajectory) == 0 or not np.all(np.isfinite(trajectory))):
+            raise ValueError("trajectory must have finite shape (n, m), n >= 1 and m >= 10")
+
+    def _activate_trajectory(self, trajectory_id: int) -> None:
+        if self.trajectory_bank is None:
+            if trajectory_id != 0:
+                raise ValueError("single-trajectory environment only supports trajectory_id 0")
+            trajectory = getattr(self, "trajectory", None)
+            if trajectory is None:
+                raise RuntimeError("single trajectory was not initialized")
+            library = self._single_initialization_library
+            metadata = {"trajectory_id": 0, "split": "legacy"}
+        else:
+            if trajectory_id not in self._trajectory_indices:
+                raise ValueError(
+                    f"trajectory_id {trajectory_id} does not belong to split '{self._requested_split}'")
+            trajectory = self.trajectory_bank.trajectory(trajectory_id)
+            library = self.trajectory_bank.initialization_library(trajectory_id)
+            metadata = self.trajectory_bank.entry(trajectory_id)
+        self._validate_trajectory(np.asarray(trajectory))
+        self.trajectory = np.asarray(trajectory)
+        self.initialization_library = (
+            ideal_initialization_library(self.trajectory, self.quad)
+            if library is None else library
+        )
+        if len(self.initialization_library.states) != len(self.trajectory):
+            raise ValueError("initialization library must contain one snapshot per trajectory row")
+        self._trajectory_id = int(trajectory_id)
+        self._trajectory_metadata = metadata
+
+    def _select_trajectory_id(self, options: dict[str, Any]) -> int:
+        if "trajectory_id" in options:
+            return int(options["trajectory_id"])
+        if len(self._trajectory_indices) == 1:
+            return int(self._trajectory_indices[0])
+        return int(self.np_random.choice(self._trajectory_indices))
+
+    def _reset_wind(self, options: dict[str, Any]) -> None:
+        self.simulation.set_external_force_world(np.zeros(3))
+        self._current_wind_force_ned = np.zeros(3)
+        self._maximum_wind_force = 0.0
+        if self.wind_config is None:
+            self._wind_enabled = False
+            self._wind = None
+            return
+        enabled = bool(options.get(
+            "wind_enabled",
+            self.np_random.random() < self.wind_config.probability,
+        ))
+        scale = float(options.get("wind_scale", self.wind_scale))
+        if not 0.0 <= scale <= 1.0:
+            raise ValueError("wind_scale option must be in [0, 1]")
+        self._wind_enabled = enabled
+        self._wind = (
+            sample_gusting_crosswind(self.np_random, self.wind_config, scale=scale)
+            if enabled else None
+        )
+
+    def _apply_wind(self) -> None:
+        self._current_wind_force_ned = (
+            np.zeros(3) if self._wind is None
+            else self._wind.force_ned(float(self.simulation.data.time))
+        )
+        self._maximum_wind_force = max(
+            self._maximum_wind_force,
+            float(np.linalg.norm(self._current_wind_force_ned)),
+        )
+        self.simulation.set_external_force_world(
+            ENU_TO_NED @ self._current_wind_force_ned)
 
     def _select_start_index(self, options: dict[str, Any]) -> int:
         if "start_index" in options:
@@ -339,6 +443,18 @@ class MujocoTrajectoryTrackingEnv(gym.Env[np.ndarray, np.ndarray]):
             "failure_reason": failure_reason,
             "start_index": int(self._start_index),
             "reference_index": int(self._reference_index),
+            "trajectory_id": int(self._trajectory_id),
+            "trajectory_split": str(self._trajectory_metadata.get("split", "legacy")),
+            "navigation_waypoint_count": int(
+                self._trajectory_metadata.get("navigation_waypoint_count", 0)),
+            "trajectory_average_speed": float(
+                self._trajectory_metadata.get("average_speed", 0.0)),
+            "trajectory_peak_speed": float(
+                self._trajectory_metadata.get("peak_speed", 0.0)),
+            "wind_enabled": bool(self._wind_enabled),
+            "wind_force_ned": self._current_wind_force_ned.astype(float).copy(),
+            "wind_force_norm": float(np.linalg.norm(self._current_wind_force_ned)),
+            "maximum_wind_force": float(self._maximum_wind_force),
         }
 
 

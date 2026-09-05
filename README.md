@@ -191,33 +191,29 @@ This yields an anytime biconvex optimization procedure that can start from a col
 Install uv, then create the project environment from the repository root:
 
 ```bash
-uv sync --extra dev
+uv sync --python 3.13
 ```
 
-The default installation includes the planners, MuJoCo simulation, CasADi, and
-the cascaded controller. MPC requires the optional acados toolchain and is not
-installed by the command above.
+The default installation includes the planners, MuJoCo simulation, CasADi,
+MPC Python dependencies, PPO/RL dependencies, and test tools. MPC still
+requires the separately built acados toolchain described below.
 
-For PPO trajectory-tracking training and evaluation, install the RL extra in
-the same Python 3.13 environment:
-
-```bash
-uv sync --extra dev --extra rl --python 3.13
-```
-
-Training uses a 100 Hz policy over the existing 1 kHz MuJoCo dynamics. Edit
-`configs/ppo_trajectory.yaml` for hyperparameters; artifacts are written below
-the ignored `runs/ppo_trajectory/` directory.
+Training uses 200 MPC-validated GCOPTER trajectories in an open scene, with 20
+validation and 20 test trajectories. Edit `configs/ppo_trajectory.yaml` for
+trajectory, wind, and PPO settings.
 
 ```bash
-uv run --extra rl python -m uav_ac.rl.training \
+uv run python -m uav_ac.rl.training \
+  --config configs/ppo_trajectory.yaml \
+  --run-dir runs/ppo_trajectory/<run-id> --prepare-only
+uv run python -m uav_ac.rl.training \
   --config configs/ppo_trajectory.yaml \
   --run-dir runs/ppo_trajectory/<run-id>
-uv run --extra rl python -m uav_ac.rl.evaluate runs/ppo_trajectory/<run-id> --mode metrics
+uv run python -m uav_ac.rl.evaluate runs/ppo_trajectory/<run-id> --mode metrics
 ```
 
-Use `--mode interactive` or `--mode record --output evaluation.mp4` for
-visual evaluation. Add `--resume <checkpoint.zip>` to continue training.
+Use `--mode interactive --trajectory-id ID --wind random` or `--mode record`
+for visual evaluation. Add `--resume <checkpoint.zip>` to continue training.
 
 ### Optional: MPC Controller
 
@@ -266,16 +262,18 @@ The main program loads the selected scene, plans the trajectory, and tracks it
 in the MuJoCo viewer. Press `Backspace` in the viewer to reset and replay the
 simulation.
 
-Select the planner and controller near the top of `uav_ac/main.py`:
+Select the planner, controller, scene, and wind near the top of `uav_ac/main.py`:
 
 ```python
 PLANNER = "gcs"          # "gcopter", "gcs", or "mini_snap" for motion planner selection
 CONTROLLER = "mpc"       # "mpc", "cascaded", or "rl" for controller selection
 VISUALIZE = False        # "False" or "True"  for convex region visualization
+SCENE = "lab_course"    # "lab_course" or "open_field"
+WIND_ENABLED = False
 ```
 
-The GCS planner uses `gcs_building.xml`. GCOPTER and Minimum Snap use
-`lab_course.xml`.
+The default remains the laboratory scene without wind. Open-field mode plans a
+new GCOPTER mission on each run; set `OPEN_FIELD_SEED` to reproduce it.
 
 For `CONTROLLER = "rl"`, select GCOPTER and name the trained run:
 
@@ -295,8 +293,7 @@ uav_ac/
 │   └── pipeline/             mission-level planning composition
 ├── control/                  MPC, cascaded control, and trajectory scheduler
 ├── simulation/               MuJoCo dynamics and scene definitions
-├── main.py                   main simulation entry point
-└── wind.py                   wind-disturbance environment
+└── main.py                   simulation and optional wind entry point
 ```
 
 ## References

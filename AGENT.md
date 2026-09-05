@@ -57,7 +57,7 @@ The supported project workflow uses uv, but the project metadata is standard
 Python packaging and can also be installed with pip in a virtual environment.
 
 ```bash
-uv sync --extra dev
+uv sync
 ```
 
 For a regular virtual environment, install the same project extras with:
@@ -96,22 +96,23 @@ Interactive simulation:
 uv run python -m uav_ac.main
 ```
 
-Wind-disturbance simulation:
+Optional wind is configured in `uav_ac/main.py` with `WIND_ENABLED` and uses
+the same simulation entry point:
 
 ```bash
-uv run python -m uav_ac.wind
+uv run python -m uav_ac.main
 ```
 
 Planning tests:
 
 ```bash
-uv run --extra dev pytest -q tests/unit/planning -o addopts=
+uv run pytest -q tests/unit/planning -o addopts=
 ```
 
 Full tests with coverage:
 
 ```bash
-uv run --extra dev pytest -q -p pytest_cov.plugin
+uv run pytest -q -p pytest_cov.plugin
 ```
 
 For recording, use the project recording entry point and write outputs under

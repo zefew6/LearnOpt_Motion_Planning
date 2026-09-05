@@ -9,7 +9,7 @@ from typing import Literal
 import numpy as np
 
 from uav_ac import utils
-from uav_ac.main import _build_controller, _plan_trajectory, _trajectory_after_takeoff
+from uav_ac.main import _build_controller, _plan_trajectory
 from uav_ac.control import TrajectoryController
 from uav_ac.planning.pipeline import build_mission_corridor
 from uav_ac.simulation.recording import default_camera, render_offscreen_frame, save_png
@@ -77,11 +77,9 @@ def record_experiment(
     trajectory = _plan_trajectory(
         planner, simulation, velocity, trajectory_dt, visualize=False,
     )
-    visible_trajectory = (
-        trajectory if planner == "gcs" else
-        _trajectory_after_takeoff(trajectory, simulation.mission_waypoints[1])
-    )
-    simulation.set_trajectory_visualization(visible_trajectory[:, :3])
+    # Keep the takeoff segment visible so the planned path starts at the
+    # initialized vehicle position in recordings as well.
+    simulation.set_trajectory_visualization(trajectory[:, :3])
 
     tracker = TrajectoryController(
         controller=_build_controller(controller_name, simulation.quad, trajectory_dt),

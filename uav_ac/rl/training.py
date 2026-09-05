@@ -1,33 +1,25 @@
-"""Train PPO for MuJoCo trajectory tracking.
-
-Run with ``python -m uav_ac.rl.training`` after installing the ``rl`` extra.
-"""
+"""Prepare a diverse trajectory bank and train PPO trajectory tracking."""
 
 from __future__ import annotations
 
 import argparse
 from collections import deque
+from dataclasses import asdict
 from datetime import datetime
 import json
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 import gymnasium as gym
 import numpy as np
 import torch
 import yaml
 from stable_baselines3 import PPO
-from stable_baselines3.common.callbacks import (
-    BaseCallback,
-    CallbackList,
-    CheckpointCallback,
-    EvalCallback,
-)
+from stable_baselines3.common.callbacks import BaseCallback, CallbackList, CheckpointCallback
 from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 
-from uav_ac import utils
 from uav_ac.control.rl_controller import (
     ACTION_SIZE,
     OBSERVATION_SIZE,
@@ -35,20 +27,20 @@ from uav_ac.control.rl_controller import (
     RL_CONFIG_VERSION,
     quad_parameters,
 )
-from uav_ac.main import _plan_trajectory
-from uav_ac.simulation.mujoco_sim import DEFAULT_SCENE_PATH, MujocoSimulation
+from uav_ac.simulation.mujoco_sim import OPEN_FIELD_SCENE_PATH, MujocoSimulation
+from uav_ac.simulation.wind_disturb import RandomWindConfig
 
-from .assets import (
-    INITIALIZATION_LIBRARY_FILENAME,
-    TRAJECTORY_FILENAME,
-    InitializationLibrary,
-    generate_initialization_library,
-)
 from .environment import MujocoTrajectoryTrackingEnv
+from .trajectory_bank import (
+    TRAJECTORY_BANK_DIRECTORY,
+    TRAJECTORY_BANK_SCHEMA_VERSION,
+    TrajectoryBank,
+    generate_trajectory_bank,
+)
 
 
 DEFAULT_TOTAL_TIMESTEPS = 10_000_000
-DEFAULT_ENVIRONMENTS = 6
+DEFAULT_ENVIRONMENTS = 24
 DEFAULT_SEED = 42
 DEFAULT_STEPS_PER_ACTION = 10
 EVALUATION_INTERVAL = 100_000
@@ -56,7 +48,7 @@ CHECKPOINT_INTERVAL = 250_000
 DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[2] / "configs" / "ppo_trajectory.yaml"
 
 
-DEFAULT_TRAINING_CONFIG = {
+DEFAULT_TRAINING_CONFIG: dict[str, Any] = {
     "seed": DEFAULT_SEED,
     "device": "cuda",
     "n_envs": DEFAULT_ENVIRONMENTS,
@@ -64,9 +56,44 @@ DEFAULT_TRAINING_CONFIG = {
     "steps_per_action": DEFAULT_STEPS_PER_ACTION,
     "evaluation_interval": EVALUATION_INTERVAL,
     "checkpoint_interval": CHECKPOINT_INTERVAL,
+    "trajectory_bank": {
+        "splits": {"train": 200, "validation": 20, "test": 20},
+        "navigation_waypoints": [5, 10],
+        "horizontal_bounds": [[-90.0, -90.0], [90.0, 90.0]],
+        "altitude": [0.8, 4.5],
+        "takeoff_altitude": 1.2,
+        "segment_length": [12.0, 50.0],
+        "path_length": [60.0, 300.0],
+        "average_speed_bins": [2.0, 3.0, 4.0, 5.0, 6.0, 7.0],
+        "maximum_speed": 8.0,
+        "length_per_piece": 6.0,
+        "gcopter_max_acceleration": 6.0,
+        "takeoff_max_speed": 3.0,
+        "takeoff_max_acceleration": 3.0,
+        "max_attempts": 20_000,
+        "mpc_validation": {
+            "horizon_steps": 10,
+            "terminal_hold_seconds": 1.0,
+            "position_rmse_max": 0.5,
+            "position_error_max": 2.0,
+            "final_position_error_max": 0.5,
+            "final_velocity_error_max": 0.5,
+            "maximum_tilt_degrees": 60.0,
+        },
+    },
+    "wind": {
+        "probability": 0.5,
+        "steady_horizontal_max": 1.0,
+        "gust_horizontal_max": 0.5,
+        "gust_vertical_max": 0.1,
+        "angular_frequency_min": 0.3,
+        "angular_frequency_max": 1.5,
+        "curriculum_fraction": 0.3,
+    },
+    "evaluation": {"panel_size": 5, "perturb_initial_state": True},
     "ppo": {
-        "n_steps": 2048,
-        "batch_size": 512,
+        "n_steps": 4096,
+        "batch_size": 4096,
         "n_epochs": 10,
         "gamma": 0.995,
         "gae_lambda": 0.95,
@@ -91,10 +118,10 @@ def _deep_merge(base: dict, override: dict) -> dict:
     return result
 
 
-def load_training_config(config_path: str | Path | None = None) -> dict:
+def load_training_config(config_path: str | Path | None = None) -> dict[str, Any]:
     """Load and validate the editable YAML training configuration."""
     path = DEFAULT_CONFIG_PATH if config_path is None else Path(config_path)
-    values = {}
+    values: dict[str, Any] = {}
     if not path.is_file():
         if config_path is not None:
             raise FileNotFoundError(f"training config does not exist: {path}")
@@ -104,33 +131,71 @@ def load_training_config(config_path: str | Path | None = None) -> dict:
         if not isinstance(values, dict):
             raise ValueError(f"training config must contain a YAML mapping: {path}")
     settings = _deep_merge(DEFAULT_TRAINING_CONFIG, values)
+    _validate_training_config(settings)
+    return settings
+
+
+def _validate_training_config(settings: dict[str, Any]) -> None:
     ppo = settings["ppo"]
     required_positive = (
         "total_timesteps", "n_envs", "steps_per_action",
         "evaluation_interval", "checkpoint_interval",
     )
     if any(int(settings[key]) < 1 for key in required_positive):
-        raise ValueError("total_timesteps, n_envs, steps_per_action and intervals must be positive")
+        raise ValueError("training steps, environments, and intervals must be positive")
     for key in ("n_steps", "batch_size", "n_epochs"):
         if int(ppo[key]) < 1:
             raise ValueError(f"ppo.{key} must be positive")
     if int(ppo["batch_size"]) > int(ppo["n_steps"]) * int(settings["n_envs"]):
         raise ValueError("ppo.batch_size cannot exceed n_steps * n_envs")
-    for key in ("gamma", "gae_lambda", "clip_range", "ent_coef", "max_grad_norm",
-                "learning_rate_start", "learning_rate_end"):
+    for key in (
+        "gamma", "gae_lambda", "clip_range", "ent_coef", "max_grad_norm",
+        "learning_rate_start", "learning_rate_end",
+    ):
         if float(ppo[key]) < 0.0:
             raise ValueError(f"ppo.{key} must be non-negative")
     if str(ppo["activation"]).lower() != "relu":
-        raise ValueError("only the planned ReLU policy is currently supported")
+        raise ValueError("only ReLU policies are supported")
     for branch in ("pi", "vf"):
         architecture = ppo["net_arch"].get(branch)
         if not architecture or any(int(width) < 1 for width in architecture):
             raise ValueError(f"ppo.net_arch.{branch} must contain positive layer widths")
-    return settings
+
+    bank = settings["trajectory_bank"]
+    if set(bank["splits"]) != {"train", "validation", "test"}:
+        raise ValueError("trajectory_bank.splits must define train, validation, and test")
+    if any(int(count) < 1 for count in bank["splits"].values()):
+        raise ValueError("all trajectory-bank splits must be non-empty")
+    waypoint_limits = np.asarray(bank["navigation_waypoints"], dtype=int)
+    if waypoint_limits.shape != (2,) or waypoint_limits[0] < 1 or waypoint_limits[1] < waypoint_limits[0]:
+        raise ValueError("trajectory_bank.navigation_waypoints must be increasing positive bounds")
+    horizontal_bounds = np.asarray(bank["horizontal_bounds"], dtype=float)
+    if horizontal_bounds.shape != (2, 2) or np.any(horizontal_bounds[1] <= horizontal_bounds[0]):
+        raise ValueError("trajectory_bank.horizontal_bounds must have increasing 2D bounds")
+    for name in ("altitude", "segment_length", "path_length"):
+        bounds = np.asarray(bank[name], dtype=float)
+        if bounds.shape != (2,) or bounds[0] <= 0.0 or bounds[1] <= bounds[0]:
+            raise ValueError(f"trajectory_bank.{name} must have increasing positive bounds")
+    speed_edges = np.asarray(bank["average_speed_bins"], dtype=float)
+    if len(speed_edges) < 2 or speed_edges[0] <= 0.0 or np.any(np.diff(speed_edges) <= 0.0):
+        raise ValueError("trajectory_bank.average_speed_bins must be increasing")
+    if float(bank["maximum_speed"]) < speed_edges[-1]:
+        raise ValueError("trajectory_bank.maximum_speed must cover all average-speed bins")
+    if float(bank["length_per_piece"]) <= 0.0:
+        raise ValueError("trajectory_bank.length_per_piece must be positive")
+    if float(bank["gcopter_max_acceleration"]) <= 0.0:
+        raise ValueError("trajectory_bank.gcopter_max_acceleration must be positive")
+    if float(bank["takeoff_max_speed"]) <= 0.0 or float(bank["takeoff_max_acceleration"]) <= 0.0:
+        raise ValueError("trajectory-bank takeoff limits must be positive")
+    if int(bank["max_attempts"]) < sum(map(int, bank["splits"].values())):
+        raise ValueError("trajectory_bank.max_attempts cannot be below the requested bank size")
+    if int(settings["evaluation"]["panel_size"]) < 1:
+        raise ValueError("evaluation.panel_size must be positive")
+    RandomWindConfig(**settings["wind"])
 
 
 class CurriculumCallback(BaseCallback):
-    """Broadcast the state-perturbation ramp to every training worker."""
+    """Broadcast state-perturbation and wind curriculum progress to workers."""
 
     def __init__(self, update_frequency: int = 1_000):
         super().__init__(verbose=0)
@@ -151,12 +216,11 @@ class CurriculumCallback(BaseCallback):
 
 
 class EpisodeMetricsCallback(BaseCallback):
-    """Expose environment episode diagnostics in SB3 console/TensorBoard logs."""
+    """Expose recent multi-trajectory and wind diagnostics in SB3 logs."""
 
     def __init__(self, window_size: int = 100):
         super().__init__(verbose=0)
-        self.window_size = int(window_size)
-        self._recent_episodes = deque(maxlen=self.window_size)
+        self._recent_episodes: deque[dict[str, Any]] = deque(maxlen=int(window_size))
 
     def _on_step(self) -> bool:
         infos = self.locals.get("infos", ())
@@ -168,54 +232,152 @@ class EpisodeMetricsCallback(BaseCallback):
             self._recent_episodes.append({
                 "success": bool(info.get("success", episode_info.get("success", False))),
                 "collision": bool(info.get("collision", episode_info.get("collision", False))),
-                "failure_reason": info.get(
-                    "failure_reason", episode_info.get("failure_reason")),
+                "failure_reason": info.get("failure_reason", episode_info.get("failure_reason")),
                 "position_rmse": float(info.get(
                     "position_rmse", episode_info.get("position_rmse", np.nan))),
+                "wind_enabled": bool(info.get(
+                    "wind_enabled", episode_info.get("wind_enabled", False))),
+                "maximum_wind_force": float(info.get(
+                    "maximum_wind_force", episode_info.get("maximum_wind_force", 0.0))),
             })
-
-        if self._recent_episodes:
-            episodes = list(self._recent_episodes)
-            successful = [episode for episode in episodes if episode["success"]]
+        if not self._recent_episodes:
+            return True
+        episodes = list(self._recent_episodes)
+        successful = [episode for episode in episodes if episode["success"]]
+        windy = [episode for episode in episodes if episode["wind_enabled"]]
+        self.logger.record("rollout/success_rate", np.mean([
+            episode["success"] for episode in episodes]))
+        self.logger.record("rollout/collision_rate", np.mean([
+            episode["collision"] for episode in episodes]))
+        self.logger.record("rollout/windy_episode_rate", len(windy) / len(episodes))
+        self.logger.record("rollout/windy_success_rate", (
+            np.mean([episode["success"] for episode in windy]) if windy else 0.0))
+        self.logger.record("rollout/mean_maximum_wind_force", np.mean([
+            episode["maximum_wind_force"] for episode in episodes]))
+        successful_rmses = [
+            episode["position_rmse"] for episode in successful
+            if np.isfinite(episode["position_rmse"])
+        ]
+        self.logger.record(
+            "rollout/successful_mean_position_rmse",
+            np.mean(successful_rmses) if successful_rmses else 0.0,
+        )
+        failed_count = sum(not episode["success"] for episode in episodes)
+        for reason in sorted({
+            str(episode["failure_reason"]) for episode in episodes
+            if episode["failure_reason"] is not None
+        }):
             self.logger.record(
-                "rollout/success_rate",
-                np.mean([episode["success"] for episode in episodes]),
+                f"rollout/failure_{reason}_rate",
+                sum(episode["failure_reason"] == reason for episode in episodes)
+                / max(failed_count, 1),
             )
-            self.logger.record(
-                "rollout/collision_rate",
-                np.mean([episode["collision"] for episode in episodes]),
-            )
-            successful_rmses = [
-                episode["position_rmse"] for episode in successful
-                if np.isfinite(episode["position_rmse"])
-            ]
-            self.logger.record(
-                "rollout/successful_mean_position_rmse",
-                np.mean(successful_rmses) if successful_rmses else 0.0,
-            )
-            self.logger.record("rollout/successful_episode_count", len(successful))
-            failure_reasons = {
-                str(episode["failure_reason"])
-                for episode in episodes
-                if episode["failure_reason"] is not None
-            }
-            failed_count = sum(not episode["success"] for episode in episodes)
-            for reason in sorted(failure_reasons):
-                reason_rate = sum(
-                    episode["failure_reason"] == reason for episode in episodes
-                ) / max(failed_count, 1)
-                self.logger.record(f"rollout/failure_{reason}_rate", reason_rate)
-            last_failure = next(
-                (episode["failure_reason"] for episode in reversed(episodes)
-                 if episode["failure_reason"] is not None),
-                None,
-            )
-            if last_failure is not None:
-                # Human/CSV output is useful for the categorical reason; avoid
-                # sending a string scalar to TensorBoard's numeric dashboard.
-                self.logger.record(
-                    "rollout/last_failure_reason", last_failure, exclude="tensorboard")
         return True
+
+
+class TrajectoryBankEvaluationCallback(BaseCallback):
+    """Evaluate a fixed validation panel without SB3 VecEnv type warnings."""
+
+    def __init__(
+            self,
+            bank: TrajectoryBank,
+            run_dir: Path,
+            *,
+            steps_per_action: int,
+            wind_config: RandomWindConfig,
+            eval_freq: int,
+            panel_size: int,
+            perturb_initial_state: bool,
+            seed: int,
+    ):
+        super().__init__(verbose=0)
+        self.run_dir = run_dir
+        self.eval_freq = max(int(eval_freq), 1)
+        self.panel_ids = bank.indices("validation")[:int(panel_size)]
+        self.perturb_initial_state = bool(perturb_initial_state)
+        self.seed = int(seed)
+        self.best_rank: tuple[float, float, float] | None = None
+        self.environment = MujocoTrajectoryTrackingEnv(
+            bank,
+            model_path=OPEN_FIELD_SCENE_PATH,
+            steps_per_action=steps_per_action,
+            random_start=False,
+            perturb_initial_state=self.perturb_initial_state,
+            curriculum_progress=1.0,
+            split="validation",
+            wind_config=wind_config,
+        )
+
+    def _on_step(self) -> bool:
+        if self.n_calls % self.eval_freq != 0:
+            return True
+        episodes = []
+        for panel_index, trajectory_id in enumerate(self.panel_ids):
+            for windy in (False, True):
+                episodes.append(self._evaluate_episode(
+                    int(trajectory_id),
+                    self.seed + 2 * panel_index + int(windy),
+                    windy,
+                ))
+        success_rate = float(np.mean([episode["success"] for episode in episodes]))
+        rmses = [episode["position_rmse"] for episode in episodes if episode["success"]]
+        mean_rmse = float(np.mean(rmses)) if rmses else float("inf")
+        mean_return = float(np.mean([episode["return"] for episode in episodes]))
+        self.logger.record("eval/success_rate", success_rate)
+        self.logger.record("eval/successful_mean_position_rmse", (
+            mean_rmse if np.isfinite(mean_rmse) else 0.0))
+        self.logger.record("eval/mean_return", mean_return)
+        result = {
+            "timesteps": int(self.num_timesteps),
+            "success_rate": success_rate,
+            "successful_mean_position_rmse": (
+                mean_rmse if np.isfinite(mean_rmse) else None),
+            "mean_return": mean_return,
+            "episodes": episodes,
+        }
+        with (self.run_dir / "validation_history.jsonl").open("a", encoding="utf-8") as file:
+            file.write(json.dumps(result, sort_keys=True) + "\n")
+        rank = (success_rate, -mean_rmse, mean_return)
+        if self.best_rank is None or rank > self.best_rank:
+            self.best_rank = rank
+            self.model.save(self.run_dir / "best_model")
+        return True
+
+    def _evaluate_episode(
+            self, trajectory_id: int, seed: int, windy: bool,
+    ) -> dict[str, Any]:
+        observation, _ = self.environment.reset(
+            seed=seed,
+            options={
+                "trajectory_id": trajectory_id,
+                "start_index": 0,
+                "perturbation_scale": 1.0 if self.perturb_initial_state else 0.0,
+                "wind_enabled": windy,
+                "wind_scale": 1.0,
+            },
+        )
+        maximum_steps = len(self.environment.trajectory) + int(round(
+            1.0 / self.environment.control_dt)) + 1
+        episode_return = 0.0
+        info: dict[str, Any] = {}
+        for _ in range(maximum_steps):
+            action, _ = self.model.predict(observation, deterministic=True)
+            observation, reward, terminated, truncated, info = self.environment.step(action)
+            episode_return += float(reward)
+            if terminated or truncated:
+                break
+        return {
+            "trajectory_id": trajectory_id,
+            "seed": seed,
+            "wind_enabled": windy,
+            "success": bool(info.get("success", False)),
+            "failure_reason": info.get("failure_reason"),
+            "position_rmse": float(info.get("position_rmse", np.inf)),
+            "return": episode_return,
+        }
+
+    def _on_training_end(self) -> None:
+        self.environment.close()
 
 
 def linear_learning_rate(
@@ -223,74 +385,55 @@ def linear_learning_rate(
         start: float = 3.0e-4,
         end: float = 3.0e-5,
 ) -> float:
-    """Linearly decay the configured learning rate over one learn call."""
     return float(end + progress_remaining * (start - end))
 
 
 def prepare_assets(
         run_dir: Path,
         *,
+        settings: dict[str, Any] | None = None,
         steps_per_action: int = DEFAULT_STEPS_PER_ACTION,
-) -> tuple[np.ndarray, InitializationLibrary, dict]:
-    """Plan GCOPTER once and create the cascaded reset-state library."""
-    trajectory_path = run_dir / TRAJECTORY_FILENAME
-    library_path = run_dir / INITIALIZATION_LIBRARY_FILENAME
-    simulation = MujocoSimulation(DEFAULT_SCENE_PATH, record_actual_trajectory=False)
-    if not np.isclose(simulation.quad.dt, 0.001):
-        raise ValueError("RL baseline requires a 1 kHz MuJoCo model timestep")
-    trajectory_dt = simulation.quad.dt * steps_per_action
-    if trajectory_path.is_file():
-        trajectory = np.load(trajectory_path)
-    else:
-        _, flight_config = utils.get_config()
-        trajectory = _plan_trajectory(
-            "gcopter",
-            simulation,
-            flight_config.getfloat("velocity"),
-            trajectory_dt,
-            visualize=False,
-        )
-        np.save(trajectory_path, trajectory)
-
-    if library_path.is_file():
-        library = InitializationLibrary.load(library_path)
-    else:
-        library = generate_initialization_library(
-            trajectory,
-            steps_per_reference=steps_per_action,
-            model_path=DEFAULT_SCENE_PATH,
-        )
-        library.save(library_path)
-    if len(library.states) != len(trajectory):
-        raise ValueError("cached initialization library does not match the trajectory")
-    return trajectory, library, quad_parameters(simulation.quad)
+        seed: int = DEFAULT_SEED,
+) -> tuple[TrajectoryBank, dict[str, Any]]:
+    """Generate or load the strict MPC-validated trajectory bank."""
+    settings = DEFAULT_TRAINING_CONFIG if settings is None else settings
+    bank = generate_trajectory_bank(
+        run_dir / TRAJECTORY_BANK_DIRECTORY,
+        settings["trajectory_bank"],
+        steps_per_action=steps_per_action,
+        seed=seed,
+    )
+    simulation = MujocoSimulation(OPEN_FIELD_SCENE_PATH, record_actual_trajectory=False)
+    return bank, quad_parameters(simulation.quad)
 
 
 def make_environment_factory(
-        trajectory_path: Path,
-        library_path: Path,
+        bank_path: Path,
         monitor_path: Path,
-    *,
-    rank: int,
-    steps_per_action: int = DEFAULT_STEPS_PER_ACTION,
+        *,
+        rank: int,
+        steps_per_action: int,
+        wind_settings: dict[str, Any],
 ) -> Callable[[], gym.Env]:
-    """Create a picklable per-process environment factory."""
+    """Create one picklable, memory-mapped training worker."""
     def factory() -> gym.Env:
         environment = MujocoTrajectoryTrackingEnv(
-            np.load(trajectory_path),
-            InitializationLibrary.load(library_path),
-            model_path=DEFAULT_SCENE_PATH,
+            TrajectoryBank.load(bank_path),
+            model_path=OPEN_FIELD_SCENE_PATH,
             steps_per_action=steps_per_action,
             random_start=True,
             perturb_initial_state=True,
             curriculum_progress=0.0,
+            split="train",
+            wind_config=RandomWindConfig(**wind_settings),
         )
         return Monitor(
             environment,
             filename=str(monitor_path / f"worker_{rank}.csv"),
             info_keywords=(
                 "success", "position_error", "collision", "failure_reason",
-                "position_rmse", "start_index",
+                "position_rmse", "start_index", "trajectory_id",
+                "wind_enabled", "maximum_wind_force",
             ),
         )
     return factory
@@ -316,31 +459,35 @@ def train(
     ppo = settings["ppo"]
     if total_timesteps < 1 or n_envs < 1:
         raise ValueError("total_timesteps and n_envs must be positive")
+
     run_dir = Path(run_dir)
     run_dir.mkdir(parents=True, exist_ok=True)
     monitor_dir = run_dir / "monitor"
     checkpoint_dir = run_dir / "checkpoints"
     tensorboard_dir = run_dir / "tensorboard"
-    monitor_dir.mkdir(exist_ok=True)
-    checkpoint_dir.mkdir(exist_ok=True)
-    tensorboard_dir.mkdir(exist_ok=True)
+    for directory in (monitor_dir, checkpoint_dir, tensorboard_dir):
+        directory.mkdir(exist_ok=True)
 
-    trajectory, library, physical_parameters = prepare_assets(
-        run_dir, steps_per_action=steps_per_action)
+    bank, physical_parameters = prepare_assets(
+        run_dir, settings=settings, steps_per_action=steps_per_action, seed=seed)
+    wind_config = RandomWindConfig(**settings["wind"])
     environment_check = MujocoTrajectoryTrackingEnv(
-        trajectory,
-        library,
+        bank,
+        model_path=OPEN_FIELD_SCENE_PATH,
         steps_per_action=steps_per_action,
         random_start=False,
         perturb_initial_state=False,
+        split="train",
+        wind_config=wind_config,
     )
     check_env(environment_check, warn=True)
     environment_check.close()
 
     configuration = {
         "schema_version": RL_CONFIG_VERSION,
+        "asset_schema_version": TRAJECTORY_BANK_SCHEMA_VERSION,
         "planner": "gcopter",
-        "scene": "lab_course.xml",
+        "scene": OPEN_FIELD_SCENE_PATH.name,
         "observation_dim": OBSERVATION_SIZE,
         "action_shape": [ACTION_SIZE],
         "action_low": [-1.0] * ACTION_SIZE,
@@ -349,12 +496,13 @@ def train(
         "control_dt": physical_parameters["physics_dt"] * steps_per_action,
         "steps_per_action": steps_per_action,
         "quad_parameters": physical_parameters,
-        "trajectory_file": TRAJECTORY_FILENAME,
-        "initialization_library_file": INITIALIZATION_LIBRARY_FILENAME,
-        "seed": int(seed),
+        "trajectory_bank_directory": TRAJECTORY_BANK_DIRECTORY,
+        "trajectory_splits": settings["trajectory_bank"]["splits"],
+        "wind": asdict(wind_config),
+        "seed": seed,
         "device": device,
-        "n_envs": int(n_envs),
-        "total_timesteps": int(total_timesteps),
+        "n_envs": n_envs,
+        "total_timesteps": total_timesteps,
         "ppo": {
             "net_arch": ppo["net_arch"],
             "activation_fn": "ReLU",
@@ -364,9 +512,7 @@ def train(
             "gamma": float(ppo["gamma"]),
             "gae_lambda": float(ppo["gae_lambda"]),
             "learning_rate": [
-                float(ppo["learning_rate_start"]),
-                float(ppo["learning_rate_end"]),
-            ],
+                float(ppo["learning_rate_start"]), float(ppo["learning_rate_end"])],
             "clip_range": float(ppo["clip_range"]),
             "ent_coef": float(ppo["ent_coef"]),
             "max_grad_norm": float(ppo["max_grad_norm"]),
@@ -380,11 +526,11 @@ def train(
 
     factories = [
         make_environment_factory(
-            run_dir / TRAJECTORY_FILENAME,
-            run_dir / INITIALIZATION_LIBRARY_FILENAME,
+            run_dir / TRAJECTORY_BANK_DIRECTORY,
             monitor_dir,
             rank=rank,
             steps_per_action=steps_per_action,
+            wind_settings=settings["wind"],
         )
         for rank in range(n_envs)
     ]
@@ -392,15 +538,6 @@ def train(
         DummyVecEnv(factories)
         if n_envs == 1 else SubprocVecEnv(factories, start_method="spawn")
     )
-    evaluation_environment = Monitor(MujocoTrajectoryTrackingEnv(
-        trajectory,
-        library,
-        random_start=False,
-        perturb_initial_state=False,
-        curriculum_progress=0.0,
-        steps_per_action=steps_per_action,
-    ))
-
     if resume is None:
         model = PPO(
             "MlpPolicy",
@@ -438,13 +575,15 @@ def train(
     callbacks = CallbackList([
         CurriculumCallback(),
         EpisodeMetricsCallback(),
-        EvalCallback(
-            evaluation_environment,
-            best_model_save_path=str(run_dir),
-            log_path=str(run_dir / "evaluation"),
+        TrajectoryBankEvaluationCallback(
+            bank,
+            run_dir,
+            steps_per_action=steps_per_action,
+            wind_config=wind_config,
             eval_freq=max(int(settings["evaluation_interval"]) // n_envs, 1),
-            n_eval_episodes=1,
-            deterministic=True,
+            panel_size=int(settings["evaluation"]["panel_size"]),
+            perturb_initial_state=bool(settings["evaluation"]["perturb_initial_state"]),
+            seed=seed + 10_000,
         ),
         CheckpointCallback(
             save_freq=max(int(settings["checkpoint_interval"]) // n_envs, 1),
@@ -464,7 +603,6 @@ def train(
             model.save(run_dir / "best_model")
     finally:
         vector_environment.close()
-        evaluation_environment.close()
     return run_dir
 
 
@@ -478,11 +616,26 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--seed", type=int, help="override YAML seed")
     parser.add_argument("--device", help="override YAML device (cpu/cuda)")
     parser.add_argument("--resume", type=Path)
+    parser.add_argument(
+        "--prepare-only", action="store_true",
+        help="generate and MPC-validate the trajectory bank without training",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     arguments = _parse_args()
+    if arguments.prepare_only:
+        settings = load_training_config(arguments.config)
+        seed = int(settings["seed"] if arguments.seed is None else arguments.seed)
+        bank, _ = prepare_assets(
+            arguments.run_dir,
+            settings=settings,
+            steps_per_action=int(settings["steps_per_action"]),
+            seed=seed,
+        )
+        print(f"Trajectory bank: {arguments.run_dir / TRAJECTORY_BANK_DIRECTORY} ({len(bank)} trajectories)")
+        return
     output = train(
         arguments.run_dir,
         total_timesteps=arguments.total_timesteps,

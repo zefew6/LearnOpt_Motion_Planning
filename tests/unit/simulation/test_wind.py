@@ -1,7 +1,11 @@
 import numpy as np
 import pytest
 
-from uav_ac.simulation.wind_disturb import GustingCrosswind
+from uav_ac.simulation.wind_disturb import (
+    GustingCrosswind,
+    RandomWindConfig,
+    sample_gusting_crosswind,
+)
 
 
 def test_gusting_crosswind_should_be_repeatable_and_bounded():
@@ -51,3 +55,19 @@ def test_gusting_crosswind_should_reject_invalid_time(time):
     # Assert
     with pytest.raises(ValueError, match="time"):
         evaluate_invalid_time()
+
+
+def test_random_wind_should_be_seeded_and_respect_configured_magnitudes():
+    config = RandomWindConfig(
+        steady_horizontal_max=1.0,
+        gust_horizontal_max=0.5,
+        gust_vertical_max=0.1,
+    )
+
+    first = sample_gusting_crosswind(np.random.default_rng(7), config)
+    second = sample_gusting_crosswind(np.random.default_rng(7), config)
+
+    assert first == second
+    assert np.linalg.norm(np.asarray(first.steady_force)[:2]) <= 1.0
+    assert np.linalg.norm(np.asarray(first.gust_force)[:2]) <= 0.5
+    assert first.gust_force[2] <= 0.1

@@ -1,6 +1,6 @@
 # PPO trajectory-tracking training configuration.
 # Run from the repository root with:
-#   uv run --extra rl python -m uav_ac.rl.training --config configs/ppo_trajectory.yaml
+#   uv run python -m uav_ac.rl.training --config configs/ppo_trajectory.yaml
 
 seed: 42
 device: cuda              # use cpu when CUDA is unavailable
@@ -9,6 +9,46 @@ total_timesteps: 10000000
 steps_per_action: 10         # 10 x 1 kHz physics steps = 100 Hz control
 evaluation_interval: 100000
 checkpoint_interval: 250000
+
+trajectory_bank:
+  splits:
+    train: 200
+    validation: 20
+    test: 20
+  navigation_waypoints: [5, 10]
+  horizontal_bounds: [[-90.0, -90.0], [90.0, 90.0]]
+  altitude: [0.8, 4.5]
+  takeoff_altitude: 1.2
+  segment_length: [12.0, 50.0]
+  path_length: [60.0, 300.0]
+  average_speed_bins: [2.0, 3.0, 4.0, 5.0, 6.0, 7.0]
+  maximum_speed: 8.0
+  length_per_piece: 6.0
+  gcopter_max_acceleration: 6.0
+  takeoff_max_speed: 3.0
+  takeoff_max_acceleration: 3.0
+  max_attempts: 20000
+  mpc_validation:
+    horizon_steps: 10
+    terminal_hold_seconds: 1.0
+    position_rmse_max: 0.5
+    position_error_max: 2.0
+    final_position_error_max: 0.5
+    final_velocity_error_max: 0.5
+    maximum_tilt_degrees: 60.0
+
+wind:
+  probability: 0.5
+  steady_horizontal_max: 1.0
+  gust_horizontal_max: 0.5
+  gust_vertical_max: 0.1
+  angular_frequency_min: 0.3
+  angular_frequency_max: 1.5
+  curriculum_fraction: 0.3
+
+evaluation:
+  panel_size: 5
+  perturb_initial_state: true
 
 ppo:
   n_steps: 4096             # rollout steps collected per environment

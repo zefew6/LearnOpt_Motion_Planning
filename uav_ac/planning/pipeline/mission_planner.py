@@ -38,18 +38,23 @@ def generate_gcopter_mission(
     quad: Any,
     velocity: float,
     dt: float,
+    length_per_piece: float = 1.5,
+    max_acceleration: float = 6.0,
+    verbose: bool = True,
 ) -> np.ndarray:
     """Optimize and sample one controller-ready GCOPTER trajectory."""
     regions = corridor.regions if isinstance(corridor, MissionCorridor) else corridor
     boundaries = corridor.fixed_boundaries if isinstance(corridor, MissionCorridor) else None
     config = GCOPTERConfig(
-        length_per_piece=1.5, max_velocity=velocity, mass=quad.m, gravity=quad.g,
+        length_per_piece=length_per_piece, max_velocity=velocity,
+        max_acceleration=max_acceleration, mass=quad.m, gravity=quad.g,
         min_thrust=4.0 * quad.min_thrust, max_thrust=4.0 * quad.max_thrust,
         max_tilt_angle=quad.max_tilt_angle)
     optimized = GCOPTER(config).plan(
         waypoints[0], waypoints[-1], regions, fixed_corridor_boundaries=boundaries)
-    print(f"GCOPTER: {optimized.piece_count} pieces, {optimized.duration:.2f} s, "
-          f"{optimized.message}.")
+    if verbose:
+        print(f"GCOPTER: {optimized.piece_count} pieces, {optimized.duration:.2f} s, "
+              f"{optimized.message}.")
     return gcopter_controller_trajectory(optimized, dt)
 
 

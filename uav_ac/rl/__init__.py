@@ -4,7 +4,7 @@ Importing :mod:`uav_ac` does not import this package, so Gymnasium and SB3 stay
 optional for conventional planning and control workflows.
 """
 
-__all__ = ["MujocoTrajectoryTrackingEnv"]
+__all__ = ["MujocoTrajectoryTrackingEnv", "TrajectoryBank"]
 
 
 def __getattr__(name: str):
@@ -12,4 +12,8 @@ def __getattr__(name: str):
         from .environment import MujocoTrajectoryTrackingEnv
 
         return MujocoTrajectoryTrackingEnv
+    if name == "TrajectoryBank":
+        from .trajectory_bank import TrajectoryBank
+
+        return TrajectoryBank
     raise AttributeError(name)

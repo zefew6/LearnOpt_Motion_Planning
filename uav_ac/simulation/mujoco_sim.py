@@ -15,6 +15,7 @@ from .recording import Mp4Recorder, default_camera
 ENU_TO_NED = np.diag([1.0, -1.0, -1.0])
 DEFAULT_SCENE_PATH = Path(__file__).parent / "models" / "lab_course.xml"
 GCS_BUILDING_SCENE_PATH = Path(__file__).parent / "models" / "gcs_building.xml"
+OPEN_FIELD_SCENE_PATH = Path(__file__).parent / "models" / "open_field.xml"
 TRAJECTORY_SEGMENT_COUNT = 200
 TRAJECTORY_COLOR = np.array([1.0, 0.25, 0.05, 0.35])
 ACTUAL_TRAJECTORY_SEGMENT_COUNT = 200
@@ -144,6 +145,14 @@ class MujocoSimulation:
     def set_external_force_world(self, force: np.ndarray) -> None:
         """Set a persistent world-frame disturbance force applied at the vehicle COM."""
         self._external_force_world = _vector(force, 3, "external_force_world").copy()
+
+    def set_goal_position(self, position_ned: np.ndarray) -> None:
+        """Move the visible goal site and update the public NED goal position."""
+        position_ned = _vector(position_ned, 3, "goal_position")
+        goal_id = _named_id(self.model, mujoco.mjtObj.mjOBJ_SITE, "goal")
+        self.model.site_pos[goal_id] = ENU_TO_NED @ position_ned
+        self.goal_position = position_ned.copy()
+        mujoco.mj_forward(self.model, self.data)
 
     def reset(
             self,
@@ -426,9 +435,6 @@ class MujocoSimulation:
 
     def _record_actual_trajectory(self) -> None:
         if not self._record_actual_trajectory_enabled:
-            return
-        takeoff_waypoint = self.mission_waypoints[1]
-        if self.quad.z > takeoff_waypoint[2]:
             return
         if self.data.time < self._next_actual_trajectory_sample_time:
             return

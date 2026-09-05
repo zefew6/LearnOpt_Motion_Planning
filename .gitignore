@@ -45,6 +45,9 @@ dist/
 rl/
 !uav_ac/rl/
 !uav_ac/rl/**
+uav_ac/rl/__pycache__/
+!tests/unit/rl/
+!tests/unit/rl/**
 AirSim/
 crazyflie-lib-python/
 crazyflie/

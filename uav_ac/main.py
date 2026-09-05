@@ -1,5 +1,5 @@
 import os
-from typing import Literal
+from typing import Callable, Literal
 
 # GCOPTER solves many tiny dense/banded systems. Starting a BLAS worker pool
 # for them costs more than the arithmetic on both desktop and onboard CPUs.
@@ -20,16 +20,24 @@ from uav_ac.planning.pipeline import (
 )
 from uav_ac.simulation.mujoco_sim import (
     DEFAULT_SCENE_PATH,
+    ENU_TO_NED,
     GCS_BUILDING_SCENE_PATH,
+    OPEN_FIELD_SCENE_PATH,
     MujocoSimulation,
 )
+from uav_ac.simulation.wind_disturb import GustingCrosswind
 
 
 PlannerName = Literal["mini_snap", "gcopter", "gcs"]
 ControllerName = Literal["cascaded", "mpc", "rl"]
+SceneName = Literal["lab_course", "open_field", "gcs_building"]
 VISUALIZE: bool = False
 PLANNER: PlannerName = "gcopter"
 CONTROLLER: ControllerName = "rl"
+SCENE: SceneName = "lab_course"
+WIND_ENABLED: bool = False
+OPEN_FIELD_SEED: int | None = None
+OPEN_FIELD_MAX_SPEED: float = 8.0
 
 
 def _trajectory_after_takeoff(
@@ -46,25 +54,33 @@ def _plan_trajectory(
         simulation: MujocoSimulation,
         velocity: float,
         trajectory_dt: float,
-        *,
-        visualize: bool | None = None,
+    *,
+    visualize: bool | None = None,
+    waypoints: np.ndarray | None = None,
 ) -> np.ndarray:
     """Run exactly one of the interchangeable planning examples."""
     visualize = VISUALIZE if visualize is None else visualize
+    if waypoints is None:
+        # Scene-defined missions must always depart from the actual vehicle
+        # state; this also protects callers from stale waypoint_00 geometry.
+        waypoints = np.asarray(simulation.mission_waypoints, dtype=float).copy()
+        waypoints[0] = simulation.start_position
+    else:
+        waypoints = np.asarray(waypoints, dtype=float)
     if planner == "mini_snap":
         print("Planner: MinimumSnap.")
         return _generate_mission_trajectory(
-            simulation.mission_waypoints,
+            waypoints,
             simulation.obstacles,
             velocity,
             trajectory_dt,
         )
     if planner == "gcopter":
         corridor = _build_firi_corridor(
-            simulation, simulation.mission_waypoints, visualize=visualize
+            simulation, waypoints, visualize=visualize
         )
         return _generate_gcopter_trajectory(
-            simulation.mission_waypoints,
+            waypoints,
             corridor,
             simulation.quad,
             velocity,
@@ -73,7 +89,7 @@ def _plan_trajectory(
     if planner == "gcs":
         corridor = _build_gcs_corridor(simulation, visualize=visualize)
         geometric = _generate_gcs_trajectory(
-            simulation.mission_waypoints[[0, -1]], corridor
+            waypoints[[0, -1]], corridor
         )
         controller_trajectory = _gcs_controller_trajectory(
             geometric, velocity, trajectory_dt
@@ -89,6 +105,53 @@ def _plan_trajectory(
         )
         return controller_trajectory
     raise ValueError(f"unsupported planner: {planner}")
+
+
+def _sample_open_field_mission(
+        simulation: MujocoSimulation,
+        seed: int | None,
+) -> np.ndarray:
+    """Create one live mission that is independent of every saved RL bank."""
+    from uav_ac.rl.trajectory_bank import sample_open_field_waypoints
+
+    rng = np.random.default_rng(seed)
+    patterns = ("s_curve", "arc", "zigzag", "random_turns", "climb_dive")
+    return sample_open_field_waypoints(
+        simulation.start_position,
+        navigation_waypoint_count=int(rng.integers(5, 11)),
+        rng=rng,
+        config={
+            "horizontal_bounds": [[-90.0, -90.0], [90.0, 90.0]],
+            "altitude": [0.8, 4.5],
+            "takeoff_altitude": 1.2,
+            "segment_length": [12.0, 50.0],
+            "path_length": [60.0, 300.0],
+        },
+        pattern=str(rng.choice(patterns)),
+    )
+
+
+def _wind_control_callbacks(
+        simulation: MujocoSimulation,
+        trajectory_controller: TrajectoryController,
+        enabled: bool,
+        wind: GustingCrosswind | None = None,
+) -> tuple[Callable[[], None], Callable[[], None]]:
+    """Apply an optional common wind wrapper to any trajectory controller."""
+    if not enabled:
+        return trajectory_controller.step, trajectory_controller.reset
+    wind = GustingCrosswind() if wind is None else wind
+
+    def control_step() -> None:
+        force_ned = wind.force_ned(float(simulation.data.time))
+        simulation.set_external_force_world(ENU_TO_NED @ force_ned)
+        trajectory_controller.step()
+
+    def reset_control() -> None:
+        trajectory_controller.reset()
+        simulation.set_external_force_world(np.zeros(3))
+
+    return control_step, reset_control
 
 
 def _build_controller(controller_name: ControllerName, quad, trajectory_dt: float):
@@ -136,7 +199,9 @@ def main() -> None:
     min_distance_target = cfg_flight.getfloat("min_dist_target")
 
     scene_path = (
-        GCS_BUILDING_SCENE_PATH if PLANNER == "gcs" else DEFAULT_SCENE_PATH
+        GCS_BUILDING_SCENE_PATH if PLANNER == "gcs" else
+        OPEN_FIELD_SCENE_PATH if SCENE == "open_field" else
+        DEFAULT_SCENE_PATH
     )
     simulation = MujocoSimulation(scene_path)
     quad = simulation.quad
@@ -144,17 +209,44 @@ def main() -> None:
     trajectory_dt = quad.dt * steps_per_reference
     controller = _build_controller(CONTROLLER, quad, trajectory_dt)
 
-    global_trajectory = _plan_trajectory(
-        PLANNER, simulation, velocity, trajectory_dt
+    live_waypoints = (
+        _sample_open_field_mission(simulation, OPEN_FIELD_SEED)
+        if scene_path == OPEN_FIELD_SCENE_PATH else simulation.mission_waypoints
     )
+    if scene_path == OPEN_FIELD_SCENE_PATH:
+        simulation.set_goal_position(live_waypoints[-1])
+    planning_velocity = (
+        OPEN_FIELD_MAX_SPEED if scene_path == OPEN_FIELD_SCENE_PATH else velocity)
 
-    visible_trajectory = (
-        global_trajectory if PLANNER == "gcs" else
-        _trajectory_after_takeoff(
-            global_trajectory, simulation.mission_waypoints[1]
+    if scene_path == OPEN_FIELD_SCENE_PATH and PLANNER == "gcopter":
+        takeoff = _plan_trajectory(
+            PLANNER,
+            simulation,
+            min(3.0, planning_velocity),
+            trajectory_dt,
+            visualize=False,
+            waypoints=live_waypoints[:2],
         )
-    )
-    simulation.set_trajectory_visualization(visible_trajectory[:, :3])
+        course = _plan_trajectory(
+            PLANNER,
+            simulation,
+            planning_velocity,
+            trajectory_dt,
+            waypoints=live_waypoints[1:],
+        )
+        global_trajectory = np.vstack((takeoff, course[1:]))
+    else:
+        global_trajectory = _plan_trajectory(
+            PLANNER,
+            simulation,
+            planning_velocity,
+            trajectory_dt,
+            waypoints=live_waypoints,
+        )
+
+    # Show the complete planned path, including the takeoff segment from the
+    # vehicle's initialized position to the first airborne waypoint.
+    simulation.set_trajectory_visualization(global_trajectory[:, :3])
 
     trajectory_controller = TrajectoryController(
         controller=controller,
@@ -163,11 +255,16 @@ def main() -> None:
         steps_per_reference=steps_per_reference,
     )
 
-    print(f"Controller: {CONTROLLER}.")
+    control_step, reset_control = _wind_control_callbacks(
+        simulation, trajectory_controller, WIND_ENABLED)
+    print(
+        f"Controller: {CONTROLLER}; scene: {scene_path.stem}; "
+        f"wind: {WIND_ENABLED}."
+    )
     print("Press Backspace in the MuJoCo viewer to replay the flight.")
     simulation.run_interactive(
-        trajectory_controller.step,
-        trajectory_controller.reset,
+        control_step,
+        reset_control,
     )
 
     distance_to_goal = np.linalg.norm(

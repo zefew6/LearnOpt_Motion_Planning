@@ -5,7 +5,12 @@ import mujoco
 import numpy as np
 import pytest
 
-from uav_ac.simulation.mujoco_sim import DEFAULT_SCENE_PATH, MujocoSimulation, mujoco_to_ned_state
+from uav_ac.simulation.mujoco_sim import (
+    DEFAULT_SCENE_PATH,
+    OPEN_FIELD_SCENE_PATH,
+    MujocoSimulation,
+    mujoco_to_ned_state,
+)
 
 
 START_POSITION = np.array([1.0, 7.0, -0.021])
@@ -130,6 +135,35 @@ def test_mujoco_simulation_should_ignore_ground_contact_during_takeoff(simulatio
     # Assert
     assert simulation.has_collision is True
     assert simulation.collision_detected is False
+
+
+def test_mujoco_simulation_should_record_actual_trajectory_before_takeoff(simulation):
+    # Arrange
+    # Act
+    simulation.step()
+
+    # Assert
+    assert len(simulation._actual_trajectory_positions) == 1
+    assert simulation._actual_trajectory_positions[0] == pytest.approx(
+        simulation.quad.position)
+
+
+def test_open_field_scene_should_have_no_planning_obstacles_and_wide_bounds():
+    simulation = MujocoSimulation(OPEN_FIELD_SCENE_PATH, record_actual_trajectory=False)
+
+    assert simulation.obstacles.shape == (0, 6)
+    assert simulation.space_limits == pytest.approx(np.array([
+        [-100.0, -100.0, -5.0], [100.0, 100.0, 0.0]]))
+
+
+def test_mujoco_simulation_should_move_visible_goal_in_ned(simulation):
+    target = np.array([3.0, 4.0, -2.0])
+
+    simulation.set_goal_position(target)
+
+    assert simulation.goal_position == pytest.approx(target)
+    assert simulation.data.site_xpos[simulation.model.site("goal").id] == pytest.approx(
+        [3.0, -4.0, 2.0])
 
 
 def test_mujoco_simulation_should_detect_ground_contact_after_takeoff(simulation):
@@ -342,7 +376,9 @@ def test_run_interactive_should_reset_runtime_when_viewer_rewinds_time(simulatio
     assert simulation.quad.omega == pytest.approx(np.zeros(4))
     assert simulation.quad.omega_command == pytest.approx(np.zeros(4))
     assert simulation.collision_detected is False
-    assert simulation._actual_trajectory_positions == []
+    assert len(simulation._actual_trajectory_positions) == 1
+    assert simulation._actual_trajectory_positions[0] == pytest.approx(
+        simulation.quad.position)
     assert simulation.model.geom("actual_trajectory_segment000").rgba[3] == pytest.approx(0.0)
 
 
