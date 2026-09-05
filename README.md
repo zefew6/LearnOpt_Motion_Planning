@@ -270,16 +270,13 @@ CONTROLLER = "mpc"       # "mpc", "cascaded", or "rl" for controller selection
 VISUALIZE = False        # "False" or "True"  for convex region visualization
 SCENE = "lab_course"    # "lab_course" or "open_field"
 WIND_ENABLED = False
+RL_RUN_DIR = "runs/ppo_trajectory/exp01"  # used when CONTROLLER = "rl"
 ```
 
 The default remains the laboratory scene without wind. Open-field mode plans a
 new GCOPTER mission on each run; set `OPEN_FIELD_SEED` to reproduce it.
 
-For `CONTROLLER = "rl"`, select GCOPTER and name the trained run:
-
-```bash
-UAV_AC_RL_RUN=runs/ppo_trajectory/<run-id> uv run python -m uav_ac.main
-```
+For `CONTROLLER = "rl"`, set `RL_RUN_DIR` to the trained run directory.
 
 
 ## Repository structure

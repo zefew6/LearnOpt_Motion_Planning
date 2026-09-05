@@ -331,6 +331,8 @@ class MujocoSimulation:
             self,
             control_step: Callable[[], None],
             reset_control: Callable[[], None] | None = None,
+            camera_name: str | None = None,
+            chase_camera: bool = False,
     ) -> None:
         """
         Run the native MuJoCo viewer while the supplied controller drives the rotors.
@@ -347,6 +349,15 @@ class MujocoSimulation:
             # explicitly from <statistic> and <visual><global> in the model.
             with viewer_handle.lock():
                 mujoco.mjv_defaultFreeCamera(self.model, viewer_handle.cam)
+                if camera_name is not None:
+                    camera_id = _named_id(
+                        self.model, mujoco.mjtObj.mjOBJ_CAMERA, camera_name)
+                    viewer_handle.cam.type = mujoco.mjtCamera.mjCAMERA_FIXED
+                    viewer_handle.cam.fixedcamid = camera_id
+                if chase_camera:
+                    viewer_handle.cam.type = mujoco.mjtCamera.mjCAMERA_FREE
+                    viewer_handle.cam.distance = 8.0
+                    viewer_handle.cam.elevation = -20.0
             viewer_handle.sync()
 
             while viewer_handle.is_running():
@@ -360,6 +371,14 @@ class MujocoSimulation:
                 control_step()
                 self.step()
                 last_simulation_time = self.data.time
+                if chase_camera:
+                    with viewer_handle.lock():
+                        body_position = self.data.xpos[self._body_id]
+                        body_rotation = self.data.xmat[self._body_id].reshape(3, 3)
+                        body_forward = body_rotation[:, 0]
+                        viewer_handle.cam.lookat[:] = body_position + np.array([0.0, 0.0, 0.5])
+                        viewer_handle.cam.azimuth = np.rad2deg(
+                            np.arctan2(body_forward[1], body_forward[0]))
                 viewer_handle.sync()
 
                 remaining_step_time = self.model.opt.timestep - (

@@ -59,7 +59,7 @@ def test_default_planning_waypoints_should_start_at_current_vehicle_position(mon
         captured["waypoints"] = waypoints.copy()
         return np.zeros((2, 10))
 
-    monkeypatch.setattr("uav_ac.main._generate_mission_trajectory", capture_waypoints)
+    monkeypatch.setattr("uav_ac.runtime._generate_mission_trajectory", capture_waypoints)
     simulation.mission_waypoints[0] += np.array([0.2, -0.1, 0.0])
 
     _plan_trajectory("mini_snap", simulation, 2.0, 0.01)
