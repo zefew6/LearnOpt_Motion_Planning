@@ -145,7 +145,11 @@ class DifferentiableMPC(nn.Module):
                     detach_unconverged=not (cfg.iterations == cfg.retry_iterations == 1),
                     backprop=outer_grad,
                     verbose=-1, best_cost_eps=1e-10)
-                with torch.enable_grad():
+                # SB3 deployment calls policy.predict() under no_grad().  Do
+                # not re-enable autograd for that path: the solver's custom
+                # backward is only needed while PPO updates the cost network.
+                solver_context = torch.enable_grad() if outer_grad else torch.no_grad()
+                with solver_context:
                     predicted, actions, _ = solver(x0, cost, self.dynamics)
                 finite = torch.isfinite(actions).all(dim=(0, 2)) & torch.isfinite(predicted).all(dim=(0, 2))
                 # The paper uses one iLQR update as the differentiable actor.

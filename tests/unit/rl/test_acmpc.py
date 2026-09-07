@@ -1,3 +1,4 @@
+import gc
 import numpy as np
 import pytest
 import torch
@@ -38,10 +39,27 @@ def test_wrench_and_dynamics_jacobian(env):
     assert dx(state, actions)[2, 9] < 0
     a, b = dx.grad_input(state[1:], actions[1:])
     delta = 1e-6
+    for i in range(13):
+        perturb = torch.zeros_like(state[1:]); perturb[:, i] = delta
+        numeric = (dx(state[1:]+perturb, actions[1:])-dx(state[1:]-perturb, actions[1:]))/(2*delta)
+        torch.testing.assert_close(a[..., i], numeric, atol=1e-7, rtol=1e-5)
     for i in range(4):
         perturb = torch.zeros_like(actions[1:]); perturb[:, i] = delta
         numeric = (dx(state[1:], actions[1:]+perturb)-dx(state[1:], actions[1:]-perturb))/(2*delta)
         torch.testing.assert_close(b[..., i], numeric, atol=1e-7, rtol=1e-5)
+
+
+def test_dynamics_jacobian_matches_autograd_away_from_hover(env):
+    dx = QuadrotorDynamics(quad_parameters(env.quad), .01, internal_controls=True)
+    generator = torch.Generator().manual_seed(7)
+    state = torch.randn((4, 13), generator=generator, dtype=torch.float64)
+    state[:, 3:7] += torch.tensor([1., .2, -.1, .05], dtype=torch.float64)
+    action = .4 * torch.randn((4, 4), generator=generator, dtype=torch.float64)
+    expected_a, expected_b = torch.func.vmap(
+        torch.func.jacrev(dx.forward, argnums=(0, 1)))(state, action)
+    actual_a, actual_b = dx.grad_input(state, action)
+    torch.testing.assert_close(actual_a, expected_a, atol=2e-10, rtol=2e-8)
+    torch.testing.assert_close(actual_b, expected_b, atol=2e-10, rtol=2e-8)
 
 
 @pytest.mark.parametrize("target", [.1, 5.])
@@ -153,3 +171,25 @@ def test_cuda_solver_backward(env):
     action = layer(x,ref,torch.zeros(1,4,device="cuda"),cost,strict=True)
     grad, = torch.autograd.grad(action[0,2],cost)
     assert torch.isfinite(grad).all() and grad.norm() > 0
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(),reason="CUDA not visible in this process")
+def test_cuda_solver_backward_releases_previous_graph(env):
+    observation,_ = env.reset()
+    layer = DifferentiableMPC(quad_parameters(env.quad),
+        {"horizon_steps":5,"chunk_size":4}).cuda()
+    state = torch.tensor(observation["mpc_state"],device="cuda")[None].repeat(128,1)
+    reference = torch.tensor(observation["reference"],device="cuda")[None].repeat(128,1,1)
+    previous = torch.zeros(128,4,device="cuda")
+    allocated = []
+    for _ in range(4):
+        cost = torch.zeros(128,layer.cost_size,device="cuda",requires_grad=True)
+        action = layer(state,reference,previous,cost,strict=True)
+        action[:,2].mean().backward()
+        del action, cost
+        gc.collect()
+        torch.cuda.synchronize()
+        allocated.append(torch.cuda.memory_allocated())
+    # A new solve may grow the allocator once, but completed graphs must not
+    # accumulate across repeated PPO backward passes.
+    assert max(allocated[1:]) - min(allocated[1:]) < 8 * 2**20

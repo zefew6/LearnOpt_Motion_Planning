@@ -4,11 +4,11 @@ trajectory_bank_path: runs/ppo_trajectory/multitraj01/trajectory_bank
 seed: 42
 device: cpu
 torch_threads: 1
-n_envs: 4
-total_timesteps: 8192
+n_envs: 24              # parallel MuJoCo workers; rollout collection is CPU-side
+total_timesteps: 10000000
 steps_per_action: 10
-evaluation_interval: 2048
-checkpoint_interval: 2048
+evaluation_interval: 100000
+checkpoint_interval: 250000
 evaluation:
   panel_size: 2
   perturb_initial_state: true
@@ -18,9 +18,9 @@ mpc:
   iterations: 1
   retry_iterations: 1
   tolerance: 0.0001
-  chunk_size: 32
+  chunk_size: 16        # peak differentiable-MPC batch on the GPU
   terminal_scale: 4.0
 ppo:
-  n_steps: 128
-  batch_size: 64
-  n_epochs: 3
+  n_steps: 4096
+  batch_size: 4096        # PPO minibatch; main GPU-memory control
+  n_epochs: 10

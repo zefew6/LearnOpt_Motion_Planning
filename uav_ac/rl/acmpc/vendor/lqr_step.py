@@ -50,6 +50,14 @@ def LQRStep(n_state,
         """
     # @profile
     def lqr_backward(ctx, C, c, F, f):
+        T = ctx.T
+        n_state = ctx.n_state
+        n_ctrl = ctx.n_ctrl
+        u_lower = ctx.u_lower
+        u_zero_I = ctx.u_zero_I
+        delta_u = ctx.delta_u
+        delta_space = ctx.delta_space
+        verbose = ctx.verbose
         n_batch = C.size(1)
 
         u = ctx.current_u
@@ -127,8 +135,8 @@ def LQRStep(n_state,
                             kt = -torch.linalg.lu_solve(*Qt_uu_LU_, qt_u_.unsqueeze(2)).squeeze(2)
             else:
                 assert delta_space
-                lb = get_bound('lower', t) - u[t]
-                ub = get_bound('upper', t) - u[t]
+                lb = get_bound(ctx, 'lower', t) - u[t]
+                ub = get_bound(ctx, 'upper', t) - u[t]
                 if delta_u is not None:
                     lb[lb < -delta_u] = -delta_u
                     ub[ub > delta_u] = delta_u
@@ -162,6 +170,18 @@ def LQRStep(n_state,
 
     # @profile
     def lqr_forward(ctx, x_init, C, c, F, f, Ks, ks):
+        T = ctx.T
+        n_state = ctx.n_state
+        n_ctrl = ctx.n_ctrl
+        u_lower = ctx.u_lower
+        u_upper = ctx.u_upper
+        u_zero_I = ctx.u_zero_I
+        delta_u = ctx.delta_u
+        linesearch_decay = ctx.linesearch_decay
+        max_linesearch_iter = ctx.max_linesearch_iter
+        true_cost = ctx.true_cost
+        true_dynamics = ctx.true_dynamics
+        delta_space = ctx.delta_space
         x = ctx.current_x
         u = ctx.current_u
         n_batch = C.size(1)
@@ -198,8 +218,8 @@ def LQRStep(n_state,
                     new_ut[u_zero_I[t]] = 0.
 
                 if u_lower is not None:
-                    lb = get_bound('lower', t)
-                    ub = get_bound('upper', t)
+                    lb = get_bound(ctx, 'lower', t)
+                    ub = get_bound(ctx, 'upper', t)
 
                     if delta_u is not None:
                         lb_limit, ub_limit = lb, ub
@@ -261,11 +281,11 @@ def LQRStep(n_state,
         )
 
 
-    def get_bound(side, t):
+    def get_bound(ctx, side, t):
         if side == 'lower':
-            v = u_lower
+            v = ctx.u_lower
         if side == 'upper':
-            v = u_upper
+            v = ctx.u_upper
         if isinstance(v, float):
             return v
         else:
@@ -274,31 +294,53 @@ def LQRStep(n_state,
     class LQRStepFn(Function):
         # @profile
         @staticmethod
-        def forward(ctx, x_init, C, c, F, f=None):
-            if no_op_forward:
-                ctx.save_for_backward(
-                    x_init, C, c, F, f, current_x, current_u)
-                ctx.current_x, ctx.current_u = current_x, current_u
-                return current_x, current_u
+        def forward(ctx, x_init, C, c, F, f, current_x, current_u,
+                    u_lower, u_upper, u_zero_I, delta_u, linesearch_decay,
+                    max_linesearch_iter, true_cost, true_dynamics,
+                    delta_space, n_state, n_ctrl, T, verbose, back_eps,
+                    no_op_forward):
+            # Keep per-solve values on the autograd context instead of in the
+            # nested Function closure.  The latter is retained by every
+            # LQRStep grad_fn and used to keep the whole solver graph alive
+            # across repeated PPO updates.
+            ctx.current_x = current_x
+            ctx.current_u = current_u
+            ctx.u_lower = u_lower
+            ctx.u_upper = u_upper
+            ctx.u_zero_I = u_zero_I
+            ctx.delta_u = delta_u
+            ctx.linesearch_decay = linesearch_decay
+            ctx.max_linesearch_iter = max_linesearch_iter
+            ctx.true_cost = true_cost
+            ctx.true_dynamics = true_dynamics
+            ctx.delta_space = delta_space
+            ctx.n_state = n_state
+            ctx.n_ctrl = n_ctrl
+            ctx.T = T
+            ctx.verbose = verbose
+            ctx.back_eps = back_eps
+            ctx.no_op_forward = no_op_forward
 
-            if delta_space:
+            if ctx.no_op_forward:
+                ctx.save_for_backward(
+                    x_init, C, c, F, f, ctx.current_x, ctx.current_u)
+                return ctx.current_x, ctx.current_u
+
+            if ctx.delta_space:
                 # Taylor-expand the objective to do the backward pass in
                 # the delta space.
-                assert current_x is not None
-                assert current_u is not None
+                assert ctx.current_x is not None
+                assert ctx.current_u is not None
                 c_back = []
-                for t in range(T):
-                    xt = current_x[t]
-                    ut = current_u[t]
+                for t in range(ctx.T):
+                    xt = ctx.current_x[t]
+                    ut = ctx.current_u[t]
                     xut = torch.cat((xt, ut), 1)
                     c_back.append(util.bmv(C[t], xut) + c[t])
                 c_back = torch.stack(c_back)
                 f_back = None
             else:
                 assert False
-
-            ctx.current_x = current_x
-            ctx.current_u = current_u
 
             Ks, ks, n_total_qp_iter = lqr_backward(ctx, C, c_back, F, f_back)
             new_x, new_u, for_out = lqr_forward(ctx,
@@ -309,9 +351,16 @@ def LQRStep(n_state,
               for_out.costs, for_out.full_du_norm, for_out.mean_alphas
 
         @staticmethod
-        def backward(ctx, dl_dx, dl_du, temp=None, temp2=None):
+        def backward(ctx, dl_dx, dl_du, temp=None, temp2=None,
+                     temp3=None, temp4=None):
             start = time.time()
             x_init, C, c, F, f, new_x, new_u = ctx.saved_tensors
+            n_state = ctx.n_state
+            n_ctrl = ctx.n_ctrl
+            T = ctx.T
+            u_lower = ctx.u_lower
+            u_upper = ctx.u_upper
+            back_eps = ctx.back_eps
 
             r = []
             for t in range(T):
@@ -404,6 +453,19 @@ def LQRStep(n_state,
             dx_init = -dlams[0]
 
             backward_time = time.time()-start
-            return dx_init, dC, dc, dF, df
+            # There are five differentiable solver inputs.  The remaining
+            # inputs are per-call auxiliary values/configuration and must not
+            # receive gradients, while still being available to forward and
+            # backward through ctx.
+            return (dx_init, dC, dc, dF, df,
+                    None, None, None, None, None, None, None, None, None,
+                    None, None, None, None, None, None, None, None)
 
-    return LQRStepFn.apply
+    def apply_lqr(x_init, C, c, F, f=None):
+        return LQRStepFn.apply(
+            x_init, C, c, F, f, current_x, current_u,
+            u_lower, u_upper, u_zero_I, delta_u, linesearch_decay,
+            max_linesearch_iter, true_cost, true_dynamics, delta_space,
+            n_state, n_ctrl, T, verbose, back_eps, no_op_forward)
+
+    return apply_lqr
