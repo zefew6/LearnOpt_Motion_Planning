@@ -18,6 +18,7 @@ from uav_ac.planning.pipeline import (
     generate_minimum_snap_mission as _generate_mission_trajectory,
 )
 from uav_ac.simulation.mujoco_sim import (
+    BMTP_VILLAGE_SCENE_PATH,
     DEFAULT_SCENE_PATH,
     ENU_TO_NED,
     GCS_BUILDING_SCENE_PATH,
@@ -26,7 +27,7 @@ from uav_ac.simulation.mujoco_sim import (
 )
 from uav_ac.simulation.wind_disturb import GustingCrosswind
 
-PlannerName = Literal["mini_snap", "gcopter", "gcs"]
+PlannerName = Literal["mini_snap", "gcopter", "gcs", "bmtp"]
 ControllerName = Literal["cascaded", "mpc", "rl"]
 
 
@@ -43,6 +44,7 @@ def plan_trajectory(
         *,
         visualize: bool = False,
         waypoints: np.ndarray | None = None,
+        bmtp_config_path: str | Path | None = None,
 ) -> np.ndarray:
     if waypoints is None:
         waypoints = np.asarray(simulation.mission_waypoints, dtype=float).copy()
@@ -53,6 +55,11 @@ def plan_trajectory(
         print("Planner: MinimumSnap.")
         return _generate_mission_trajectory(
             waypoints, simulation.obstacles, velocity, trajectory_dt)
+    if planner == "bmtp":
+        from uav_ac.planning.pipeline.bmtp_mission import DEFAULT_BMTP_CONFIG, generate_bmtp_mission
+
+        return generate_bmtp_mission(simulation, trajectory_dt,
+                                     bmtp_config_path or DEFAULT_BMTP_CONFIG, visualize=visualize)
     if planner == "gcopter":
         corridor = _build_firi_corridor(simulation, waypoints, visualize=visualize)
         return _generate_gcopter_trajectory(
@@ -142,6 +149,8 @@ def build_controller(
 
 
 def scene_path(planner: PlannerName, scene: str) -> Path:
+    if planner == "bmtp":
+        return BMTP_VILLAGE_SCENE_PATH
     if planner == "gcs":
         return GCS_BUILDING_SCENE_PATH
     if scene == "open_field":
@@ -171,6 +180,7 @@ def plan_scene_trajectory(
         velocity: float,
         *,
         visualize: bool = False,
+        bmtp_config_path: str | Path | None = None,
 ) -> np.ndarray:
     if planner in ("gcopter", "mini_snap") and len(waypoints) > 2:
         # Scene missions insert waypoint_00 directly above the initialized
@@ -192,6 +202,7 @@ def plan_scene_trajectory(
         trajectory_dt,
         visualize=visualize,
         waypoints=waypoints,
+        bmtp_config_path=bmtp_config_path,
     )
 
 

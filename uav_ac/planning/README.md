@@ -54,11 +54,52 @@ corridor/firi/         FIRI configuration, separation, MVIE and corridor plannin
 trajectory/minimum_snap.py
 trajectory/gcopter/    MINCO, mappings, penalties, L-BFGS and planner orchestration
 trajectory/gcs/        CVXPY perspective SOCP, flow rounding and Bezier restriction
+trajectory/bmtp/       independent Bernstein BMTP trajectory/plane alternation
 pipeline/              mission-level composition of RRT*, FIRI and trajectory planning
 ```
 
 Public imports follow the package hierarchy directly; no duplicate flat-module
 compatibility layer is maintained.
+
+## BMTP API and reproduction demo
+
+BMTP is implemented independently of the upstream `pybmtp` package and Drake.
+It alternates a CVXPY/Clarabel minimum-time trajectory SOCP with maximum-margin
+time-varying separating-plane SOCPs, and certifies each Bézier segment with
+recursive de Casteljau collision checking:
+
+```python
+from uav_ac.planning.geometry.polytope import ConvexPolytope
+from uav_ac.planning.trajectory.bmtp import BMTPConfig, BMTPLimits, BMTPPlanner
+
+result = BMTPPlanner(BMTPConfig()).plan(
+    collision_free_initial_path, convex_obstacles, planning_domain,
+    BMTPLimits(velocity=3.0, acceleration=3.0, jerk=15.0, snap=30.0),
+)
+assert result.success
+samples = result.trajectory.sample(0.01)
+```
+
+The dedicated `bmtp_village.xml` scene is selected in `uav_ac/main.py` by
+setting `PLANNER = "bmtp"`; its parameters are in `configs/bmtp.yaml`.  To
+reproduce the multi-initialization experiment and export `summary.png`,
+`summary.svg`, `convergence.png`, `outcomes.png`, `iterations.gif`, JSON, and
+NPZ records:
+
+```bash
+MPLCONFIGDIR=/tmp/mpl-bmtp .venv/bin/python \
+  -m uav_ac.planning.trajectory.bmtp.demo
+```
+
+Saved runs can be plotted or checked without re-solving with
+`--replay runs/bmtp/<timestamp>`.  `--check-flight` additionally tracks each
+certified fixed initialization in MuJoCo and writes `flight_checks.json`.
+Dashed curves are initial geometric paths, solid curves are certified BMTP
+trajectories, and red/orange animation states identify rejected collision
+candidates and newly tagged obstacles.  The high-route initialization in this
+scene is intentionally a different valid topology; its shorter duration is
+reported as a real topology effect, not hidden when assessing initialization
+robustness.
 
 ## GCS API
 

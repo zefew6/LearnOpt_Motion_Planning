@@ -16,6 +16,7 @@ ENU_TO_NED = np.diag([1.0, -1.0, -1.0])
 DEFAULT_SCENE_PATH = Path(__file__).parent / "models" / "lab_course.xml"
 GCS_BUILDING_SCENE_PATH = Path(__file__).parent / "models" / "gcs_building.xml"
 OPEN_FIELD_SCENE_PATH = Path(__file__).parent / "models" / "open_field.xml"
+BMTP_VILLAGE_SCENE_PATH = Path(__file__).parent / "models" / "bmtp_village.xml"
 TRAJECTORY_SEGMENT_COUNT = 200
 TRAJECTORY_COLOR = np.array([1.0, 0.25, 0.05, 0.35])
 ACTUAL_TRAJECTORY_SEGMENT_COUNT = 200
@@ -60,6 +61,7 @@ class MujocoSimulation:
             model_path: str | Path = DEFAULT_SCENE_PATH,
             *,
             record_actual_trajectory: bool = True,
+            planning_path_capacity: int = 0,
     ):
         """
         Load the vehicle, mission and obstacle geometry from a MuJoCo scene.
@@ -69,8 +71,20 @@ class MujocoSimulation:
         """
         specification = mujoco.MjSpec.from_file(str(model_path))
         add_corridor_mesh_pool(specification)
+        if not 0 <= planning_path_capacity <= 8:
+            raise ValueError("planning_path_capacity must be between 0 and 8")
+        for route in range(planning_path_capacity):
+            for index in range(TRAJECTORY_SEGMENT_COUNT):
+                specification.worldbody.add_geom(
+                    name=f"planning_path_{route}_{index}",
+                    type=mujoco.mjtGeom.mjGEOM_CAPSULE, size=[0.025, 0.01, 0.0],
+                    pos=[0, 0, -100], contype=0, conaffinity=0,
+                    rgba=[0, 0, 0, 0], group=2)
         self.model = specification.compile()
         self.data = mujoco.MjData(self.model)
+        self._planning_path_ids = [np.array([
+            _named_id(self.model, mujoco.mjtObj.mjOBJ_GEOM, f"planning_path_{route}_{index}")
+            for index in range(TRAJECTORY_SEGMENT_COUNT)]) for route in range(planning_path_capacity)]
         self._body_id = _named_id(self.model, mujoco.mjtObj.mjOBJ_BODY, "quadrotor")
         self._body_geom_id = _named_id(self.model, mujoco.mjtObj.mjOBJ_GEOM, "body")
         self._tracking_beacon_id = mujoco.mj_name2id(
@@ -141,6 +155,31 @@ class MujocoSimulation:
         count = self._corridor_visualizer.set_regions(regions, ENU_TO_NED)
         mujoco.mj_forward(self.model, self.data)
         return count
+
+    def set_planning_paths(self, paths, colors, *, dashed=None) -> None:
+        """Optional multi-route NED overlay. Slots have no collision geometry."""
+        if len(paths) > len(self._planning_path_ids) or len(paths) != len(colors):
+            raise ValueError("planning paths exceed capacity or colors do not match")
+        dashed = [False]*len(paths) if dashed is None else dashed
+        if len(dashed) != len(paths):
+            raise ValueError("dashed flags must match planning paths")
+        for ids in self._planning_path_ids:
+            self.model.geom_rgba[ids, 3] = 0
+        for path, color, dash, ids in zip(paths, colors, dashed, self._planning_path_ids):
+            path, color = np.asarray(path, float), np.asarray(color, float)
+            if path.ndim != 2 or path.shape[1] != 3 or len(path) < 2 or not np.all(np.isfinite(path)):
+                raise ValueError("planning path must be finite (N, 3), N >= 2")
+            if color.shape != (4,) or not np.all(np.isfinite(color)) or np.any((color < 0) | (color > 1)):
+                raise ValueError("planning color must be an RGBA vector in [0,1]")
+            # Densify sparse polylines without replacing their corners by chords.
+            if dash:
+                pieces = [np.linspace(a, b, max(2, int(np.linalg.norm(b-a)/0.4)+1))[:-1]
+                          for a, b in zip(path[:-1], path[1:])]
+                path = np.vstack((*pieces, path[-1]))
+            self._set_trajectory_segments(path, ids, color)
+            if dash:
+                self.model.geom_rgba[ids[1::2], 3] = 0
+        mujoco.mj_forward(self.model, self.data)
 
     def set_external_force_world(self, force: np.ndarray) -> None:
         """Set a persistent world-frame disturbance force applied at the vehicle COM."""
