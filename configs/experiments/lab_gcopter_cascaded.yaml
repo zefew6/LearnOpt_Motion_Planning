@@ -1,0 +1,36 @@
+mode: deploy
+scene:
+  config: ../scenes/lab_course.yaml
+task:
+  name: trajectory_tracking
+  reference:
+    source: planner
+  initialization:
+    source: scene
+    perturb: false
+  success:
+    position_tolerance_m: 0.5
+planner:
+  name: gcopter
+  initial_path:
+    source: scene_waypoints
+  limits:
+    velocity: 3.0
+  options: {}
+agent:
+  type: controller
+  name: cascaded
+  options: {}
+disturbance:
+  wind:
+    type: none
+execution:
+  action_dt: 0.01
+  seed: 42
+  episodes: 1
+  max_steps: 100000
+output:
+  directory: ../../runs/experiments/lab_gcopter_cascaded
+  viewer: true
+  record: false
+  planning_visualization: false

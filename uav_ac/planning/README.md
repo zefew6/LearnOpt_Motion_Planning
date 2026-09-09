@@ -80,9 +80,10 @@ assert result.success
 samples = result.trajectory.sample(0.01)
 ```
 
-The dedicated `bmtp_village.xml` scene is selected in `uav_ac/main.py` by
-setting `PLANNER = "bmtp"`; its parameters are in `configs/bmtp.yaml`.  To
-reproduce the multi-initialization experiment and export `summary.png`,
+The dedicated `bmtp_village.xml` scene is selected explicitly by
+`configs/experiments/bmtp_cascaded.yaml`; the planner and scene are validated
+independently at startup. Its parameters can be edited in that experiment
+configuration. To reproduce the multi-initialization experiment and export `summary.png`,
 `summary.svg`, `convergence.png`, `outcomes.png`, `iterations.gif`, JSON, and
 NPZ records:
 

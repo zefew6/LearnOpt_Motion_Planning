@@ -70,6 +70,8 @@ def scene_problem(simulation, settings):
     model = simulation.model
     ids = np.flatnonzero((model.geom_bodyid == simulation._body_id)
                          & ((model.geom_contype != 0) | (model.geom_conaffinity != 0)))
+    if not len(ids):
+        raise ValueError("BMTP scene requires collidable vehicle geometry")
     radius = float(np.max(np.linalg.norm(model.geom_pos[ids], axis=1)+model.geom_rbound[ids]))
     margin = radius + float(settings["scene"]["clearance"])
     domain = offset(box(*simulation.space_limits), -margin)
@@ -91,10 +93,27 @@ def bmtp_controller_trajectory(trajectory: BMTPTrajectory, dt: float) -> np.ndar
 
 
 def generate_bmtp_mission(simulation, dt: float, config_path=DEFAULT_BMTP_CONFIG,
-                          *, visualize: bool = False) -> np.ndarray:
-    settings = load_bmtp_settings(config_path)
+                          *, visualize: bool = False, settings: dict | None = None) -> np.ndarray:
+    """Plan without retiming; explicit settings bypass the legacy YAML loader.
+
+    Settings use ``planner``, ``scene`` and flat ``limits`` dictionaries, or
+    the legacy ``limits_preset``/named-limits layout used by the demo.
+    """
+    if not np.isfinite(dt) or dt <= 0:
+        raise ValueError("dt must be finite and positive")
+    settings = load_bmtp_settings(config_path) if settings is None else settings
     config = BMTPConfig(**settings["planner"])
-    limits = BMTPLimits(**settings["limits"][settings["limits_preset"]])
+    limit_values = settings["limits"]
+    if "limits_preset" in settings:
+        limit_values = limit_values[settings["limits_preset"]]
+    limits = BMTPLimits(**limit_values)
+    scene = settings["scene"]
+    if not np.isfinite(scene["clearance"]) or scene["clearance"] < 0:
+        raise ValueError("BMTP clearance must be finite and nonnegative")
+    if type(scene["segments"]) is not int or scene["segments"] < 1:
+        raise ValueError("BMTP segments must be a positive integer")
+    if type(scene["initial_route"]) is not int or scene["initial_route"] < 0:
+        raise ValueError("initial_route must be a nonnegative integer")
     domain, obstacles, margin = scene_problem(simulation, settings)
     seeds = scene_seed_paths(simulation)
     route = settings["scene"]["initial_route"]
@@ -120,5 +139,5 @@ def generate_bmtp_mission(simulation, dt: float, config_path=DEFAULT_BMTP_CONFIG
             [*seeds, final_path], colors, dashed=[True, True, True, True, False])
     print(f"BMTP: {result.status}; T={result.trajectory.duration:.3f}s; "
           f"planning={result.timings['total_seconds']:.3f}s; inflation={margin:.3f}m; "
-          f"limits={settings['limits_preset']}")
+          f"limits={settings.get('limits_preset', 'explicit')}")
     return bmtp_controller_trajectory(result.trajectory, dt)

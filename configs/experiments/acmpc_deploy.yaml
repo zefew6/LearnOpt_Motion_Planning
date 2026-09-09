@@ -1,0 +1,31 @@
+mode: deploy
+scene:
+  config: ../scenes/open_field.yaml
+task:
+  name: trajectory_tracking
+  reference:
+    source: trajectory_bank
+    path: ../../runs/ppo_trajectory/multitraj01/trajectory_bank
+    split: test
+  initialization:
+    source: reference
+    perturb: false
+  success:
+    position_tolerance_m: 0.5
+agent:
+  type: rl
+  checkpoint: ../../runs/acmpc_trajectory/multitraj01/best_model.zip
+  device: cuda
+disturbance:
+  wind:
+    type: none
+execution:
+  action_dt: from_model
+  seed: 42
+  episodes: 1
+  max_steps: 100000
+output:
+  directory: ../../runs/experiments/acmpc_deploy
+  viewer: true
+  record: false
+  planning_visualization: false

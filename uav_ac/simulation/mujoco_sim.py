@@ -7,6 +7,7 @@ import numpy as np
 
 from uav_ac.planning.corridor.firi import FIRI3D, FIRIRegion
 from uav_ac.quadrotor.quad import Quad
+from uav_ac.scenes.loader import extract_scene_metadata
 from uav_ac.visualization import CorridorMeshVisualizer, add_corridor_mesh_pool
 
 from .recording import Mp4Recorder, default_camera
@@ -66,7 +67,7 @@ class MujocoSimulation:
         """
         Load the vehicle, mission and obstacle geometry from a MuJoCo scene.
 
-        :param model_path: MJCF scene containing the required quadrotor and mission data
+        :param model_path: MJCF scene containing the quadrotor; mission data is optional
         :param record_actual_trajectory: update the blue flown-path geometry while stepping
         """
         specification = mujoco.MjSpec.from_file(str(model_path))
@@ -93,16 +94,19 @@ class MujocoSimulation:
         self._rotor_site_ids = np.array([_named_id(
             self.model, mujoco.mjtObj.mjOBJ_SITE, f"rotor_{index}") for index in range(4)])
         self._rotor_spin_directions = self.model.site_user[self._rotor_site_ids, 0].copy()
-        self._trajectory_segment_ids = np.array([_named_id(
+        self._trajectory_segment_ids = np.array([mujoco.mj_name2id(
             self.model,
             mujoco.mjtObj.mjOBJ_GEOM,
             f"trajectory_segment{index:03d}",
-        ) for index in range(TRAJECTORY_SEGMENT_COUNT)])
-        self._actual_trajectory_segment_ids = np.array([_named_id(
+        ) for index in range(TRAJECTORY_SEGMENT_COUNT)], dtype=int)
+        self._trajectory_segment_ids = self._trajectory_segment_ids[self._trajectory_segment_ids >= 0]
+        self._actual_trajectory_segment_ids = np.array([mujoco.mj_name2id(
             self.model,
             mujoco.mjtObj.mjOBJ_GEOM,
             f"actual_trajectory_segment{index:03d}",
-        ) for index in range(ACTUAL_TRAJECTORY_SEGMENT_COUNT)])
+        ) for index in range(ACTUAL_TRAJECTORY_SEGMENT_COUNT)], dtype=int)
+        self._actual_trajectory_segment_ids = self._actual_trajectory_segment_ids[
+            self._actual_trajectory_segment_ids >= 0]
         self._corridor_visualizer = CorridorMeshVisualizer(self.model)
         # Compatibility aliases for existing diagnostics and downstream code.
         self._corridor_region_ids = self._corridor_visualizer.region_ids
@@ -117,14 +121,13 @@ class MujocoSimulation:
 
         mujoco.mj_forward(self.model, self.data)
         self._sync_quad_state()
-        self.start_position = self.quad.position.copy()
-        goal_id = _named_id(self.model, mujoco.mjtObj.mjOBJ_SITE, "goal")
-        self.goal_position = ENU_TO_NED @ self.data.site_xpos[goal_id]
-        self.mission_waypoints = _extract_mission_waypoints(
-            self.model, self.data, self.start_position, self.goal_position)
-        self.gcs_guide_paths = _extract_gcs_guide_paths(self.model, self.data)
-        self.space_limits = _numeric(self.model, "planning_bounds", 6).reshape(2, 3)
-        self.obstacles = _extract_obstacles(self.model, self.data)
+        self.scene = extract_scene_metadata(model_path, self.model, self.data)
+        self.start_position = self.scene.start_position.copy()
+        self.goal_position = self.scene.goal_position
+        self.mission_waypoints = self.scene.mission_waypoints
+        self.gcs_guide_paths = self.scene.gcs_guide_paths
+        self.space_limits = self.scene.space_limits
+        self.obstacles = self.scene.obstacles
         if self.has_collision:
             raise ValueError("quadrotor starts in collision")
 
@@ -289,6 +292,8 @@ class MujocoSimulation:
             clearance: float = 0.15,
     ) -> np.ndarray:
         """Return collision-checked NED grid samples in the planning volume."""
+        if self.space_limits is None:
+            raise ValueError("free-space sampling requires planning_bounds")
         spacing = np.asarray(spacing, dtype=float)
         if spacing.shape != (3,) or np.any(spacing <= 0.0) or clearance < 0.0:
             raise ValueError("spacing must be positive in 3D and clearance non-negative")
@@ -332,6 +337,8 @@ class MujocoSimulation:
             color: np.ndarray,
     ) -> None:
         max_points = len(segment_ids) + 1
+        if not len(segment_ids):
+            return
         if len(positions) > max_points:
             sample_indices = np.linspace(0, len(positions) - 1, max_points).round().astype(int)
             positions = positions[sample_indices]
@@ -584,85 +591,6 @@ def _create_quad(model: mujoco.MjModel, body_id: int, rotor_site_ids: np.ndarray
     )
 
 
-def _extract_obstacles(model: mujoco.MjModel, data: mujoco.MjData) -> np.ndarray:
-    obstacles = []
-    for geom_id in range(model.ngeom):
-        name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_GEOM, geom_id)
-        if name is None or not name.startswith("obstacle_"):
-            continue
-        if model.geom_type[geom_id] != mujoco.mjtGeom.mjGEOM_BOX:
-            raise ValueError(f"MuJoCo planning obstacle '{name}' must be an axis-aligned box")
-        if not np.allclose(data.geom_xmat[geom_id].reshape(3, 3), np.eye(3)):
-            raise ValueError(f"MuJoCo planning obstacle '{name}' must be axis-aligned")
-
-        center_ned = ENU_TO_NED @ data.geom_xpos[geom_id]
-        half_size = model.geom_size[geom_id]
-        obstacles.append(np.array([
-            center_ned[0] - half_size[0], center_ned[0] + half_size[0],
-            center_ned[1] - half_size[1], center_ned[1] + half_size[1],
-            center_ned[2] - half_size[2], center_ned[2] + half_size[2],
-        ]))
-    return np.asarray(obstacles, dtype=float).reshape(-1, 6)
-
-
-def _extract_mission_waypoints(
-        model: mujoco.MjModel,
-        data: mujoco.MjData,
-        start_position: np.ndarray,
-        goal_position: np.ndarray,
-) -> np.ndarray:
-    waypoint_ids = []
-    for site_id in range(model.nsite):
-        name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_SITE, site_id)
-        if name is not None and name.startswith("waypoint_"):
-            waypoint_ids.append((name, site_id))
-
-    waypoint_ids.sort()
-    expected_names = [f"waypoint_{index:02d}" for index in range(len(waypoint_ids))]
-    if [name for name, _ in waypoint_ids] != expected_names:
-        raise ValueError("MuJoCo mission waypoints must be consecutively numbered from waypoint_00")
-    if not waypoint_ids:
-        raise ValueError("MuJoCo scene must define at least one mandatory waypoint")
-
-    mandatory_waypoints = np.array([
-        ENU_TO_NED @ data.site_xpos[site_id] for _, site_id in waypoint_ids
-    ])
-    return np.vstack((start_position, mandatory_waypoints, goal_position))
-
-
-def _extract_gcs_guide_paths(
-        model: mujoco.MjModel,
-        data: mujoco.MjData,
-) -> list[np.ndarray]:
-    """Read consecutively numbered GCS corridor guide paths from scene sites."""
-    grouped: dict[int, list[tuple[int, int]]] = {}
-    prefix = "gcs_route_"
-    for site_id in range(model.nsite):
-        name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_SITE, site_id)
-        if name is None or not name.startswith(prefix):
-            continue
-        parts = name[len(prefix):].split("_")
-        if len(parts) != 2 or not all(part.isdigit() for part in parts):
-            raise ValueError(
-                "GCS guide sites must use names gcs_route_<route>_<point>")
-        route_index, point_index = map(int, parts)
-        grouped.setdefault(route_index, []).append((point_index, site_id))
-    if not grouped:
-        return []
-    if sorted(grouped) != list(range(len(grouped))):
-        raise ValueError("GCS guide routes must be consecutively numbered from zero")
-    routes = []
-    for route_index in range(len(grouped)):
-        points = sorted(grouped[route_index])
-        if [index for index, _ in points] != list(range(len(points))):
-            raise ValueError(
-                f"GCS guide route {route_index} points must be consecutively numbered")
-        if len(points) < 2:
-            raise ValueError("each GCS guide route must contain at least two points")
-        routes.append(np.array([
-            ENU_TO_NED @ data.site_xpos[site_id] for _, site_id in points
-        ]))
-    return routes
 
 
 def _numeric(model: mujoco.MjModel, name: str, expected_size: int) -> np.ndarray:

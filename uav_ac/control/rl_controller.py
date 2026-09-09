@@ -235,8 +235,17 @@ class RLController:
     ) -> "RLController":
         """Load and validate the best SB3 PPO policy from a training run."""
         run_dir = Path(run_dir)
-        config_path = run_dir / RL_CONFIG_FILENAME
-        model_path = run_dir / BEST_MODEL_FILENAME
+        return cls.from_checkpoint(run_dir / BEST_MODEL_FILENAME, quad, device=device)
+
+    @classmethod
+    def from_checkpoint(
+            cls, model_path: str | Path, quad: Quad, device: str = "cpu",
+    ) -> "RLController":
+        """Load an explicit checkpoint without substituting another model file."""
+        model_path = Path(model_path)
+        config_path = model_path.parent / RL_CONFIG_FILENAME
+        if not config_path.is_file() and model_path.parent.name == "checkpoints":
+            config_path = model_path.parent.parent / RL_CONFIG_FILENAME
         if not config_path.is_file():
             raise FileNotFoundError(f"missing RL configuration: {config_path}")
         if not model_path.is_file():

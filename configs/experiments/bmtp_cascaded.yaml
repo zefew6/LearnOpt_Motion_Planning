@@ -1,0 +1,51 @@
+mode: deploy
+scene:
+  config: ../scenes/bmtp_village.yaml
+task:
+  name: trajectory_tracking
+  reference:
+    source: planner
+  initialization:
+    source: scene
+    perturb: false
+  success:
+    position_tolerance_m: 0.5
+planner:
+  name: bmtp
+  initial_path:
+    source: scene_route
+    index: 0
+    segments: 8
+    clearance: 0.15
+  limits:
+    velocity: 3.0
+    acceleration: 3.0
+    jerk: 15.0
+    snap: 30.0
+  options:
+    degree: 8
+    plane_degree: 1
+    continuity_order: 4
+    terminal_order: 2
+    relative_tolerance: 0.01
+    max_iterations: 50
+    collision_tolerance: 0.0001
+    trajectory_margin: 0.0001
+    obstacle_margin: 0.000001
+agent:
+  type: controller
+  name: cascaded
+  options: {}
+disturbance:
+  wind:
+    type: none
+execution:
+  action_dt: 0.01
+  seed: 42
+  episodes: 1
+  max_steps: 100000
+output:
+  directory: ../../runs/experiments/bmtp_cascaded
+  viewer: true
+  record: false
+  planning_visualization: true
