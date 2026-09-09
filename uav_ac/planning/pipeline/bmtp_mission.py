@@ -128,16 +128,13 @@ def generate_bmtp_mission(simulation, dt: float, config_path=DEFAULT_BMTP_CONFIG
         raise RuntimeError("BMTP final collision certification failed")
     simulation.bmtp_result = result
     if visualize:
-        seeds = [subdivide_path(seed, settings["scene"]["segments"])
-                 for seed in scene_seed_paths(simulation)]
-        colors = [(0.0, 0.45, 0.70, 0.8), (0.9, 0.4, 0.0, 0.8),
-                  (0.0, 0.6, 0.5, 0.8), (0.8, 0.4, 0.7, 0.8),
-                  (0.1, 0.1, 0.1, 0.95)]
+        # Show the actual initialization used by this run, not every route in
+        # the scene. This keeps deployment visualization readable and makes
+        # BMTP's initial-path dependence explicit.
         final_path = result.trajectory.evaluate(
             np.linspace(0.0, result.trajectory.duration, 501))
         simulation.set_planning_paths(
-            [*seeds, final_path], colors, dashed=[True, True, True, True, False])
-    print(f"BMTP: {result.status}; T={result.trajectory.duration:.3f}s; "
-          f"planning={result.timings['total_seconds']:.3f}s; inflation={margin:.3f}m; "
-          f"limits={settings.get('limits_preset', 'explicit')}")
+            [result.initial_path, final_path],
+            [(0.95, 0.65, 0.05, 0.95), (0.05, 0.85, 0.25, 0.95)],
+            dashed=[True, False])
     return bmtp_controller_trajectory(result.trajectory, dt)

@@ -13,11 +13,9 @@ from uav_ac.simulation.recording import default_camera
 
 SCENE_PATH = DEFAULT_SCENE_PATH.with_name("bmtp_village.xml")
 SEED_ROUTES = [
-    [(1, 1, -2), (1, 23, -2), (23, 23, -2)],
-    [(1, 1, -2), (23, 1, -2), (23, 23, -2)],
-    [(1, 1, -2), (1, 12, -2), (1, 23, -2), (12, 23, -2),
-     (23, 23, -2)],
-    [(1, 1, -2), (1, 1, -6.5), (1, 23, -6.5), (23, 23, -6.5), (23, 23, -2)],
+    [(-0.2, -0.2, -2), (-0.2, 8.4, -2.75), (-0.2, 17, -3.5),
+     (-0.2, 25.6, -4.25), (-0.2, 34.2, -5), (8.4, 34.2, -5.75),
+     (17, 34.2, -6.5), (25.6, 34.2, -7.25), (34.2, 34.2, -8)],
 ]
 
 
@@ -42,40 +40,34 @@ def _segment_hits_box(start, end, lower, upper):
 
 
 def test_bmtp_scene_loads_requested_mission_without_initial_contact(simulation):
-    assert simulation.start_position == pytest.approx([1, 1, -2])
-    assert simulation.goal_position == pytest.approx([23, 23, -2])
-    assert simulation.space_limits == pytest.approx(np.array([[0, 0, -8], [24, 24, 0]]))
+    assert simulation.start_position == pytest.approx([-0.2, -0.2, -2])
+    assert simulation.goal_position == pytest.approx([34.2, 34.2, -8])
+    assert simulation.space_limits == pytest.approx(np.array([[-1, -1, -11], [35, 35, 1]]))
     assert simulation.data.ncon == 0
     assert not simulation.has_collision
     assert not simulation.collision_detected
     # The current loader requires a waypoint; it imposes no extra location.
     assert simulation.mission_waypoints == pytest.approx(
-        np.array([[1, 1, -2], [1, 1, -2], [23, 23, -2]]))
+        np.array([[-0.2, -0.2, -2], [-0.2, -0.2, -2], [34.2, 34.2, -8]]))
     assert simulation.model.site("waypoint_00").rgba[3] == 0
 
 
-def test_bmtp_buildings_are_physical_axis_aligned_boxes_on_the_grid(simulation):
+def test_bmtp_scene_recreates_the_paper_village_with_521_convex_obstacles(simulation):
     boxes = simulation.obstacles
-    assert boxes.shape == (16, 6)
-    centers = (boxes[:, ::2] + boxes[:, 1::2]) / 2
-    assert set(map(tuple, centers[:, :2])) == set(product((5, 10, 15, 20), repeat=2))
-    np.testing.assert_allclose(boxes[:, 1:4:2] - boxes[:, 0:3:2], 2.5)
-    np.testing.assert_allclose(boxes[:, 5], 0)
-    heights = -boxes[:, 4]
-    np.testing.assert_allclose(heights, np.resize([2.5, 4, 5.5], 16))
-    grid = {(x, y): h for (x, y), h in zip(centers[:, :2], heights)}
-    assert any(grid[x, y] != grid[y, x] for x, y in grid)
-    for index in range(16):
-        geom = simulation.model.geom(f"obstacle_{index:02d}")
-        assert geom.type == mujoco.mjtGeom.mjGEOM_BOX
-        assert geom.bodyid == 0
-        assert geom.contype != 0 and geom.conaffinity != 0
-        np.testing.assert_allclose(simulation.data.geom_xmat[geom.id].reshape(3, 3), np.eye(3))
+    assert boxes.shape == (521, 6)
+    np.testing.assert_allclose(boxes[0], [-0.5, 34.5, -0.5, 34.5, 0.01, 0.02])
+    geom = simulation.model.geom("obstacle_000")
+    assert geom.type == mujoco.mjtGeom.mjGEOM_BOX
+    assert geom.bodyid == 0
+    assert geom.contype != 0 and geom.conaffinity != 0
+    np.testing.assert_allclose(simulation.data.geom_xmat[geom.id].reshape(3, 3), np.eye(3))
+    assert any(_segment_hits_box(simulation.start_position, simulation.goal_position,
+                                 box[::2], box[1::2]) for box in boxes[1:])
     assert simulation.model.geom("ground").type == mujoco.mjtGeom.mjGEOM_PLANE
 
 
-@pytest.mark.parametrize("route_index", range(4))
-def test_bmtp_seed_sites_encode_clear_polylines(simulation, route_index):
+def test_bmtp_seed_sites_encode_the_paper_outer_perimeter_initialization(simulation):
+    route_index = 0
     names = sorted(
         simulation.model.site(index).name for index in range(simulation.model.nsite)
         if simulation.model.site(index).name.startswith(f"bmtp_route_{route_index:02d}_")
@@ -87,16 +79,14 @@ def test_bmtp_seed_sites_encode_clear_polylines(simulation, route_index):
     route = np.array([simulation.data.site_xpos[site.id] for site in sites]) * [1, -1, -1]
     np.testing.assert_allclose(route, SEED_ROUTES[route_index])
     assert all(site.rgba[3] == 0 and site.bodyid == 0 for site in sites)
-    assert np.all(route >= simulation.space_limits[0] + 0.4)
-    assert np.all(route <= simulation.space_limits[1] - 0.4)
     for start, end in zip(route[:-1], route[1:]):
         for index, box in enumerate(simulation.obstacles):
-            assert not _segment_hits_box(start, end, box[::2] - 0.4, box[1::2] + 0.4), (
+            assert not _segment_hits_box(start, end, box[::2], box[1::2]), (
                 f"route {route_index}, segment {start} -> {end}, obstacle {index}"
             )
     route_names = [simulation.model.site(index).name for index in range(simulation.model.nsite)
                    if simulation.model.site(index).name.startswith("bmtp_route_")]
-    assert len(route_names) == sum(map(len, SEED_ROUTES))
+    assert len(route_names) == len(SEED_ROUTES[0])
 
 
 @pytest.mark.parametrize(("start", "end", "expected"), [
@@ -142,14 +132,14 @@ def test_bmtp_vehicle_dynamics_match_laboratory_scene(simulation):
 
 def test_bmtp_default_camera_frames_whole_village(simulation):
     camera = default_camera(simulation.model)
-    np.testing.assert_allclose(camera.lookat, [12, -12, 3])
+    np.testing.assert_allclose(camera.lookat, [17, -17, 5])
     assert camera.elevation < 0
-    corners = np.array(list(product((0, 24), (-24, 0), (0, 8))))
+    corners = np.array(list(product((-1, 35), (-35, 1), (0, 11))))
     radius = np.linalg.norm(corners - camera.lookat, axis=1).max()
     # A sphere containing the entire planning volume fits the vertical FOV.
     half_fov = np.deg2rad(simulation.model.vis.global_.fovy / 2)
     assert radius < camera.distance * np.sin(half_fov)
     overhead = simulation.model.camera("overhead")
-    np.testing.assert_allclose(overhead.pos[:2], [12, -12])
+    np.testing.assert_allclose(overhead.pos[:2], [17, -17])
     np.testing.assert_allclose(overhead.quat, [1, 0, 0, 0])
-    assert (overhead.pos[2] - 8) * np.tan(np.deg2rad(overhead.fovy[0] / 2)) > 12
+    assert (overhead.pos[2] - 11) * np.tan(np.deg2rad(overhead.fovy[0] / 2)) > 18

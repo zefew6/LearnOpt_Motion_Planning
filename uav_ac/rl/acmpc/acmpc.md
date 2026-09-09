@@ -16,17 +16,18 @@ is recorded in run metadata; update it when moving the run.
 ```bash
 uv run python -m uav_ac.rl.acmpc.benchmark \
   --run-dir runs/acmpc_trajectory/exp01 --mode preflight
-uv run python -m uav_ac.rl.mlp_baseline.training \
+uv run python -m uav_ac.rl.training \
   --config configs/acmpc_trajectory.yaml --run-dir runs/acmpc_trajectory/exp01
 uv run python -m uav_ac.rl.mlp_baseline.evaluate runs/acmpc_trajectory/exp01 --mode metrics
 uv run python -m uav_ac.rl.acmpc.benchmark \
   --run-dir runs/acmpc_trajectory/exp01 --mode compare
 ```
 
-The existing `evaluate` interactive/record modes also work. Use `CONTROLLER =
-"rl"` and `RL_RUN_DIR` in `uav_ac.main` to deploy either policy. Resume using
-`--resume CHECKPOINT.zip`. Old MLP runs retain schema 1; AC-MPC uses schema 2
-and validates observation layout, physical parameters and MPC settings.
+The existing `evaluate` interactive/record modes also work. To deploy either
+policy through `uav_ac.main`, set `controller: rl` and an explicit `checkpoint`
+in `configs/flight.yaml`. Resume training using `--resume CHECKPOINT.zip`. Old
+MLP runs retain schema 1; AC-MPC uses schema 2 and validates observation layout,
+physical parameters and MPC settings.
 
 The short run uses 8,192 steps, 4 environments, seed 42, 128 rollout steps per
 environment, minibatches of 64, three PPO epochs and MPC chunks of 32. A full

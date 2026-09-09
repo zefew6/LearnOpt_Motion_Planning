@@ -37,10 +37,10 @@
     <geom name="world_boundary_east" type="box" pos="0 -100 2.5" size="100 0.1 2.5" rgba="0 0 0 0"/>
     <geom name="world_boundary_ceiling" type="box" pos="0 0 5.1" size="100 100 0.1" rgba="0 0 0 0"/>
 
-    <!-- These define only the deterministic main.py example. RL bank generation supplies its own waypoints. -->
-    <site name="waypoint_00" type="sphere" pos="-90 0 1.2" size="0.08" rgba="1 0.85 0.1 0.8"/>
-    <site name="waypoint_01" type="sphere" pos="-35 -18 2.5" size="0.08" rgba="1 0.85 0.1 0.8"/>
-    <site name="waypoint_02" type="sphere" pos="30 14 3.5" size="0.08" rgba="1 0.85 0.1 0.8"/>
+    <!-- Task checkpoints for the deterministic main.py example. The adapter
+         prepends the vehicle start; RL bank generation supplies its own route. -->
+    <site name="waypoint_00" type="sphere" pos="-35 -18 2.5" size="0.08" rgba="1 0.85 0.1 0.8"/>
+    <site name="waypoint_01" type="sphere" pos="30 14 3.5" size="0.08" rgba="1 0.85 0.1 0.8"/>
 
     <replicate count="200">
       <geom name="trajectory_segment" type="capsule" pos="0 0 -20" size="0.025 0.01"

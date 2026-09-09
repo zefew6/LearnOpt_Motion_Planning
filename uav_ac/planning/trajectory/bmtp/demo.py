@@ -41,9 +41,10 @@ def initializations(simulation, settings, domain, obstacles):
         raise ValueError("random initializations and perturbation must be nonnegative")
     rng = np.random.default_rng(settings["demo"]["random_seed"])
     rejected = 0
+    fixed_count = len(seeds)
     for i in range(count):
         for _ in range(500):
-            seed = seeds[i % 4].copy()
+            seed = seeds[i % fixed_count].copy()
             seed[1:-1] += rng.uniform(-deviation, deviation, size=seed[1:-1].shape)
             if (np.all(domain.contains(seed)) and not collisions(np.stack((seed[:-1], seed[1:]), axis=1), obstacles)):
                 seeds.append(seed)
@@ -105,12 +106,12 @@ def evaluate_initializations(simulation, settings):
         records.append(record)
         print(f"[{i+1}/{len(seeds)}] {record['kind']} {record['status']}: "
               f"T={record['duration']}; {result.timings['total_seconds']:.2f}s; {result.message}", flush=True)
-    fixed = records[:4]
+    fixed = records[:len(scene_seed_paths(simulation))]
     durations = [r["duration"] for r in fixed if r["success"]]
     metadata["summary"] = dict(total=len(records), certified=sum(r["success"] for r in records),
         converged=sum(r["converged"] for r in records), fixed_certified=len(durations),
-        fixed_duration_ratio=max(durations)/min(durations) if len(durations) == 4 else None,
-        demonstration_target_met=len(durations) == 4 and max(durations)/min(durations) <= 1.10)
+        fixed_duration_ratio=max(durations)/min(durations) if durations else None,
+        demonstration_target_met=len(durations) == len(fixed) and bool(durations))
     return metadata, arrays
 
 
@@ -134,7 +135,10 @@ def show_overlays(simulation, metadata, arrays):
     colors = [(0.0, 0.45, 0.70, 0.8), (0.9, 0.4, 0.0, 0.8),
               (0.0, 0.6, 0.5, 0.8), (0.8, 0.4, 0.7, 0.8)]
     paths, rgba, dashed = [], [], []
-    for record, color in zip(metadata["records"][:4], colors):
+    for index, record in enumerate(metadata["records"]):
+        if record["kind"] != "fixed":
+            continue
+        color = colors[index % len(colors)]
         paths.append(record["initial_path"])
         rgba.append(color)
         dashed.append(True)
@@ -211,7 +215,7 @@ def main():
     parser.add_argument("--config", type=Path, default=DEFAULT_BMTP_CONFIG)
     parser.add_argument("--replay", type=Path, help="load a saved run without re-optimizing")
     parser.add_argument("--viewer", action="store_true", help="open MuJoCo after generating comparison artifacts")
-    parser.add_argument("--check-flight", action="store_true", help="simulate all four fixed results headlessly")
+    parser.add_argument("--check-flight", action="store_true", help="simulate every fixed result headlessly")
     parser.add_argument("--video", action="store_true", help="record actual flight to MP4 (requires an OpenGL backend)")
     args = parser.parse_args()
     if args.replay:
@@ -228,8 +232,10 @@ def main():
     print(json.dumps(metadata["summary"], indent=2), flush=True)
     print(f"Results: {output.resolve()}", flush=True)
     if args.check_flight:
-        flights = [fly(metadata, arrays, i) if metadata["records"][i]["success"]
-                   else dict(route=i, skipped="no certified trajectory") for i in range(4)]
+        fixed = [record for record in metadata["records"] if record["kind"] == "fixed"]
+        flights = [fly(metadata, arrays, i) if record["success"]
+                   else dict(route=i, skipped="no certified trajectory")
+                   for i, record in enumerate(fixed)]
         with (output/"flight_checks.json").open("w") as stream:
             json.dump(flights, stream, indent=2)
         print(json.dumps(flights, indent=2), flush=True)

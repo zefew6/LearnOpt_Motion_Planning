@@ -80,10 +80,9 @@ assert result.success
 samples = result.trajectory.sample(0.01)
 ```
 
-The dedicated `bmtp_village.xml` scene is selected explicitly by
-`configs/experiments/bmtp_cascaded.yaml`; the planner and scene are validated
-independently at startup. Its parameters can be edited in that experiment
-configuration. To reproduce the multi-initialization experiment and export `summary.png`,
+The interactive entry selects `scene: bmtp_village` and `planner: bmtp` in
+`configs/flight.yaml`; its optional `bmtp:` section controls the initial route,
+segment count, clearance, and solver overrides. To reproduce the multi-initialization experiment and export `summary.png`,
 `summary.svg`, `convergence.png`, `outcomes.png`, `iterations.gif`, JSON, and
 NPZ records:
 
@@ -95,12 +94,13 @@ MPLCONFIGDIR=/tmp/mpl-bmtp .venv/bin/python \
 Saved runs can be plotted or checked without re-solving with
 `--replay runs/bmtp/<timestamp>`.  `--check-flight` additionally tracks each
 certified fixed initialization in MuJoCo and writes `flight_checks.json`.
-Dashed curves are initial geometric paths, solid curves are certified BMTP
-trajectories, and red/orange animation states identify rejected collision
-candidates and newly tagged obstacles.  The high-route initialization in this
-scene is intentionally a different valid topology; its shorter duration is
-reported as a real topology effect, not hidden when assessing initialization
-robustness.
+`bmtp_village.xml` reproduces the paper's deterministic FPP village benchmark:
+521 convex boxes in a 34×34×10 workspace and an eight-segment initialization
+that naively goes around the village. The dashed path is that poor initial
+route; the solid curve is BMTP's certified minimum-time trajectory, which cuts
+through the village as collision-triggered separating planes are added.
+Red/orange animation states identify rejected collision candidates and newly
+tagged obstacles.
 
 ## GCS API
 

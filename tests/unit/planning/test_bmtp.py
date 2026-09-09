@@ -389,10 +389,23 @@ def test_limits_reject_invalid_bounds(kwargs):
     {"solver_max_iterations": 0}, {"relative_tolerance": 0},
     {"collision_tolerance": -1}, {"trajectory_margin": np.nan},
     {"obstacle_margin": np.inf}, {"feasibility_tolerance": 0}, {"solver_tolerance": 0},
+    {"trajectory_backend": "other"}, {"active_plane_slots": 0},
 ])
 def test_config_rejects_invalid_orders_budgets_and_tolerances(kwargs):
     with pytest.raises(ValueError):
         BMTPConfig(**kwargs)
+
+
+def test_native_clarabel_fixed_slots_match_cvxpy_certificate(config, limits, detour):
+    """A plane added after the first solve must reuse the native CSC pattern."""
+    path, obstacles, domain = detour
+    reference = BMTPPlanner(config).plan(path, obstacles, domain, limits)
+    native_config = replace(config, trajectory_backend="clarabel", active_plane_slots=8)
+    native = BMTPPlanner(native_config).plan(path, obstacles, domain, limits)
+    assert reference.success and native.success, (reference.message, native.message)
+    _assert_feasible(native.trajectory, path, obstacles, domain, limits, native_config)
+    assert len(native.history) > 1  # exercises a numerical Clarabel update
+    assert native.trajectory.duration == pytest.approx(reference.trajectory.duration, rel=2e-5)
 
 
 def test_one_update_budget_returns_feasible_seed_and_records_new_collision_tags(config, limits, detour):

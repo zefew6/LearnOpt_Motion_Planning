@@ -45,7 +45,6 @@ def test_mujoco_simulation_should_load_ordered_mandatory_waypoints_from_scene(si
     # Arrange
     expected_waypoints = np.array([
         [1.0, 7.0, -0.021],
-        [1.0, 7.0, -1.3],
         [4.0, 7.0, -1.3],
         [7.5, 4.0, -3.0],
         [11.0, 7.0, -3.5],
@@ -60,8 +59,6 @@ def test_mujoco_simulation_should_load_ordered_mandatory_waypoints_from_scene(si
 
     # Assert
     assert waypoints == pytest.approx(expected_waypoints)
-    assert waypoints[1, :2] == pytest.approx(waypoints[0, :2])
-    assert waypoints[1, 2] < waypoints[0, 2]
 
 
 def test_mujoco_to_ned_state_should_convert_enu_and_flu_frames():
@@ -496,17 +493,17 @@ def test_mujoco_scene_should_define_under_through_and_over_challenges(simulation
     second_ring_center = simulation.model.site("ring_center_01")
 
     # Act
-    under_waypoint_altitude = -simulation.mission_waypoints[2, 2]
-    over_waypoint_altitude = -simulation.mission_waypoints[4, 2]
+    under_waypoint_altitude = -simulation.mission_waypoints[1, 2]
+    over_waypoint_altitude = -simulation.mission_waypoints[3, 2]
     under_bar_lower_surface = under_bar.pos[2] - under_bar.size[2]
     low_wall_upper_surface = low_wall.pos[2] + low_wall.size[2]
 
     # Assert
     assert under_waypoint_altitude < under_bar_lower_surface
     assert over_waypoint_altitude > low_wall_upper_surface
-    assert simulation.mission_waypoints[3] == pytest.approx(
+    assert simulation.mission_waypoints[2] == pytest.approx(
         np.array([first_ring_center.pos[0], -first_ring_center.pos[1], -first_ring_center.pos[2]]))
-    assert simulation.mission_waypoints[6] == pytest.approx(
+    assert simulation.mission_waypoints[5] == pytest.approx(
         np.array([second_ring_center.pos[0], -second_ring_center.pos[1], -second_ring_center.pos[2]]))
     assert simulation.model.geom("ring_00_segment_00").type == mujoco.mjtGeom.mjGEOM_CAPSULE
 

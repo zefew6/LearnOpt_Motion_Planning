@@ -38,6 +38,9 @@ class BMTPConfig:
     feasibility_tolerance: float = 1e-5
     solver_tolerance: float = 1e-8
     solver_max_iterations: int = 300
+    trajectory_backend: str = "cvxpy"
+    # Fixed Clarabel plane slots per spline segment; unused slots are relaxed.
+    active_plane_slots: int = 16
 
     def __post_init__(self):
         if self.degree < 2*self.terminal_order+1 or self.degree <= self.continuity_order:
@@ -46,6 +49,10 @@ class BMTPConfig:
             raise ValueError("orders must be nonnegative")
         if self.max_iterations < 1 or self.collision_max_depth < 1 or self.solver_max_iterations < 1:
             raise ValueError("iteration/depth limits must be positive")
+        if self.trajectory_backend not in {"cvxpy", "clarabel"}:
+            raise ValueError("trajectory_backend must be 'cvxpy' or 'clarabel'")
+        if self.active_plane_slots < 1:
+            raise ValueError("active_plane_slots must be positive")
         for value in (self.relative_tolerance, self.collision_tolerance,
                       self.trajectory_margin, self.obstacle_margin,
                       self.feasibility_tolerance, self.solver_tolerance):

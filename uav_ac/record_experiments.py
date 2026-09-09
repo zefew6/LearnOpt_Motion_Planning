@@ -8,8 +8,7 @@ from typing import Literal
 
 import numpy as np
 
-from uav_ac import utils
-from uav_ac.main import _build_controller, _plan_trajectory
+from uav_ac.main import build_controller, plan_trajectory
 from uav_ac.control import TrajectoryController
 from uav_ac.planning.pipeline import build_mission_corridor
 from uav_ac.simulation.recording import default_camera, render_offscreen_frame, save_png
@@ -45,6 +44,8 @@ GCS_RECORDING_AZIMUTH = -5.0
 GCS_RECORDING_ELEVATION = -5.0
 DEFAULT_RECORDING_AZIMUTH = 45.0
 DEFAULT_RECORDING_ELEVATION = -32.0
+DEFAULT_CONTROL_DT = 0.01
+DEFAULT_GCS_SPEED = 4.5
 
 
 def _recording_camera(
@@ -143,20 +144,36 @@ def record_experiment(
         raise ValueError("hold_seconds must be non-negative")
 
     planner, controller_name = EXPERIMENTS[experiment]
-    cfg, flight_cfg = utils.get_config()
-    steps_per_reference = cfg.getint("frequency")
+    scene_path = GCS_BUILDING_SCENE_PATH if planner == "gcs" else DEFAULT_SCENE_PATH
+    simulation = MujocoSimulation(scene_path)
     velocity = (
         gcopter_velocity if planner == "gcopter"
         else minisnap_velocity if planner == "mini_snap"
-        else flight_cfg.getfloat("velocity")
+        else DEFAULT_GCS_SPEED
     )
-    scene_path = GCS_BUILDING_SCENE_PATH if planner == "gcs" else DEFAULT_SCENE_PATH
-
-    simulation = MujocoSimulation(scene_path)
-    trajectory_dt = simulation.quad.dt * steps_per_reference
-    trajectory = _plan_trajectory(
-        planner, simulation, velocity, trajectory_dt, visualize=False,
-    )
+    run_config = {
+        "planner": planner,
+        "controller": controller_name,
+        "speed": velocity,
+        "control_dt": trajectory_dt,
+        "visualize": False,
+        "seed": 7,
+        "bmtp": {},
+        "gcopter": {},
+        "gcs": {},
+        "mpc": {},
+        "wind": "none",
+        "wind_options": {},
+    }
+    if controller_name == "rl":
+        checkpoint = Path(rl_run_dir or "runs/ppo_trajectory/exp01") / "best_model.zip"
+        run_config.update(checkpoint=str(checkpoint), device="cpu")
+        run_config.pop("control_dt")
+    controller, trajectory_dt = build_controller(run_config, simulation)
+    steps_per_reference = int(round(trajectory_dt / simulation.quad.dt))
+    if not np.isclose(trajectory_dt, steps_per_reference * simulation.quad.dt):
+        raise ValueError("recording control period must be an integer multiple of physics dt")
+    trajectory = plan_trajectory(run_config, simulation, trajectory_dt)
     if planner == "gcopter" and gcopter_average_speed is not None:
         trajectory = _retime_trajectory_average_speed(
             trajectory, trajectory_dt, gcopter_average_speed)
@@ -170,8 +187,7 @@ def record_experiment(
     simulation.set_trajectory_visualization(trajectory[:, :3])
 
     tracker = TrajectoryController(
-        controller=_build_controller(
-            controller_name, simulation.quad, trajectory_dt, run_dir=rl_run_dir),
+        controller=controller,
         quad=simulation.quad,
         trajectory=trajectory,
         steps_per_reference=steps_per_reference,

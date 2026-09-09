@@ -1,5 +1,7 @@
 # Independent BMTP. Main: PLANNER = "bmtp"; CONTROLLER = "cascaded".
 planner:
+  trajectory_backend: clarabel
+  active_plane_slots: 16
   degree: 8
   plane_degree: 1
   continuity_order: 4
@@ -9,17 +11,17 @@ planner:
   collision_tolerance: 0.0001
   trajectory_margin: 0.0001
   obstacle_margin: 0.000001
-limits_preset: flight
+limits_preset: paper
 limits:
   flight: {velocity: 3.0, acceleration: 3.0, jerk: 15.0, snap: 30.0}
   paper: {velocity: 5.0, acceleration: 5.0, jerk: 25.0, snap: 50.0}
 scene:
   # Body radius is measured from scene collision geometry; this is extra margin.
-  clearance: 0.15
+  clearance: 0.05
   segments: 8
   initial_route: 0
 demo:
-  random_initializations: 20
+  random_initializations: 0
   random_seed: 20260908
   perturbation: 0.25
   output_dir: runs/bmtp

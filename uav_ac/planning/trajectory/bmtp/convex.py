@@ -6,6 +6,7 @@ Recover h from z[J], NOT the potentially slack z[1].
 """
 
 from time import perf_counter
+import warnings
 
 import cvxpy as cp
 import numpy as np
@@ -18,11 +19,20 @@ from .types import BMTPTrajectory
 
 def solve_problem(problem: cp.Problem, config: BMTPConfig) -> tuple[float, float]:
     start = perf_counter()
-    problem.solve(solver="CLARABEL", warm_start=True,
-                  tol_gap_abs=config.solver_tolerance,
-                  tol_gap_rel=config.solver_tolerance,
-                  tol_feas=config.solver_tolerance,
-                  max_iter=config.solver_max_iterations)
+    # CVXPY emits a backend-selection warning for the affine expressions used
+    # by the BMTP formulation. SCIPY canonicalization is expected here; keep
+    # this implementation detail out of normal deployment output.
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message=r"The problem includes expressions that don't support CPP backend.*",
+            category=UserWarning,
+        )
+        problem.solve(solver="CLARABEL", warm_start=True,
+                      tol_gap_abs=config.solver_tolerance,
+                      tol_gap_rel=config.solver_tolerance,
+                      tol_feas=config.solver_tolerance,
+                      max_iter=config.solver_max_iterations)
     elapsed = perf_counter()-start
     if problem.status not in (cp.OPTIMAL, cp.OPTIMAL_INACCURATE):
         raise RuntimeError(f"Clarabel returned {problem.status}")

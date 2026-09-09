@@ -1,96 +1,115 @@
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import ANY, Mock
+
 import numpy as np
 import pytest
 
-from uav_ac.main import (
-    _generate_mission_trajectory,
-    _plan_trajectory,
-    _sample_open_field_mission,
-    _trajectory_after_takeoff,
-    _wind_control_callbacks,
-)
-from uav_ac.simulation.mujoco_sim import OPEN_FIELD_SCENE_PATH, MujocoSimulation
+from uav_ac import main
 
 
-def test_trajectory_after_takeoff_should_hide_vertical_departure_segment():
-    # Arrange
-    trajectory = np.zeros((5, 10))
-    trajectory[:, :3] = np.array([
-        [1.0, 7.0, -0.021],
-        [1.0, 7.0, -0.7],
-        [1.0, 7.0, -1.3],
-        [2.0, 7.0, -1.3],
-        [3.0, 6.0, -1.5],
-    ])
-    takeoff_waypoint = np.array([1.0, 7.0, -1.3])
-
-    # Act
-    visible_trajectory = _trajectory_after_takeoff(trajectory, takeoff_waypoint)
-
-    # Assert
-    assert visible_trajectory[:, :3] == pytest.approx(trajectory[2:, :3])
+def write_config(tmp_path, text):
+    path = tmp_path / "flight.yaml"
+    path.write_text(text, encoding="utf-8")
+    return path
 
 
-def test_generate_mission_trajectory_should_keep_takeoff_vertical_and_above_ground():
-    # Arrange
-    simulation = MujocoSimulation()
+def test_default_flight_config_is_small_and_resolves_scene():
+    config = main.load_config()
+    assert Path(config["scene"]).is_file()
+    assert config["planner"] in main.PLANNERS
+    assert config["controller"] in main.CONTROLLERS
+    assert config["wind"] == "none"
 
-    # Act
-    trajectory = _generate_mission_trajectory(
-        simulation.mission_waypoints,
-        simulation.obstacles,
-        velocity=2.0,
-        dt=simulation.quad.dt * 10,
+
+def test_minimal_config_receives_runtime_defaults(tmp_path):
+    config = main.load_config(write_config(
+        tmp_path, "scene: lab_course\nplanner: mini_snap\ncontroller: cascaded\n"))
+    assert config["speed"] == 3.0
+    assert config["control_dt"] == 0.01
+    assert config["visualize"] is False
+    assert config["follow_camera"] is False
+    assert config["gcopter"] == {}
+
+
+def test_follow_camera_is_loaded_from_flight_yaml(tmp_path):
+    config = main.load_config(write_config(
+        tmp_path, "scene: lab_course\nplanner: mini_snap\ncontroller: cascaded\nfollow_camera: true\n"))
+    assert config["follow_camera"] is True
+
+
+@pytest.mark.parametrize("text,match", [
+    ("scene: lab_course\nscene: open_field\nplanner: gcopter\ncontroller: cascaded\n",
+     "duplicate YAML key"),
+    ("scene: lab_course\nplanner: wrong\ncontroller: cascaded\n", "planner must"),
+    ("scene: lab_course\nplanner: gcopter\ncontroller: wrong\n", "controller must"),
+    ("scene: open_field\nplanner: gcopter\ncontroller: rl\nrl: {checkpoint: model.zip}\ncontrol_dt: 0.01\n",
+     "control_dt is owned"),
+    ("scene: ../lab_course\nplanner: gcopter\ncontroller: cascaded\n", "scene must"),
+])
+def test_invalid_compact_config_fails_locally(tmp_path, text, match):
+    with pytest.raises(ValueError, match=match):
+        main.load_config(write_config(tmp_path, text))
+
+
+def test_inactive_component_blocks_are_retained_but_ignored(tmp_path):
+    config = main.load_config(write_config(tmp_path, """\
+scene: lab_course
+planner: gcopter
+controller: cascaded
+wind: none
+bmtp: {segments: 8}
+mpc: {horizon_steps: 10}
+rl: {checkpoint: missing.zip, device: cuda}
+wind_options: {steady_force: [3.0, 0.0, 0.0]}
+"""))
+    assert config["bmtp"]["segments"] == 8
+    assert config["rl"]["checkpoint"] == "missing.zip"
+
+
+def test_rl_requires_explicit_zip_checkpoint(tmp_path):
+    with pytest.raises(ValueError, match="rl.checkpoint is required"):
+        main.load_config(write_config(
+            tmp_path, "scene: open_field\nplanner: gcopter\ncontroller: rl\n"))
+
+
+def test_cascaded_controller_uses_selected_period():
+    simulation = SimpleNamespace(quad=SimpleNamespace(g=9.81, dt=0.001))
+    controller, dt = main.build_controller({
+        "controller": "cascaded", "control_dt": 0.02, "mpc": {}}, simulation)
+    assert dt == 0.02
+    assert controller.dt == 0.02
+
+
+def test_rl_controller_owns_control_period(monkeypatch):
+    loaded = SimpleNamespace(control_dt=0.025)
+    loader = Mock(return_value=loaded)
+    monkeypatch.setattr(main.RLController, "from_checkpoint", loader)
+    simulation = SimpleNamespace(quad=object())
+    controller, dt = main.build_controller({
+        "controller": "rl", "rl": {"checkpoint": "model.zip", "device": "cuda"}}, simulation)
+    assert controller is loaded
+    assert dt == 0.025
+    loader.assert_called_once_with("model.zip", simulation.quad, device="cuda")
+
+
+def test_run_does_not_require_or_write_an_output_directory(monkeypatch):
+    trajectory = np.zeros((2, 10))
+    trajectory[1, 0] = 1.0
+    tracker = Mock()
+    simulation = SimpleNamespace(
+        quad=SimpleNamespace(dt=0.001, position=np.zeros(3)),
+        goal_position=np.zeros(3), collision_detected=False,
+        set_trajectory_visualization=Mock(), run_interactive=Mock(),
+        set_external_force_world=Mock(),
     )
-    takeoff_index = np.argmin(np.linalg.norm(
-        trajectory[:, :3] - simulation.mission_waypoints[1], axis=1))
-    takeoff_positions = trajectory[:takeoff_index + 1, :3]
-
-    # Assert
-    assert takeoff_positions[:, :2] == pytest.approx(
-        np.repeat(simulation.start_position[np.newaxis, :2], len(takeoff_positions), axis=0))
-    assert np.all(trajectory[:, 2] <= 0.0)
-
-
-def test_default_planning_waypoints_should_start_at_current_vehicle_position(monkeypatch):
-    simulation = MujocoSimulation(record_actual_trajectory=False)
-    captured = {}
-
-    def capture_waypoints(waypoints, obstacles, velocity, dt):
-        captured["waypoints"] = waypoints.copy()
-        return np.zeros((2, 10))
-
-    monkeypatch.setattr("uav_ac.runtime._generate_mission_trajectory", capture_waypoints)
-    simulation.mission_waypoints[0] += np.array([0.2, -0.1, 0.0])
-
-    _plan_trajectory("mini_snap", simulation, 2.0, 0.01)
-
-    assert captured["waypoints"][0] == pytest.approx(simulation.start_position)
-
-
-def test_open_field_main_mission_should_be_seeded_and_not_use_scene_waypoints():
-    simulation = MujocoSimulation(OPEN_FIELD_SCENE_PATH, record_actual_trajectory=False)
-
-    first = _sample_open_field_mission(simulation, 42)
-    second = _sample_open_field_mission(simulation, 42)
-
-    assert first == pytest.approx(second)
-    assert 5 <= len(first) - 2 <= 10
-    assert not np.allclose(first[-1], simulation.goal_position)
-
-
-def test_main_wind_wrapper_should_apply_and_clear_external_force():
-    simulation = MujocoSimulation(record_actual_trajectory=False)
-
-    class Controller:
-        def step(self):
-            pass
-
-        def reset(self):
-            pass
-
-    step, reset = _wind_control_callbacks(simulation, Controller(), True)
-
-    step()
-    assert np.linalg.norm(simulation._external_force_world) > 0.0
-    reset()
-    assert simulation._external_force_world == pytest.approx(np.zeros(3))
+    monkeypatch.setattr(main, "MujocoSimulation", Mock(return_value=simulation))
+    monkeypatch.setattr(main, "build_controller", Mock(return_value=(object(), 0.01)))
+    monkeypatch.setattr(main, "plan_trajectory", Mock(return_value=trajectory))
+    monkeypatch.setattr(main, "TrajectoryController", Mock(return_value=tracker))
+    config = {"scene": str(main.MODEL_DIRECTORY / "lab_course.xml"),
+              "planner": "gcopter", "controller": "cascaded", "visualize": False,
+              "wind": "none", "wind_options": {}}
+    assert main.run(config) is trajectory
+    simulation.run_interactive.assert_called_once_with(
+        ANY, ANY, chase_camera=False)

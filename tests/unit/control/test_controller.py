@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from uav_ac.control import CascadedController
+from uav_ac.control import CascadedConfig, CascadedController
 from uav_ac.simulation.mujoco_sim import MujocoSimulation
 
 
@@ -84,6 +84,13 @@ def test_altitude_at_setpoint_returns_hover_thrust(controller, quad):
 
     # Assert
     assert result == pytest.approx(quad.m * G)
+
+
+def test_cascaded_config_regenerates_response_gains(quad):
+    CascadedConfig(tau_xy=0.4, zeta_xy=0.9, tau_altitude=0.3).apply_to(quad)
+    assert quad.kp_xy == pytest.approx(1.0 / 0.4**2)
+    assert quad.kd_xy == pytest.approx(2 * 0.9 / 0.4)
+    assert quad.kp_z == pytest.approx(1.0 / 0.3**2)
 
 
 def test_altitude_limits_commanded_descent_rate(quad):

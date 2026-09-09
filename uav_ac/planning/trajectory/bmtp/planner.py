@@ -10,6 +10,7 @@ from .bezier import derivative_matrix
 from .collision import collisions, normalized
 from .config import BMTPConfig, BMTPLimits
 from .convex import PlaneProgram, TrajectoryProgram
+from .native import NativeTrajectoryProgram
 from .types import BMTPResult, BMTPIteration, BMTPTrajectory
 
 
@@ -83,9 +84,13 @@ class BMTPPlanner:
             if max(seed_residuals.values()) <= config.feasibility_tolerance and not collisions(
                     seed.control_points, obstacles, config.collision_tolerance, config.collision_max_depth):
                 result.trajectory = seed
+            if config.trajectory_backend == "clarabel":
+                build_start = perf_counter()
+                trajectory_program = NativeTrajectoryProgram(len(path)-1, domain, limits, config)
+                timings["build_seconds"] += perf_counter()-build_start
             for iteration in range(1, config.max_iterations+1):
                 tags = tuple(sorted(planes))
-                if tags != cached_tags:
+                if config.trajectory_backend == "cvxpy" and tags != cached_tags:
                     build_start = perf_counter()
                     trajectory_program = TrajectoryProgram(len(path)-1, domain, limits, config, tags)
                     timings["build_seconds"] += perf_counter()-build_start

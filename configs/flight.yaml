@@ -1,0 +1,100 @@
+# Interactive planning and controller deployment.
+scene: lab_course      # lab_course / open_field / gcs_building / bmtp_village
+planner: gcopter      # mini_snap / gcopter / gcs / bmtp
+controller: cascaded  # cascaded / mpc / rl
+
+speed: 5.0
+wind: none             # none / fixed_gust
+visualize: false
+follow_camera: true   # false: free scene view; true: follow the UAV
+seed: 50
+
+# GCOPTER preset; read only when planner: gcopter.
+# `speed` above owns max_velocity; vehicle mass, thrust, and tilt come from XML.
+gcopter:
+  # Trajectory scale and dynamic envelope. `speed` owns max_velocity.
+  length_per_piece: 1.5       # smaller: more polynomial pieces / slower solve
+  max_acceleration: 6.0       # m/s^2
+  max_body_rate: 3.0          # rad/s
+
+  # Soft-constraint penalties. Keep these comparable when tuning an envelope.
+  time_weight: 200.0
+  position_weight: 10000.0
+  velocity_weight: 1000.0
+  acceleration_weight: 1000.0
+  thrust_weight: 1000.0
+  tilt_weight: 1000.0
+  body_rate_weight: 1000.0
+  smoothing_epsilon: 0.01
+  integral_resolution: 12
+
+  # Non-convex optimizer convergence.
+  max_iterations: 80
+  gradient_tolerance: 0.00001
+  relative_cost_tolerance: 0.00001
+  lbfgs_memory: 16
+  feasible_iteration_patience: 2
+  inverse_map_iterations: 40
+
+# GCS preset; read only when planner: gcs.
+gcs:
+  degree: 5
+  continuity: 2
+  relaxation_degree: 1
+  length_weight: 1.0
+  derivative_order: 2
+  derivative_weight: 0.05
+  zero_endpoint_derivatives: 2
+  regularization: 0.00000001
+  flow_tolerance: 0.000001
+  feasibility_tolerance: 0.0000001
+  max_iterations: 200
+  solver: CLARABEL
+  verbose: false
+
+# Cascaded-controller preset; read only when controller: cascaded.
+# Physical limits remain in the selected scene XML.
+cascaded:
+  tau_xy: 0.25
+  zeta_xy: 0.875
+  tau_altitude: 0.2
+  zeta_altitude: 0.8
+  tau_roll: 0.07
+  tau_pitch: 0.07
+  tau_yaw: 0.25
+  tau_p: 0.008
+  tau_q: 0.008
+  tau_r: 0.09
+  ki_z: 0.1
+
+# Nonlinear MPC preset; read only when controller: mpc.
+# control_dt above owns dt.
+mpc:
+  horizon_steps: 20
+  position_weights: [40.0, 40.0, 60.0]
+  velocity_weights: [6.0, 6.0, 8.0]
+  attitude_weight: 6.0
+  body_rate_weights: [0.25, 0.25, 0.15]
+  thrust_weight: 0.08
+  moment_weights: [0.8, 0.8, 0.4]
+  terminal_scale: 4.0
+  nlp_solver_type: SQP_RTI
+  qp_solver: PARTIAL_CONDENSING_HPIPM
+  integrator_type: ERK
+  print_level: 0
+  levenberg_marquardt: 0.00001
+  raise_on_failure: false
+
+# BMTP preset; read only when planner: bmtp.
+bmtp:
+  trajectory_backend: clarabel
+  active_plane_slots: 16
+  clearance: 0.05
+  acceleration: 5.0
+  jerk: 25.0
+  snap: 50.0
+
+# RL preset; read only when controller: rl.
+rl:
+  checkpoint: ../runs/ppo_trajectory/multitraj01/best_model.zip
+  device: cuda

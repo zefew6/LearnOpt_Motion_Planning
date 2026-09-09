@@ -18,10 +18,8 @@ from .result import MissionCorridor
 def generate_minimum_snap_mission(
     waypoints: np.ndarray, obstacles: np.ndarray, velocity: float, dt: float,
 ) -> np.ndarray:
-    """Generate isolated takeoff and course segments with MinimumSnap."""
-    takeoff = MinimumSnap(waypoints[:2], obstacles, velocity, dt).get_trajectory()
-    course = MinimumSnap(waypoints[1:], obstacles, velocity, dt).get_trajectory()
-    return np.vstack((takeoff, course))
+    """Generate one continuous minimum-snap trajectory over the whole mission."""
+    return MinimumSnap(waypoints, obstacles, velocity, dt).get_trajectory()
 
 
 def gcopter_controller_trajectory(trajectory: GCOPTERTrajectory, dt: float) -> np.ndarray:

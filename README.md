@@ -84,46 +84,30 @@ L-BFGS optimizes the compact variables; the mission adapter samples the result i
 
 ### GCS
 
-Graph of Convex Sets represents collision-free convex regions as graph vertices and their connections as edges. A segment within region $\mathcal{X}_v$ is a Bézier curve:
+GCS starts from a cover of collision-free convex sets $\{\mathcal X_v\}_{v\in V}$. Each set is a graph vertex; a directed edge $(u,v)\in E$ is added when $\mathcal X_u\cap\mathcal X_v\neq\varnothing$, with singleton source and goal vertices added in the same way. The preliminary optimization is therefore a shortest-path problem coupled to continuous trajectory variables: binary edge flows select one source-to-goal path, while Bézier control points remain in the selected convex sets.
 
 ```math
-\mathbf{r}_v(\tau)=\sum_{k=0}^{d}B_{k,d}(\tau)\mathbf{P}_{v,k},
-\qquad \mathbf{P}_{v,k}\in\mathcal{X}_v.
+\min_{\phi,\tilde P}\ \sum_{e\in E}\ell_e(\tilde P_e)
+\quad\mathrm{s.t.}\quad B\phi=b,\quad
+\phi_e\in\{0,1\},\quad
+\tilde P_{e,k}\in\phi_e\mathcal X_{\mathrm{tail}(e)},\quad
+\tilde P'_{e,k}\in\phi_e\mathcal X_{\mathrm{head}(e)}.
 ```
 
-The convex-hull property keeps each segment inside its region. Convex relaxation couples region selection with continuous curve optimization; the mission adapter then time-parameterizes the geometric path for tracking.
-
-### Nonlinear MPC
-
-The acados controller tracks the reference through a finite-horizon optimal-control problem:
-
-```math
-\min_{\mathbf{u}_{0:N-1}}
-\sum_{k=0}^{N-1}
-\left(\|\mathbf{x}_k-\mathbf{x}^{\mathrm{ref}}_k\|_Q^2
-+\|\mathbf{u}_k-\mathbf{u}^{\mathrm{ref}}_k\|_R^2\right)
-+\|\mathbf{x}_N-\mathbf{x}^{\mathrm{ref}}_N\|_{Q_f}^2,
-\quad
-\mathbf{x}_{k+1}=f_d(\mathbf{x}_k,\mathbf{u}_k).
-```
-
-It applies the first optimized input and replans at the next control tick. Terminal feedback improves end-of-trajectory tracking. Cascaded control and Minimum Snap provide conventional tracking and planning baselines.
+This is a mixed-integer convex program. The implementation replaces $\phi_e\in\{0,1\}$ with $0\le\phi_e\le1$ and uses perspective constraints, yielding an SOCP relaxation. It rounds the resulting flow to one path and solves a convex Bézier restriction on that path with endpoint and derivative-continuity constraints. The convex-hull property then keeps every Bézier segment inside its assigned region before time parameterization for tracking.
 
 ### Differentiable MPC and reinforcement learning (ACMPC)
 
-Actor-Critic Model Predictive Control (ACMPC) embeds a differentiable MPC solver inside the actor. A neural cost map converts the observation $o_t$ into quadratic MPC cost parameters, and MPC uses these costs, the dynamics, and input constraints to optimize a short-horizon control sequence:
+Actor-Critic Model Predictive Control (ACMPC) places a differentiable MPC layer at the end of the actor. A neural cost map turns the observation into time-varying quadratic cost residuals; together with known quadrotor dynamics and bounded inputs, they define the MPC action mean:
 
 ```math
-c_\theta=g_\theta(o_t),\qquad
-\mathbf{u}_{0:N-1}^{\star}=
-\arg\min_{\mathbf{u}}
-\sum_{k=0}^{N-1}\ell_{c_\theta}(\mathbf{x}_k,\mathbf{u}_k)
-+\ell_{c_\theta,N}(\mathbf{x}_N),
-\quad
-\mathbf{x}_{k+1}=f_d(\mathbf{x}_k,\mathbf{u}_k),\quad \mathbf{u}_k\in\mathcal U.
+c_\theta(o_t)=\{Q_k,q_k\}_{k=0}^{N},\qquad
+\mu_\theta(o_t)=u_0^\star,qquad
+\pi_\theta(a\mid o_t)=\mathcal N(\mu_\theta(o_t),\Sigma),
+\quad x_{k+1}=f_d(x_k,u_k),\ u_k\in\mathcal U.
 ```
 
-The first optimized input $\mathbf{u}_0^\star$ becomes the actor's action mean after normalization, while a separate critic estimates the long-horizon return. Reinforcement learning therefore learns the MPC cost from interaction rewards rather than predicting the action directly. Since the solver is differentiable, the policy gradient can pass through the optimization solution to the neural cost map:
+The first optimized input is the Gaussian actor mean, while a separate critic estimates the long-horizon return. PPO therefore learns the MPC cost map from reward rather than directly regressing an action. Gradients pass through the solver to the cost network:
 
 ```math
 \nabla_\theta L_{\mathrm{RL}}
@@ -133,107 +117,74 @@ The first optimized input $\mathbf{u}_0^\star$ becomes the actor's action mean a
 \nabla_{\mathbf{u}_0^\star}L_{\mathrm{RL}}.
 ```
 
-This combines RL's reward-driven exploration with MPC's model-based prediction and online replanning. In this repository, PPO supplies the actor-critic update, and the actor uses a box-constrained iLQR-based differentiable solver with an approximate fixed-point backward pass. The paper's Model Predictive Value Expansion (MPVE) component is not implemented here.
+This repository follows the paper's one-iLQR-update actor and uses an analytic differentiable backward pass. Its actor learns diagonal quadratic-cost residuals around a tracking cost; the critic is an MLP trained by PPO. Model-Predictive Value Expansion (MPVE) from the extended paper is not included.
 
 ### Biconvex Minimum-Time Planning (BMTP)
 
-BMTP alternates between optimizing a smooth trajectory and the planes separating it from convex obstacles. For a curve $p(\tau)$ and obstacle $\mathcal O$, separation is expressed as
+BMTP jointly represents a Bézier trajectory $p(\tau)$ and time-varying separating planes $(a(\tau),b(\tau))$. For every convex obstacle $\mathcal O$, the required margin $\delta>0$ is
 
 ```math
-a(\tau)^\top p(\tau)+b(\tau)\le-\delta,\qquad
-a(\tau)^\top v+b(\tau)\ge\delta
-\quad\forall v\in\mathcal O,\ \forall\tau\in[0,1],
-```
-
-where $\delta>0$ is a separation margin. The product $a(\tau)^\top p(\tau)$ couples the plane and trajectory variables bilinearly. Fixing one block makes the separation constraints convex in the other.
-
-Starting from a collision-free polygonal path, BMTP repeats two convex subproblems: **fix the trajectory and update the separating planes**, then **fix the planes and optimize the trajectory and duration**, subject to smoothness and derivative limits. Bézier representations and a conic time formulation make these updates tractable. The iterations reduce travel time while maintaining separation; they do not guarantee a global optimum. See the [BMTP experiments](uav_ac/planning/README.md) for comparisons across initial paths.
-
-The trajectory is represented by Bézier control points $P$ and separating planes $(a,b)$. Their collision constraint contains the bilinear term $a(\tau)^\top p(\tau)$:
-
-```math
-a(\tau)^\top p(\tau)+b(\tau)\le-\delta,\qquad
+a(\tau)^\top p(\tau)+b(\tau)\le-\delta,
+\qquad
 a(\tau)^\top x+b(\tau)\ge\delta
-\quad \forall x\in\mathcal O.
+\quad\forall x\in\mathcal O.
 ```
 
-BMTP alternates two convex subproblems. First, it fixes $P$ and updates the obstacle-separating planes. Then it fixes $(a,b)$ and optimizes the Bézier trajectory, smoothness, derivative limits, and segment duration:
+The term $a(\tau)^\top p(\tau)$ is bilinear. BMTP alternates between plane fitting with $p$ fixed and smooth minimum-time trajectory optimization with $(a,b)$ fixed:
 
 ```math
-\min_{P,h}\;T=Mh
-\quad\text{s.t.}\quad
-p(0)=p_{\mathrm{start}},\quad p(1)=p_{\mathrm{goal}},\quad
-\|p^{(k)}(t)\|_2\le d_k,\quad
-p(t)\ \text{stays inside the fixed corridor}.
+(a,b)\leftarrow\arg\min\ \mathrm{plane\ violation}\mid p,
+\qquad
+(p,h)\leftarrow\arg\min\ Mh\mid(a,b),\ \text{smoothness and derivative limits}.
 ```
 
-Fixing either block removes the bilinearity, so each update is convex. The alternating procedure improves the trajectory locally, depends on the initial collision-free path, and does not guarantee a global optimum.
+Each update is convex; the overall alternating method is local and depends on its collision-free initialization.
 
 ## Setup and running
 
-### Requirements and installation
-
-- Python 3.13 and [uv](https://docs.astral.sh/uv/)
-- A graphical desktop for the interactive MuJoCo viewer
-- FFmpeg and a working MuJoCo rendering backend for video recording
-- A separately built acados installation for nonlinear MPC and trajectory-bank validation
-
-Run all commands from the repository root:
+Python 3.13, [uv](https://docs.astral.sh/uv/), and a graphical desktop for MuJoCo are required.
 
 ```bash
 uv sync --python 3.13
 ```
 
-This installs the Python dependencies, including MuJoCo, the planners, PyTorch, SB3, and test tools. Cascaded control, MLP policies, and ACMPC inference do not require acados.
-
-### Run an experiment
-
-Start with GCOPTER and the cascaded controller; no trained checkpoint is needed:
+Set `scene`, `planner`, and `controller` in `configs/flight.yaml`, then run:
 
 ```bash
-.venv/bin/python -m uav_ac.main --config configs/experiments/lab_gcopter_cascaded.yaml
+.venv/bin/python -m uav_ac.main --config configs/flight.yaml
 ```
 
-To try BMTP with its dedicated scene:
+## Flight configuration
 
-```bash
-.venv/bin/python -m uav_ac.main --config configs/experiments/bmtp_cascaded.yaml
-```
+`scene` names an XML file under `uav_ac/simulation/models/`, with or without the `.xml` suffix. The main choices are:
 
-Copy an example YAML to create your own experiment. Edit its settings rather than Python constants:
-
-| Section | What to configure |
-| --- | --- |
-| `mode` | `plan`, `train`, `evaluate`, `deploy`, or saved-state `replay` |
-| `scene` | XML file, directly or through a descriptor in `configs/scenes/` |
-| `task` | Task, reference source, initialization, and success settings |
-| `planner` | Planner, initial path, limits, and algorithm options |
-| `agent` | A controller, an RL training policy, or a deployment checkpoint |
-| `disturbance.wind` | `none`, `fixed_gust`, or `random_gust`; forces are in newtons |
-| `execution` | Action period, seed, and deployment episode limits |
-| `training` | PPO hyperparameters, environment count, and curriculum |
-| `output` | Result directory, viewer, recording, and planning visualization |
-
-Paths are relative to the YAML that defines them. XML files remain in `uav_ac/simulation/models/`; `configs/scenes/` holds their YAML descriptors. Selecting a planner does not change the selected scene.
-
-Available planners and controllers are:
-
-| Configuration field | Available values | Notes |
+| Field | Values | Notes |
 | --- | --- | --- |
-| `planner.name` | `mini_snap`, `gcopter`, `gcs`, `bmtp` | `gcopter` uses an FIRI corridor; `gcs` is intended for `gcs_building.xml`; `bmtp` requires `bmtp_village.xml` and its `bmtp_route_*` sites |
-| `agent.type: controller` | `agent.name: cascaded`, `agent.name: mpc` | Cascaded control needs no external solver; MPC requires acados |
-| `agent.type: rl` | `agent.policy: mlp`, `agent.policy: acmpc` | For deployment, set `agent.checkpoint` to an explicit `.zip` model |
+| `planner` | `mini_snap`, `gcopter`, `gcs`, `bmtp` | GCS needs scene guide regions; BMTP needs `bmtp_route_*` sites |
+| `controller` | `cascaded`, `mpc`, `rl` | MPC requires acados; RL requires `rl.checkpoint` |
+| `wind` | `none`, `fixed_gust` | Add `wind_options` only to override fixed-gust defaults |
+| `visualize` | `true`, `false` | Shows corridor geometry; BMTP always shows its dashed initialization and solid result |
 
-The available XML scenes are `lab_course`, `open_field`, `gcs_building`, and
-`bmtp_village`, selected through `scene.config`. A common combination is
-`gcopter + cascaded + lab_course`; use `gcs + gcs_building` and
-`bmtp + bmtp_village` for the planners that require dedicated scene metadata.
+Planner/controller-specific blocks can coexist as presets; only the block belonging to the selected planner or controller is used. `configs/flight.yaml` includes complete presets for `gcopter`, `gcs`, `bmtp`, `cascaded`, `mpc`, and `rl`. For example:
 
-For tracking, choose one reference source: `planner`, `saved_trajectory`, or `trajectory_bank`. Omit `planner` when using a saved reference. Choose either `agent.type: controller` or `agent.type: rl`. The action period must be an integer multiple of the XML physics timestep.
+```yaml
+scene: bmtp_village
+planner: bmtp
+controller: cascaded
+speed: 3.0
+bmtp:
+  initial_route: 3
+  segments: 8
+  clearance: 0.15
+```
 
-Set `output.viewer: false` for headless runs, and `output.record: true` to save video during deployment or replay. Use a new `output.directory` for each run; an existing `resolved_config.yaml` prevents overwriting the experiment. Deployment saves episode states and metrics alongside the resolved settings. Replay uses those saved states without replanning.
+Use `scene: gcs_building` with `planner: gcs`. `gcopter:` and `gcs:` can override their native dataclass settings; `mpc:` configures the nonlinear controller. Traditional controllers default to a 0.01 s `control_dt`, which can be overridden with an integer multiple of the XML timestep. RL checkpoints own their control period. Viewer runs do not create output directories or overwrite previous results. Use `uav_ac.record_experiments` for videos.
 
-### Optional: acados MPC
+For GCOPTER, keep `speed` as the shared velocity bound. `gcopter:` exposes trajectory scale (`length_per_piece`, `time_weight`), dynamic limits (`max_acceleration`, `max_body_rate`), soft-constraint weights, and optimizer convergence settings. `gcs:` exposes the Bézier graph optimization and solver settings; `mpc:` exposes NMPC horizon, tracking weights, and solver settings; `cascaded:` exposes response time constants, damping, and altitude integration. Mass, thrust, tilt, and flight-speed limits remain in the selected XML vehicle.
+
+## Optional MPC and RL workflows
+
+### acados MPC
 
 Build acados using its [installation instructions](https://docs.acados.org/installation/index.html), then install the Python interface into the project environment:
 
@@ -244,15 +195,13 @@ uv pip install -e "$ACADOS_SOURCE_DIR/interfaces/acados_template"
 .venv/bin/python -c "from acados_template import AcadosOcpSolver"
 ```
 
-Replace `/path/to/acados` with your installation path. Select the controller in your experiment YAML:
+Replace `/path/to/acados` with your installation path. Select the controller in `configs/flight.yaml`:
 
 ```yaml
-agent:
-  type: controller
-  name: mpc
-  options:
-    horizon_steps: 10
-    nlp_solver_type: SQP_RTI
+controller: mpc
+mpc:
+  horizon_steps: 10
+  nlp_solver_type: SQP_RTI
 ```
 
 ### Train and deploy RL
@@ -266,23 +215,30 @@ First prepare a trajectory bank. The default configuration generates 200 trainin
   --run-dir runs/ppo_trajectory/multitraj01 --prepare-only
 ```
 
-Generation can take substantial time. For training, set `task.reference.path` to the compatible bank, choose `agent.device: cpu` or `cuda`, and adjust `training.n_envs`, `training.ppo`, and `output.directory`:
+Generation can take substantial time. Train ACMPC with its independent training configuration and a new run directory:
 
 ```bash
-.venv/bin/python -m uav_ac.main --config configs/training/acmpc_open_field.yaml
+.venv/bin/python -m uav_ac.rl.training \
+  --config configs/acmpc_trajectory.yaml \
+  --run-dir runs/acmpc_trajectory/multitraj01
 ```
 
-The example requests 10 million timesteps with 24 environments. For an MLP baseline, copy it, set `agent.policy: mlp`, and remove `agent.mpc`. The unified training entry currently uses an existing trajectory bank and supports no wind or randomized gusts.
+Edit `configs/acmpc_trajectory.yaml` for its trajectory bank, device, MPC, PPO, wind, and training scale. Use `configs/ppo_trajectory.yaml` for the MLP baseline.
 
-To deploy a trained policy, edit `configs/experiments/acmpc_deploy.yaml` with your trajectory-bank path, device, and explicit `.zip` checkpoint:
+To deploy either an MLP or ACMPC policy, let `main` plan the reference and select the explicit checkpoint:
 
-```bash
-.venv/bin/python -m uav_ac.main --config configs/experiments/acmpc_deploy.yaml
+```yaml
+scene: open_field
+planner: gcopter
+controller: rl
+rl:
+  checkpoint: ../runs/acmpc_trajectory/multitraj01/best_model.zip
+  device: cuda
 ```
 
-Keep `rl_config.json` with the checkpoint. Use `execution.action_dt: from_model` to adopt its trained control period. The loader checks physics, timing, and observation/action compatibility.
+Checkpoint paths are relative to the YAML file. Keep `rl_config.json` beside the model; the deployed controller adopts and validates the trained control period automatically. Dataset-based metrics, interactive evaluation, and recording remain available through `uav_ac.rl.mlp_baseline.evaluate`.
 
-### Tests
+## Tests
 
 ```bash
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 .venv/bin/python -m pytest -o addopts='' -q
@@ -294,24 +250,22 @@ See [AGENT.md](AGENT.md) for contributor guidance, module contracts, and coverag
 
 ```text
 configs/
-├── scenes/                   YAML descriptors for XML scenes
-├── experiments/              Planning and deployment examples
-└── training/                 RL training examples
+├── flight.yaml               Short interactive-flight configuration
+├── ppo_trajectory.yaml       MLP training and trajectory-bank settings
+├── acmpc_trajectory.yaml     ACMPC training settings
+└── bmtp.yaml                 Standalone BMTP experiment settings
 uav_ac/
-├── main.py                   Unified --config entry
-├── experiments/              Config validation, execution, and replay
+├── main.py                   Scene, planner, controller, wind, and viewer entry
 ├── scenes/                   XML loading and scene metadata
 ├── tasks/                    Task protocol and trajectory tracking
 ├── envs/                     Generic MuJoCo Gym environment
 ├── planning/
-│   ├── api.py                Unified mission-planning adapter
 │   ├── geometry/             Convex geometry and collision utilities
 │   ├── search/               RRT* path search
 │   ├── corridor/firi/        Convex safe-corridor construction
 │   ├── trajectory/           GCOPTER, GCS, BMTP, and Minimum Snap
 │   └── pipeline/             Mission and trajectory conversion
 ├── control/                  Cascaded/MPC control and tracking interfaces
-├── deployment/               Controller and policy episode adapters
 ├── rl/
 │   ├── training.py           Shared MLP/ACMPC trainer and bank preparation
 │   ├── common/               Trajectory banks and initialization assets
@@ -323,7 +277,7 @@ uav_ac/
 └── visualization/            Planning overlays and plots
 tests/                        Unit and integration tests
 docs/                         Figures and documentation media
-runs/                         Local datasets, models, and experiment outputs
+runs/                         Local trajectory banks and trained models
 ```
 
 For reusable APIs and extension points, see the [planning guide](uav_ac/planning/README.md) and [contributor guide](AGENT.md).
@@ -365,9 +319,7 @@ For reusable APIs and extension points, see the [planning guide](uav_ac/planning
    arXiv:2608.02834*, 2026.
    https://arxiv.org/abs/2608.02834
 
-8. ACMPC: [paper](https://arxiv.org/html/2306.09852v8) and
-   [official implementation](https://github.com/uzh-rpg/acmpc_public).
-   The bundled differentiable solver comes from
-   [mpc.pytorch_acmpc](https://github.com/uzh-rpg/mpc.pytorch_acmpc);
-   its pinned revision, MIT license, and local changes are documented in
-   [SOURCE.md](uav_ac/rl/acmpc/vendor/SOURCE.md).
+8. A. Romero, E. Aljalbout, Y. Song, and D. Scaramuzza, “Actor–Critic Model
+   Predictive Control: Differentiable Optimization Meets Reinforcement Learning
+   for Agile Flight,” *IEEE Transactions on Robotics*, 2025.
+   DOI: https://doi.org/10.1109/TRO.2025.3644945

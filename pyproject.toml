@@ -28,7 +28,6 @@ include = ["uav_ac*"]
 
 [tool.setuptools.package-data]
 uav_ac = [
-    "config.ini",
     "simulation/models/*.xml",
     "rl/acmpc/vendor/LICENSE.mit",
     "rl/acmpc/vendor/SOURCE.md",

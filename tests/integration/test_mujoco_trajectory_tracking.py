@@ -1,7 +1,7 @@
 import numpy as np
 
-from uav_ac.control import CascadedController
-from uav_ac.main import TrajectoryController, _generate_mission_trajectory
+from uav_ac.control import CascadedController, TrajectoryController
+from uav_ac.planning.pipeline import generate_minimum_snap_mission
 from uav_ac.simulation.mujoco_sim import MujocoSimulation
 
 
@@ -13,7 +13,7 @@ def test_mujoco_simulation_should_follow_minimum_snap_trajectory_without_collisi
     simulation = MujocoSimulation()
     quad = simulation.quad
     trajectory_dt = quad.dt * FREQUENCY
-    trajectory = _generate_mission_trajectory(
+    trajectory = generate_minimum_snap_mission(
         simulation.mission_waypoints,
         simulation.obstacles,
         velocity=2.0,

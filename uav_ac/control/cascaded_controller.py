@@ -1,8 +1,46 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+import math
 import numpy as np
 
 from .trajectory_controller import ControlCommand, TrajectoryReference
+
+
+@dataclass(frozen=True)
+class CascadedConfig:
+    """Response tuning for the cascaded controller, separate from XML physics."""
+
+    tau_xy: float = 0.25
+    zeta_xy: float = 0.875
+    tau_altitude: float = 0.2
+    zeta_altitude: float = 0.8
+    tau_roll: float = 0.07
+    tau_pitch: float = 0.07
+    tau_yaw: float = 0.25
+    tau_p: float = 0.008
+    tau_q: float = 0.008
+    tau_r: float = 0.09
+    ki_z: float = 0.1
+
+    def __post_init__(self) -> None:
+        if any(not math.isfinite(value) or value <= 0.0
+               for value in self.__dict__.values()):
+            raise ValueError("cascaded response settings must be finite and positive")
+
+    def apply_to(self, quad) -> None:
+        """Apply controller tuning and regenerate its derived second-order gains."""
+        for name, value in self.__dict__.items():
+            setattr(quad, name, value)
+        quad.kp_xy, quad.kd_xy = quad.second_order_gains(quad.tau_xy, quad.zeta_xy)
+        quad.kp_z, quad.kd_z = quad.second_order_gains(
+            quad.tau_altitude, quad.zeta_altitude)
+        quad.kp_roll = 1.0 / quad.tau_roll
+        quad.kp_pitch = 1.0 / quad.tau_pitch
+        quad.kp_yaw = 1.0 / quad.tau_yaw
+        quad.kp_p = 1.0 / quad.tau_p
+        quad.kp_q = 1.0 / quad.tau_q
+        quad.kp_r = 1.0 / quad.tau_r
 
 
 class CascadedController:
