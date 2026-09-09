@@ -102,7 +102,7 @@ Actor-Critic Model Predictive Control (ACMPC) places a differentiable MPC layer 
 
 ```math
 c_\theta(o_t)=\{Q_k,q_k\}_{k=0}^{N},\qquad
-\mu_\theta(o_t)=u_0^\star,qquad
+\mu_\theta(o_t)=u_0^\star,\qquad
 \pi_\theta(a\mid o_t)=\mathcal N(\mu_\theta(o_t),\Sigma),
 \quad x_{k+1}=f_d(x_k,u_k),\ u_k\in\mathcal U.
 ```
