@@ -1,0 +1,113 @@
+<mujoco model="uav_gate_racing">
+  <compiler angle="radian" autolimits="true"/>
+  <option timestep="0.001" gravity="0 0 -9.81" integrator="Euler"/>
+  <size nuser_site="1"/>
+  <statistic center="15 10 3" extent="32"/>
+
+  <custom>
+    <!-- NED bounds: north, east, down. -->
+    <numeric name="planning_bounds" data="-8 -32 -9 38 8 0"/>
+    <numeric name="rotor_force_coefficient" data="1"/>
+    <numeric name="rotor_drag_to_thrust" data="0.016"/>
+    <numeric name="rotor_thrust_limits" data="0.1 4.5"/>
+    <numeric name="motor_time_constants" data="0.0125 0.025"/>
+    <numeric name="flight_limits" data="3 2 8 12 0.7"/>
+  </custom>
+
+  <visual>
+    <global azimuth="90" elevation="-35"/>
+    <map znear="0.01" zfar="180"/>
+  </visual>
+
+  <asset>
+    <texture name="ground_grid" type="2d" builtin="checker" width="512" height="512"
+             rgb1="0.55 0.55 0.55" rgb2="0.35 0.35 0.35"/>
+    <material name="ground" texture="ground_grid" texrepeat="20 20" texuniform="true"
+              reflectance="0.1"/>
+  </asset>
+
+  <worldbody>
+    <light name="sun" pos="0 0 35" dir="-0.3 0.2 -1" directional="true"/>
+    <geom name="ground" type="plane" size="102 102 0.1" material="ground"/>
+
+    <replicate count="200">
+      <geom name="trajectory_segment" type="capsule" pos="0 0 -20" size="0.025 0.01"
+            contype="0" conaffinity="0" rgba="1 0.25 0.05 0"/>
+    </replicate>
+    <replicate count="200">
+      <geom name="actual_trajectory_segment" type="capsule" pos="0 0 -20" size="0.015 0.01"
+            contype="0" conaffinity="0" rgba="0.1 0.4 1 0"/>
+    </replicate>
+
+    <body name="gate_00" pos="8 0 2" euler="0 0 0">
+      <!-- Local +X is the crossing direction; site Y/Z sizes are aperture half widths. -->
+      <site name="gate_00" type="box" size="0.04 1 1" rgba="0 0 0 0"/>
+      <geom type="box" pos="0 -1.08 0" size="0.08 0.08 1.16" rgba="0.95 0.4 0.1 1"/>
+      <geom type="box" pos="0 1.08 0" size="0.08 0.08 1.16" rgba="0.95 0.4 0.1 1"/>
+      <geom type="box" pos="0 0 -1.08" size="0.08 1 0.08" rgba="0.95 0.4 0.1 1"/>
+      <geom type="box" pos="0 0 1.08" size="0.08 1 0.08" rgba="0.95 0.4 0.1 1"/>
+    </body>
+    <body name="gate_01" pos="18 0 3" euler="0 0 0">
+      <!-- Local +X is the crossing direction; site Y/Z sizes are aperture half widths. -->
+      <site name="gate_01" type="box" size="0.04 1 1" rgba="0 0 0 0"/>
+      <geom type="box" pos="0 -1.08 0" size="0.08 0.08 1.16" rgba="0.95 0.4 0.1 1"/>
+      <geom type="box" pos="0 1.08 0" size="0.08 0.08 1.16" rgba="0.95 0.4 0.1 1"/>
+      <geom type="box" pos="0 0 -1.08" size="0.08 1 0.08" rgba="0.95 0.4 0.1 1"/>
+      <geom type="box" pos="0 0 1.08" size="0.08 1 0.08" rgba="0.95 0.4 0.1 1"/>
+    </body>
+    <body name="gate_02" pos="26 6 5" euler="0 0 0.7853981633974483">
+      <!-- Local +X is the crossing direction; site Y/Z sizes are aperture half widths. -->
+      <site name="gate_02" type="box" size="0.04 1 1" rgba="0 0 0 0"/>
+      <geom type="box" pos="0 -1.08 0" size="0.08 0.08 1.16" rgba="0.95 0.4 0.1 1"/>
+      <geom type="box" pos="0 1.08 0" size="0.08 0.08 1.16" rgba="0.95 0.4 0.1 1"/>
+      <geom type="box" pos="0 0 -1.08" size="0.08 1 0.08" rgba="0.95 0.4 0.1 1"/>
+      <geom type="box" pos="0 0 1.08" size="0.08 1 0.08" rgba="0.95 0.4 0.1 1"/>
+    </body>
+    <body name="gate_03" pos="26 16 4" euler="0 0 1.5707963267948966">
+      <!-- Local +X is the crossing direction; site Y/Z sizes are aperture half widths. -->
+      <site name="gate_03" type="box" size="0.04 1 1" rgba="0 0 0 0"/>
+      <geom type="box" pos="0 -1.08 0" size="0.08 0.08 1.16" rgba="0.95 0.4 0.1 1"/>
+      <geom type="box" pos="0 1.08 0" size="0.08 0.08 1.16" rgba="0.95 0.4 0.1 1"/>
+      <geom type="box" pos="0 0 -1.08" size="0.08 1 0.08" rgba="0.95 0.4 0.1 1"/>
+      <geom type="box" pos="0 0 1.08" size="0.08 1 0.08" rgba="0.95 0.4 0.1 1"/>
+    </body>
+    <body name="gate_04" pos="16 22 3" euler="0 0 2.6179938779914944">
+      <!-- Local +X is the crossing direction; site Y/Z sizes are aperture half widths. -->
+      <site name="gate_04" type="box" size="0.04 1 1" rgba="0 0 0 0"/>
+      <geom type="box" pos="0 -1.08 0" size="0.08 0.08 1.16" rgba="0.95 0.4 0.1 1"/>
+      <geom type="box" pos="0 1.08 0" size="0.08 0.08 1.16" rgba="0.95 0.4 0.1 1"/>
+      <geom type="box" pos="0 0 -1.08" size="0.08 1 0.08" rgba="0.95 0.4 0.1 1"/>
+      <geom type="box" pos="0 0 1.08" size="0.08 1 0.08" rgba="0.95 0.4 0.1 1"/>
+    </body>
+    <body name="gate_05" pos="6 16 2" euler="0 0 3.6651914291880923">
+      <!-- Local +X is the crossing direction; site Y/Z sizes are aperture half widths. -->
+      <site name="gate_05" type="box" size="0.04 1 1" rgba="0 0 0 0"/>
+      <geom type="box" pos="0 -1.08 0" size="0.08 0.08 1.16" rgba="0.95 0.4 0.1 1"/>
+      <geom type="box" pos="0 1.08 0" size="0.08 0.08 1.16" rgba="0.95 0.4 0.1 1"/>
+      <geom type="box" pos="0 0 -1.08" size="0.08 1 0.08" rgba="0.95 0.4 0.1 1"/>
+      <geom type="box" pos="0 0 1.08" size="0.08 1 0.08" rgba="0.95 0.4 0.1 1"/>
+    </body>
+
+    <body name="quadrotor" pos="0 0 2">
+      <freejoint name="quadrotor_freejoint"/>
+      <inertial pos="0 0 0" mass="0.5" diaginertia="0.0023 0.0023 0.0046"/>
+      <geom name="body" type="box" size="0.08 0.05 0.02" rgba="0.08 0.12 0.16 1"/>
+      <geom name="arm_0" type="capsule" fromto="-0.120208 0.120208 0 0.120208 -0.120208 0"
+            size="0.008" contype="1" conaffinity="1" rgba="0.25 0.25 0.28 1"/>
+      <geom name="arm_1" type="capsule" fromto="-0.120208 -0.120208 0 0.120208 0.120208 0"
+            size="0.008" contype="1" conaffinity="1" rgba="0.25 0.25 0.28 1"/>
+      <geom name="rotor_visual_0" type="cylinder" pos="0.120208 0.120208 0" size="0.055 0.002"
+            contype="1" conaffinity="1" rgba="0.1 0.7 0.9 1"/>
+      <geom name="rotor_visual_1" type="cylinder" pos="0.120208 -0.120208 0" size="0.055 0.002"
+            contype="1" conaffinity="1" rgba="0.1 0.7 0.9 1"/>
+      <geom name="rotor_visual_2" type="cylinder" pos="-0.120208 -0.120208 0" size="0.055 0.002"
+            contype="1" conaffinity="1" rgba="0.1 0.7 0.9 1"/>
+      <geom name="rotor_visual_3" type="cylinder" pos="-0.120208 0.120208 0" size="0.055 0.002"
+            contype="1" conaffinity="1" rgba="0.1 0.7 0.9 1"/>
+      <site name="rotor_0" pos="0.120208 0.120208 0" size="0.008" user="1" rgba="0 0.7 1 1"/>
+      <site name="rotor_1" pos="0.120208 -0.120208 0" size="0.008" user="-1" rgba="0 0.7 1 1"/>
+      <site name="rotor_2" pos="-0.120208 -0.120208 0" size="0.008" user="1" rgba="0 0.7 1 1"/>
+      <site name="rotor_3" pos="-0.120208 0.120208 0" size="0.008" user="-1" rgba="0 0.7 1 1"/>
+    </body>
+  </worldbody>
+</mujoco>

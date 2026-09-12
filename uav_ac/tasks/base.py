@@ -14,6 +14,11 @@ class Task(Protocol):
     reset runs after the simulation reset and may choose a new physical state.
     observation/reward/terminated are evaluated after all physics substeps.
     Use Gymnasium TimeLimit for task-independent episode time limits.
+
+    Tasks may additionally implement after_substep(simulation, previous_state,
+    action) to consume physical events before observations are computed, and
+    info(simulation) to expose episode metrics. Absent hooks are no-ops; legacy
+    tasks retain their control-interval termination semantics.
     """
 
     observation_space: gym.Space

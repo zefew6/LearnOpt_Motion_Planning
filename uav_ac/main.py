@@ -32,8 +32,9 @@ from uav_ac.simulation.wind_disturb import GustingCrosswind
 ROOT = Path(__file__).resolve().parents[1]
 MODEL_DIRECTORY = Path(__file__).resolve().parent / "simulation" / "models"
 DEFAULT_CONFIG = ROOT / "configs" / "flight.yaml"
-PLANNERS = {"mini_snap", "gcopter", "gcs", "bmtp"}
+PLANNERS = {"none", "mini_snap", "gcopter", "gcs", "bmtp"}
 CONTROLLERS = {"cascaded", "mpc", "rl"}
+TASKS = {"trajectory_tracking", "gate_racing"}
 
 
 class _UniqueLoader(yaml.SafeLoader):
@@ -75,7 +76,7 @@ def load_config(path: str | Path = DEFAULT_CONFIG) -> dict:
     with path.open(encoding="utf-8") as stream:
         config = yaml.load(stream, Loader=_UniqueLoader)
     _only(config, {
-        "scene", "planner", "controller", "speed", "control_dt", "wind",
+        "task", "scene", "planner", "controller", "speed", "control_dt", "wind",
         "visualize", "follow_camera", "seed", "rl", "cascaded", "bmtp", "gcopter",
         "gcs", "mpc", "wind_options",
     }, "flight")
@@ -96,6 +97,16 @@ def load_config(path: str | Path = DEFAULT_CONFIG) -> dict:
         raise ValueError(f"planner must be one of: {', '.join(sorted(PLANNERS))}")
     if config["controller"] not in CONTROLLERS:
         raise ValueError(f"controller must be one of: {', '.join(sorted(CONTROLLERS))}")
+    config.setdefault("task", "trajectory_tracking")
+    if config["task"] not in TASKS:
+        raise ValueError(f"task must be one of: {', '.join(sorted(TASKS))}")
+    if config["task"] == "gate_racing":
+        if scene != "gate_racing" or config["planner"] != "none" or config["controller"] != "rl":
+            raise ValueError("gate_racing requires scene: gate_racing, planner: none, and controller: rl")
+        if config.get("wind", "none") != "none":
+            raise ValueError("gate_racing deployment does not support flight wind options")
+    elif config["planner"] == "none":
+        raise ValueError("planner: none is only valid for task: gate_racing")
     config.setdefault("speed", 3.0)
     config.setdefault("wind", "none")
     config.setdefault("visualize", False)
@@ -262,8 +273,10 @@ def _print_summary(config, trajectory, dt):
           f"peak_speed={peak_speed:.2f}m/s | samples={len(trajectory)}")
 
 
-def run(config: dict) -> np.ndarray:
+def run(config: dict) -> np.ndarray | dict:
     """Plan and fly once; ordinary viewer runs intentionally write no files."""
+    if config.get("task", "trajectory_tracking") == "gate_racing":
+        return _run_gate_racing(config)
     planning_capacity = 2 if config["planner"] == "bmtp" else 0
     simulation = MujocoSimulation(
         config["scene"], planning_path_capacity=planning_capacity)
@@ -299,7 +312,23 @@ def run(config: dict) -> np.ndarray:
     return trajectory
 
 
-def main(config_path: str | Path = DEFAULT_CONFIG) -> np.ndarray:
+def _run_gate_racing(config: dict):
+    """Replay a reference-free gate-racing policy in the native viewer."""
+    from uav_ac.rl.tasks.gate_racing.evaluation import replay
+
+    checkpoint = Path(config["rl"]["checkpoint"])
+    result = replay(
+        checkpoint.parent,
+        device=config["rl"]["device"],
+        seed=config["seed"],
+    )
+    print(f"Finished gate racing: success={result['success_rate']:.3f} | "
+          f"gates={result['mean_gates_passed']:.2f} | "
+          f"collision={result['collision_rate']:.3f}")
+    return result
+
+
+def main(config_path: str | Path = DEFAULT_CONFIG) -> np.ndarray | dict:
     return run(load_config(config_path))
 
 

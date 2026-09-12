@@ -20,6 +20,35 @@ def test_default_flight_config_is_small_and_resolves_scene():
     assert config["planner"] in main.PLANNERS
     assert config["controller"] in main.CONTROLLERS
     assert config["wind"] == "none"
+    assert config["task"] == "trajectory_tracking"
+
+
+def test_gate_racing_flight_config_routes_reference_free_deployment(tmp_path):
+    checkpoint = tmp_path / "model.zip"
+    checkpoint.write_bytes(b"checkpoint")
+    config = main.load_config(write_config(
+        tmp_path,
+        f"task: gate_racing\nscene: gate_racing\nplanner: none\ncontroller: rl\n"
+        f"rl: {{checkpoint: {checkpoint.name}}}\n"))
+    assert config["task"] == "gate_racing"
+    assert config["planner"] == "none"
+    assert config["scene"].endswith("gate_racing.xml")
+
+
+def test_gate_racing_run_uses_reference_free_replay(monkeypatch, tmp_path):
+    from uav_ac.rl.tasks.gate_racing import evaluation
+
+    replay = Mock(return_value={"success_rate": 0.5, "mean_gates_passed": 3.0,
+                                "collision_rate": 0.25})
+    monkeypatch.setattr(evaluation, "replay", replay)
+    checkpoint = tmp_path / "best_model.zip"
+    result = main.run({
+        "task": "gate_racing", "scene": str(main.MODEL_DIRECTORY / "gate_racing.xml"),
+        "planner": "none", "controller": "rl", "seed": 7,
+        "rl": {"checkpoint": str(checkpoint), "device": "cpu"},
+    })
+    assert result["success_rate"] == 0.5
+    replay.assert_called_once_with(tmp_path, device="cpu", seed=7)
 
 
 def test_minimal_config_receives_runtime_defaults(tmp_path):

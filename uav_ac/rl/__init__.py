@@ -1,4 +1,4 @@
-"""Reinforcement-learning trajectory tracking utilities.
+"""Task-oriented reinforcement-learning workflows and shared utilities.
 
 Importing :mod:`uav_ac` does not import this package, so Gymnasium and SB3 stay
 optional for conventional planning and control workflows.

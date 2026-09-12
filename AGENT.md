@@ -17,7 +17,8 @@ configs/flight.yaml → main.py → XML scene → planner → controller → MuJ
 | `uav_ac/simulation/models/` | XML scenes, vehicle parameters, waypoints, bounds, and planner guide sites |
 | `uav_ac/planning/` | Geometry, search, corridors, trajectory algorithms, and mission conversion |
 | `uav_ac/control/` | Cascaded/MPC/RL controllers and trajectory scheduling |
-| `uav_ac/rl/` | Trajectory banks, MLP/ACMPC training, evaluation, and checkpoint metadata |
+| `uav_ac/rl/tasks/` | Task-owned configuration, environments, training, and evaluation |
+| `uav_ac/rl/common/`, `uav_ac/rl/acmpc/` | Shared RL primitives and stable ACMPC implementation/checkpoint paths |
 | `uav_ac/tasks/`, `uav_ac/envs/` | Training environment and generic support for future non-trajectory RL tasks |
 | `uav_ac/visualization/` | Planning overlays and BMTP reports |
 
@@ -45,7 +46,9 @@ uv run python -m uav_ac.rl.training \
   --run-dir runs/acmpc_trajectory/<run-id>
 ```
 
-Ordinary viewer runs write no files. `uav_ac.record_experiments` owns conventional comparison videos; `uav_ac.rl.mlp_baseline.evaluate` owns trained-policy metrics, viewing, and recording.
+Ordinary viewer runs write no files. `uav_ac.record_experiments` owns conventional comparison videos; `uav_ac.rl.evaluate` owns trained-policy metrics, viewing, and recording. The old `uav_ac.rl.mlp_baseline` and `uav_ac.rl.gate_racing` imports remain compatibility facades.
+
+RL training and evaluation dispatch through the explicit registry in `uav_ac/rl/common/registry.py`. New tasks belong under `uav_ac/rl/tasks/<task>/`, expose one `WORKFLOW`, and add one registry entry; do not add task-name conditionals to the unified entrypoints.
 
 ## Flight configuration contract
 

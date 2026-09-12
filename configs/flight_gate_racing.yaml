@@ -1,0 +1,13 @@
+# Native viewer deployment for a trained reference-free gate-racing policy.
+task: gate_racing
+scene: gate_racing
+planner: none
+controller: rl
+
+wind: none
+follow_camera: true
+seed: 0
+
+rl:
+  checkpoint: ../runs/gate_racing/mlp_validation_01/best_model.zip
+  device: cpu

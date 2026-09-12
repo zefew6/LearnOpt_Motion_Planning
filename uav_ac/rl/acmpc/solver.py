@@ -113,8 +113,6 @@ class DifferentiableMPC(nn.Module):
         return state, QuadCost(torch.diag_embed(diagonal).transpose(0, 1), c.transpose(0, 1))
 
     def forward(self, state, ref, previous_action, residual, *, strict):
-        started = time.perf_counter()
-        outer_grad = torch.is_grad_enabled()
         cfg = self.settings
         if state.ndim != 2 or state.shape[1] != 13 or ref.shape != (len(state),cfg.horizon_steps+1,10):
             raise ValueError("incompatible MPC state or reference shape")
@@ -122,12 +120,29 @@ class DifferentiableMPC(nn.Module):
             raise ValueError("MPC inputs must be finite")
         if bool((state[:,3:7].norm(dim=-1) < 1e-10).any()):
             raise ValueError("MPC requires a nonzero quaternion")
+        local_state, cost = self.build_cost(state.double(), ref.double(), residual)
+        return self.solve_cost(local_state, cost, previous_action, strict=strict)
+
+    def solve_cost(self, state, cost, previous_action, *, strict):
+        """Solve a batched quadratic objective, independent of its task source."""
+        started = time.perf_counter()
+        outer_grad = torch.is_grad_enabled()
+        cfg = self.settings
+        if state.ndim != 2 or state.shape[1] != 13 or previous_action.shape != (len(state), 4):
+            raise ValueError("incompatible MPC state or action shape")
+        if cost.C.shape != (cfg.horizon_steps+1, len(state), 17, 17) or cost.c.shape != (cfg.horizon_steps+1, len(state), 17):
+            raise ValueError("incompatible quadratic cost shape")
+        if not all(bool(torch.isfinite(t).all()) for t in (state, previous_action, cost.C, cost.c)):
+            raise ValueError("MPC inputs must be finite")
+        if bool((state[:, 3:7].norm(dim=-1) < 1e-10).any()):
+            raise ValueError("MPC requires a nonzero quaternion")
         means, residuals = [], []
         failures = retries = 0
         sample_failures, sample_retries = [], []
         for start in range(0, len(state), cfg.chunk_size):
             end = start + cfg.chunk_size
-            x0, cost = self.build_cost(state[start:end].double(), ref[start:end].double(), residual[start:end])
+            x0 = state[start:end].double()
+            chunk_cost = QuadCost(cost.C[:, start:end], cost.c[:, start:end])
             previous = previous_action[start:end].double().clamp(-1, 1)
             batch = len(x0)
             lower = torch.full((cfg.horizon_steps+1, batch, 4), -1., device=x0.device, dtype=x0.dtype)
@@ -150,7 +165,7 @@ class DifferentiableMPC(nn.Module):
                 # backward is only needed while PPO updates the cost network.
                 solver_context = torch.enable_grad() if outer_grad else torch.no_grad()
                 with solver_context:
-                    predicted, actions, _ = solver(x0, cost, self.dynamics)
+                    predicted, actions, _ = solver(x0, chunk_cost, self.dynamics)
                 finite = torch.isfinite(actions).all(dim=(0, 2)) & torch.isfinite(predicted).all(dim=(0, 2))
                 # The paper uses one iLQR update as the differentiable actor.
                 # In that mode, a fixed-point residual is expected and is not

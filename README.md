@@ -17,10 +17,10 @@ Built on [Mdhvince/UAV-Autonomous-control](https://github.com/Mdhvince/UAV-Auton
 - [x] Integrate differentiable MPC into PPO policies (ACMPC)
 - [x] Independently implement biconvex minimum-time planning (BMTP)
 - [x] Add a unified YAML entry for planning, training, deployment, and replay
-- [ ] Extend RL training and deployment to tasks beyond trajectory tracking
+- [x] Add reference-free gate racing with PPO-MLP and PPO-ACMPC
 - [ ] Implement diffusion-based motion planning
 
-The current CLI supports trajectory tracking. A generic MuJoCo task interface is available for developing additional tasks. Implementation details and experiment workflows are documented in the [planning library guide](uav_ac/planning/README.md) and [contributor guide](AGENT.md).
+The flight CLI supports trajectory tracking; the RL training/evaluation entrypoints also support gate racing without a planner or trajectory bank. Implementation details and experiment workflows are documented in the [planning library guide](uav_ac/planning/README.md), [RL workflow guide](uav_ac/rl/README.md), [gate racing guide](docs/gate_racing.md), and [contributor guide](AGENT.md).
 
 ## Experiment videos
 
@@ -156,11 +156,11 @@ Set `scene`, `planner`, and `controller` in `configs/flight.yaml`, then run:
 
 ## Flight configuration
 
-`scene` names an XML file under `uav_ac/simulation/models/`, with or without the `.xml` suffix. The main choices are:
+`scene` names an XML file under `uav_ac/simulation/models/`, with or without the `.xml` suffix. Standard trajectory flights omit `task` (defaulting to `trajectory_tracking`). Reference-free gate-racing deployment uses `task: gate_racing`, `scene: gate_racing`, `planner: none`, and `controller: rl`; see [flight_gate_racing.yaml](configs/flight_gate_racing.yaml).
 
 | Field | Values | Notes |
 | --- | --- | --- |
-| `planner` | `mini_snap`, `gcopter`, `gcs`, `bmtp` | GCS needs scene guide regions; BMTP needs `bmtp_route_*` sites |
+| `planner` | `none`, `mini_snap`, `gcopter`, `gcs`, `bmtp` | `none` is only valid for gate racing; GCS needs scene guide regions; BMTP needs `bmtp_route_*` sites |
 | `controller` | `cascaded`, `mpc`, `rl` | MPC requires acados; RL requires `rl.checkpoint` |
 | `wind` | `none`, `fixed_gust` | Add `wind_options` only to override fixed-gust defaults |
 | `visualize` | `true`, `false` | Shows corridor geometry; BMTP always shows its dashed initialization and solid result |
@@ -179,6 +179,14 @@ bmtp:
 ```
 
 Use `scene: gcs_building` with `planner: gcs`. `gcopter:` and `gcs:` can override their native dataclass settings; `mpc:` configures the nonlinear controller. Traditional controllers default to a 0.01 s `control_dt`, which can be overridden with an integer multiple of the XML timestep. RL checkpoints own their control period. Viewer runs do not create output directories or overwrite previous results. Use `uav_ac.record_experiments` for videos.
+
+To open a trained reference-free gate-racing policy in the native viewer:
+
+```bash
+.venv/bin/python -m uav_ac.main --config configs/flight_gate_racing.yaml
+```
+
+This path uses `planner: none`; the policy observes the next gates directly and drives normalized thrust/body moments. It does not construct a trajectory or invoke GCOPTER.
 
 For GCOPTER, keep `speed` as the shared velocity bound. `gcopter:` exposes trajectory scale (`length_per_piece`, `time_weight`), dynamic limits (`max_acceleration`, `max_body_rate`), soft-constraint weights, and optimizer convergence settings. `gcs:` exposes the Bézier graph optimization and solver settings; `mpc:` exposes NMPC horizon, tracking weights, and solver settings; `cascaded:` exposes response time constants, damping, and altitude integration. Mass, thrust, tilt, and flight-speed limits remain in the selected XML vehicle.
 
@@ -236,7 +244,7 @@ rl:
   device: cuda
 ```
 
-Checkpoint paths are relative to the YAML file. Keep `rl_config.json` beside the model; the deployed controller adopts and validates the trained control period automatically. Dataset-based metrics, interactive evaluation, and recording remain available through `uav_ac.rl.mlp_baseline.evaluate`.
+Checkpoint paths are relative to the YAML file. Keep `rl_config.json` beside the model; the deployed controller adopts and validates the trained control period automatically. Dataset-based metrics, interactive evaluation, and recording are available through `uav_ac.rl.evaluate`; it selects the task from run metadata.
 
 ## Tests
 
@@ -251,6 +259,7 @@ See [AGENT.md](AGENT.md) for contributor guidance, module contracts, and coverag
 ```text
 configs/
 ├── flight.yaml               Short interactive-flight configuration
+├── flight_gate_racing.yaml   Gate-racing policy viewer configuration
 ├── ppo_trajectory.yaml       MLP training and trajectory-bank settings
 ├── acmpc_trajectory.yaml     ACMPC training settings
 └── bmtp.yaml                 Standalone BMTP experiment settings
@@ -267,8 +276,10 @@ uav_ac/
 │   └── pipeline/             Mission and trajectory conversion
 ├── control/                  Cascaded/MPC control and tracking interfaces
 ├── rl/
-│   ├── training.py           Shared MLP/ACMPC trainer and bank preparation
-│   ├── common/               Trajectory banks and initialization assets
+│   ├── training.py           Unified task-aware MLP/ACMPC training entry point
+│   ├── evaluate.py           Unified task-aware evaluation/viewer entry point
+│   ├── tasks/                Task-owned RL workflows, including gate racing
+│   ├── common/               Registry, shared config, and trajectory-bank assets
 │   ├── acmpc/                Differentiable MPC policy and solver
 │   └── mlp_baseline/         Existing training/evaluation entry points
 ├── simulation/

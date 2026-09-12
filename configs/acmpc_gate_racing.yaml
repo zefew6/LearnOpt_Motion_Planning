@@ -1,0 +1,23 @@
+task: gate_racing
+scene: gate_racing
+policy_type: acmpc
+device: cpu
+seed: 42
+n_envs: 4
+total_timesteps: 8192
+steps_per_action: 10
+episode_seconds: 30.0
+evaluation_episodes: 20
+evaluation_interval: 8192
+checkpoint_interval: 8192
+torch_threads: 1
+mpc:
+  horizon_steps: 20
+  dt: 0.01
+  iterations: 1
+  retry_iterations: 1
+  chunk_size: 32
+ppo:
+  n_steps: 128
+  batch_size: 64
+  n_epochs: 3

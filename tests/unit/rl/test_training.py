@@ -12,6 +12,9 @@ from uav_ac.rl import training
 from uav_ac.rl.common.trajectory_bank import trajectory_bank_fingerprint
 from uav_ac.rl.mlp_baseline import training as legacy
 from uav_ac.rl.mlp_baseline import train as legacy_cli
+from uav_ac.rl.tasks.trajectory_tracking import assets as trajectory_assets
+from uav_ac.rl.tasks.trajectory_tracking import environment as trajectory_environment
+from uav_ac.rl.tasks.trajectory_tracking import training as trajectory_training
 
 
 def test_legacy_training_exports_shared_implementation():
@@ -47,12 +50,12 @@ def test_external_bank_checks_selected_scene(tmp_path, monkeypatch, matching_sce
     fingerprint_scene = scene if matching_scene else training.OPEN_FIELD_SCENE_PATH
     bank = SimpleNamespace(metadata={"fingerprint": trajectory_bank_fingerprint(
         settings["trajectory_bank"], scene_path=fingerprint_scene, steps_per_action=10)})
-    monkeypatch.setattr(training.TrajectoryBank, "load", Mock(return_value=bank))
+    monkeypatch.setattr(trajectory_assets.TrajectoryBank, "load", Mock(return_value=bank))
     generate = Mock(side_effect=AssertionError("must not generate an external bank"))
-    monkeypatch.setattr(training, "generate_trajectory_bank", generate)
+    monkeypatch.setattr(trajectory_assets, "generate_trajectory_bank", generate)
     simulation = Mock(return_value=SimpleNamespace(quad=object()))
-    monkeypatch.setattr(training, "MujocoSimulation", simulation)
-    monkeypatch.setattr(training, "quad_parameters", Mock(return_value={"physics_dt": 0.001}))
+    monkeypatch.setattr(trajectory_assets, "MujocoSimulation", simulation)
+    monkeypatch.setattr(trajectory_assets, "quad_parameters", Mock(return_value={"physics_dt": 0.001}))
     if matching_scene:
         assert training.prepare_assets(tmp_path, settings=settings, model_path=scene)[0] is bank
         simulation.assert_called_once_with(scene, record_actual_trajectory=False)
@@ -66,10 +69,10 @@ def test_external_bank_checks_selected_scene(tmp_path, monkeypatch, matching_sce
 def test_legacy_asset_generation_passes_selected_scene(tmp_path, monkeypatch):
     scene = tmp_path / "scene.xml"
     generate = Mock(return_value=object())
-    monkeypatch.setattr(training, "generate_trajectory_bank", generate)
+    monkeypatch.setattr(trajectory_assets, "generate_trajectory_bank", generate)
     simulation = Mock(return_value=SimpleNamespace(quad=object()))
-    monkeypatch.setattr(training, "MujocoSimulation", simulation)
-    monkeypatch.setattr(training, "quad_parameters", Mock(return_value={}))
+    monkeypatch.setattr(trajectory_assets, "MujocoSimulation", simulation)
+    monkeypatch.setattr(trajectory_assets, "quad_parameters", Mock(return_value={}))
     training.prepare_assets(tmp_path, model_path=scene)
     assert generate.call_args.kwargs["scene_path"] == scene
     simulation.assert_called_once_with(scene, record_actual_trajectory=False)
@@ -78,11 +81,11 @@ def test_legacy_asset_generation_passes_selected_scene(tmp_path, monkeypatch):
 def test_worker_factory_passes_selected_scene(tmp_path, monkeypatch):
     scene = tmp_path / "scene.xml"
     bank = object()
-    monkeypatch.setattr(training.TrajectoryBank, "load", Mock(return_value=bank))
+    monkeypatch.setattr(trajectory_environment.TrajectoryBank, "load", Mock(return_value=bank))
     environment = Mock()
-    monkeypatch.setattr(training, "MujocoTrajectoryTrackingEnv", environment)
+    monkeypatch.setattr(trajectory_environment, "MujocoTrajectoryTrackingEnv", environment)
     monitor = Mock()
-    monkeypatch.setattr(training, "Monitor", monitor)
+    monkeypatch.setattr(trajectory_environment, "Monitor", monitor)
     factory = training.make_environment_factory(
         tmp_path / "bank", tmp_path / "monitor", rank=2, steps_per_action=10,
         wind_settings=training.DEFAULT_TRAINING_CONFIG["wind"], model_path=scene)
@@ -101,18 +104,18 @@ def test_training_routes_scene_and_preserves_artifacts(tmp_path, monkeypatch, po
     scene = tmp_path / "selected.xml"
     bank = SimpleNamespace(indices=lambda split: [0])
     prepare = Mock(return_value=(bank, {"physics_dt": 0.001}))
-    monkeypatch.setattr(training, "prepare_assets", prepare)
-    monkeypatch.setattr(training, "load_training_config", Mock(side_effect=AssertionError("must use settings")))
+    monkeypatch.setattr(trajectory_training, "prepare_assets", prepare)
+    monkeypatch.setattr(trajectory_training, "load_training_config", Mock(side_effect=AssertionError("must use settings")))
     environment = Mock()
-    monkeypatch.setattr(training, "MujocoTrajectoryTrackingEnv", environment)
-    monkeypatch.setattr(training, "check_env", Mock())
+    monkeypatch.setattr(trajectory_training, "MujocoTrajectoryTrackingEnv", environment)
+    monkeypatch.setattr(trajectory_training, "check_env", Mock())
     factory = Mock()
-    monkeypatch.setattr(training, "make_environment_factory", factory)
+    monkeypatch.setattr(trajectory_training, "make_environment_factory", factory)
     vector = Mock()
-    monkeypatch.setattr(training, "DummyVecEnv", Mock(return_value=vector))
+    monkeypatch.setattr(trajectory_training, "DummyVecEnv", Mock(return_value=vector))
     model = Mock(policy=SimpleNamespace())
     ppo = Mock(return_value=model)
-    monkeypatch.setattr(training, "PPO", ppo)
+    monkeypatch.setattr(trajectory_training, "PPO", ppo)
     run_dir = tmp_path / "run"
     assert training.train(run_dir, settings=settings, model_path=scene) == run_dir
     assert settings == original
@@ -151,7 +154,7 @@ def test_acmpc_evaluation_panel_uses_selected_scene(tmp_path, monkeypatch):
         environments.append(env)
         return env
 
-    monkeypatch.setattr(training, "MujocoTrajectoryTrackingEnv", make_env)
+    monkeypatch.setattr(trajectory_training, "MujocoTrajectoryTrackingEnv", make_env)
     collect = Mock(return_value=[{"success": True, "position_rmse": 0.1, "return": 1.0}])
     monkeypatch.setattr(benchmark, "collect_panel", collect)
     callback = training.TrajectoryBankEvaluationCallback(
