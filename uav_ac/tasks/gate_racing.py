@@ -7,6 +7,7 @@ import mujoco
 import numpy as np
 
 from uav_ac.scenes.loader import ENU_TO_NED
+from .gate_course import apply_course, course_settings, describe_course, sample_course
 
 SCENE_PATH = Path(__file__).resolve().parents[1] / "simulation/models/gate_racing.xml"
 FEATURE_SCALES = np.array([1.] * 4 + [10.] * 3 + [10.] * 3 + [1.] * 4
@@ -65,24 +66,35 @@ def read_gates(simulation):
 
 
 class GateRacingTask:
-    def __init__(self, *, acmpc=False, perturb_initial_state=True):
+    def __init__(self, *, acmpc=False, perturb_initial_state=True, course=None):
         self.acmpc = acmpc
         self.perturb_initial_state = perturb_initial_state
         self.observation_space = observation_space(acmpc)
+        self.course = course_settings(course)
 
     def reset(self, simulation, rng, options):
-        self.gates = read_gates(simulation)
         if simulation.space_limits is None:
             raise ValueError("gate racing requires scene planning_bounds")
         state = simulation.quad.X.copy()
+        # Always consume the same two seeds, independently of initial perturbation.
+        course_seed, state_seed = rng.integers(0, 2**63, size=2, dtype=np.int64)
+        state_rng = np.random.default_rng(state_seed)
+        if self.course["mode"] == "random":
+            if len(read_gates(simulation)) != 6:
+                raise ValueError("random courses require exactly six gates")
+            gates = sample_course(np.random.default_rng(course_seed), state[:3],
+                                  simulation.space_limits, self.course)
+            apply_course(simulation, gates)
         if options.get("perturb_initial_state", self.perturb_initial_state):
-            state[:3] += rng.uniform(-.2, .2, 3)
-            state[7:10] = rng.uniform(-.1, .1, 3)
-            delta = rng.uniform(-.02, .02, 3)
+            state[:3] += state_rng.uniform(-.2, .2, 3)
+            state[7:10] = state_rng.uniform(-.1, .1, 3)
+            delta = state_rng.uniform(-.02, .02, 3)
             state[3:7] = np.r_[1., delta]
             state[3:7] /= np.linalg.norm(state[3:7])
         quad = simulation.quad
         simulation.reset(state, np.full(4, np.sqrt(quad.m * quad.g / (4 * quad.kf))))
+        self.gates = read_gates(simulation)
+        self.course_description = describe_course(self.gates)
         if simulation.collision_detected:
             raise ValueError("gate racing reset is in collision")
         self.gate_index = 0
@@ -113,7 +125,13 @@ class GateRacingTask:
         start, end = previous_state[:3], state[:3]
         while self.gate_index < len(self.gates):
             gate = self.gates[self.gate_index]
+            start_side = (gate.rotation.T @ (start-gate.center))[0]
+            end_side = (gate.rotation.T @ (end-gate.center))[0]
             fraction = gate.crossing(start, end)
+            if start_side >= 0 or (end_side >= 0 and fraction is None):
+                self.reason = "missed_gate"
+                self.pending_reward -= 10.
+                break
             stop = end if fraction is None else start + fraction * (end - start)
             self.pending_reward += np.linalg.norm(start-gate.center) - np.linalg.norm(stop-gate.center)
             if fraction is None:

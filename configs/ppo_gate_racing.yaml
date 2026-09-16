@@ -1,6 +1,8 @@
 # Large PPO-MLP gate-racing run. Start with a new run directory per seed.
 task: gate_racing
 scene: gate_racing
+course:
+  mode: random
 policy_type: mlp
 device: cuda
 seed: 42

@@ -7,17 +7,21 @@ collective-thrust/body-moment actions. This is a custom three-dimensional
 track, not a reproduction of the paper's Split-S geometry or thrust/body-rate
 interface. MPVE, wind and dynamics randomization are outside this version.
 
+Task version 2 uses strict missed-gate termination. Both supplied training
+YAMLs now generate a fresh static six-gate course at each reset. Version 1
+checkpoints are incompatible: keep old runs and start a new run directory.
+
 ## Train, resume and evaluate
 
 Run from the repository root with the existing Python 3.13 environment:
 
 ```bash
-.venv/bin/python -m uav_ac.rl.training --config configs/ppo_gate_racing.yaml --run-dir runs/gate_racing/mlp01
-.venv/bin/python -m uav_ac.rl.training --config configs/acmpc_gate_racing.yaml --run-dir runs/gate_racing/acmpc01
-.venv/bin/python -m uav_ac.rl.training --config configs/acmpc_gate_racing.yaml --run-dir runs/gate_racing/acmpc01 --resume runs/gate_racing/acmpc01/final_model.zip --total-timesteps 8192
-.venv/bin/python -m uav_ac.rl.evaluate runs/gate_racing/acmpc01 --mode metrics --episodes 20
-.venv/bin/python -m uav_ac.rl.evaluate runs/gate_racing/acmpc01 --mode interactive
-.venv/bin/python -m uav_ac.rl.evaluate runs/gate_racing/acmpc01 --mode record --output runs/gate_racing/acmpc01/replay.mp4
+.venv/bin/python -m uav_ac.rl.training --config configs/ppo_gate_racing.yaml --run-dir runs/gate_racing/mlp_random_v2
+.venv/bin/python -m uav_ac.rl.training --config configs/acmpc_gate_racing.yaml --run-dir runs/gate_racing/acmpc_random_v2
+.venv/bin/python -m uav_ac.rl.training --config configs/acmpc_gate_racing.yaml --run-dir runs/gate_racing/acmpc_random_v2 --resume runs/gate_racing/acmpc_random_v2/final_model.zip --total-timesteps 8192
+.venv/bin/python -m uav_ac.rl.evaluate runs/gate_racing/acmpc_random_v2 --mode metrics --episodes 20
+.venv/bin/python -m uav_ac.rl.evaluate runs/gate_racing/acmpc_random_v2 --mode interactive --seed 17
+.venv/bin/python -m uav_ac.rl.evaluate runs/gate_racing/acmpc_random_v2 --mode record --seed 17 --output runs/gate_racing/acmpc_random_v2/replay.mp4
 ```
 
 For headless recording, use `MUJOCO_GL=egl` or an available offscreen MuJoCo
@@ -37,6 +41,11 @@ TensorBoard logs live under the run directory. `rl_config.json` records the
 task, observation scales, action definition, vehicle parameters, scene SHA-256,
 control period and MPC settings. Keep it with the checkpoints. Loading or
 resuming after changing the scene or these contracts fails explicitly.
+The contract also records the task version, course generator version and all
+course parameters. Evaluation episodes include actual gate centers and rotation
+matrices in NED and aperture half-sizes; `missed_gate_rate` is reported in metrics
+and TensorBoard. Initial-state perturbation uses a separate random stream, so
+disabling it does not change the course for a given reset seed.
 Old trajectory-tracking configurations and checkpoint classes are preserved.
 
 ## Task and scene conventions
@@ -49,7 +58,36 @@ together. Simulation geometry uses the repository's MuJoCo convention;
 task/dynamics state uses NED/FRD after conversion at the scene boundary.
 
 The fixed track has 2 m square openings, approximately 8–12 m gate spacing,
-turns and heights from 2–5 m. Episodes start in hover at the XML start, with
+turns and heights from 2–5 m. Set `course.mode: fixed` to use it; omitted `course`
+also selects fixed geometry for programmatic callers. The supplied YAMLs select
+`random`. Optional course settings (distances in meters, angles in degrees):
+
+```yaml
+course:
+  mode: random
+  spacing: [5.0, 8.0]           # 3D distance between successive centers
+  height: [2.0, 6.0]           # height above z=0, positive upward
+  height_step: 1.0
+  turn_degrees: 60.0           # change in horizontal path heading
+  width: [1.5, 2.5]            # full clear aperture width
+  aperture_height: [1.5, 2.5]  # full clear aperture height
+  yaw_degrees: 15.0            # offset from incoming path heading
+  tilt_degrees: 15.0           # independently sampled pitch and roll
+```
+
+The first gate is 5–8 m from the XML start, directed toward the field interior;
+successive headings, heights, dimensions and orientations are sampled anew.
+The generator checks full frame bounds with 0.25 m margin, nonoverlap using
+conservative enclosing spheres, approach sides, and center-connecting segments
+against every frame box expanded by 0.25 m. A short segment beyond the finish is
+also checked. These are conservative geometry checks, not a dynamics feasibility
+certificate. Up to 100 complete candidate courses are tried; exhaustion reports
+an error without falling back to a fixed track. MuJoCo recompiles the pristine
+template on every random reset to update collision bounds and visible geometry
+together; this adds reset cost but does not change physics stepping. Renderers
+and viewers must attach after reset, as the existing replay entry point does.
+
+Episodes start in hover at the XML start, with
 position perturbations ±0.2 m, velocity perturbations ±0.1 m/s and small
 quaternion perturbations. All gates must be passed once in order within 30 s.
 There is no tracking-speed or tilt cutoff. The physical step is 1 ms and
@@ -59,12 +97,17 @@ Each physical substep tests the motion segment against the current gate plane.
 Only a forward intersection strictly inside the opening counts. Later gates
 cannot be collected out of order. Collision or leaving scene bounds terminates
 immediately, with collision taking priority over a same-substep crossing. The
+first forward crossing outside the current aperture (including its edge)
+terminates as `missed_gate`; returning to retry cannot recover the episode.
+Starting a substep or activating a new target on its exit side also fails.
+Moving backward while still on the approach side is allowed. A reverse crossing
+never earns gate credit. The
 new vehicle scene includes arm and rotor collision geometry. As with MuJoCo's
 discrete collision detection, this does not guarantee collision detection at
 arbitrarily large speeds.
 
 Reward sums distance progress toward the current gate, +10 per passed gate,
-an additional +10 on completion, and −10 on collision or leaving bounds.
+an additional +10 on completion, and −10 on collision, leaving bounds or missing a gate.
 Progress is split at each crossing before changing the target, avoiding a
 spurious jump between gate centers. The body-rate penalty is
 `−0.01 * ||omega|| * (substep_dt / 0.01)`; its accumulation is independent of

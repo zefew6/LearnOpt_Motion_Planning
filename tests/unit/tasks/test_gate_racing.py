@@ -8,6 +8,7 @@ from stable_baselines3.common.env_checker import check_env
 
 from uav_ac.envs.mujoco_env import MujocoEnv
 from uav_ac.tasks.gate_racing import Gate, GateRacingTask, SCENE_PATH, FEATURE_SIZE
+from scipy.spatial.transform import Rotation
 
 
 @pytest.fixture
@@ -141,3 +142,52 @@ def test_rate_penalty_independent_of_substep_partition(env):
         return env.task.reward(sim, np.zeros(4))
     assert integrate(.001, 10) == pytest.approx(-.02)
     assert integrate(.002, 5) == pytest.approx(-.02)
+
+
+@pytest.mark.parametrize("offset", [1., 1.2, -1.2])
+@pytest.mark.parametrize("angles", [[0, 0, 0], [35, 15, -12]])
+def test_missed_gate_is_terminal_even_after_return(env, offset, angles):
+    gate = Gate(np.array([8., 0., -3.]),
+                Rotation.from_euler("ZYX", angles, degrees=True).as_matrix(), np.ones(2))
+    env.task.gates = [gate]
+    a, b = [gate.center + gate.rotation @ np.array(p) for p in
+            ([-1., offset, 0], [1., offset, 0])]
+    assert move(env.task, env.simulation, a, b) == -10.
+    assert env.task.reason == "missed_gate"
+    assert env.task.gate_index == 0
+    # Neither a return nor a later valid crossing can rescue the failed episode.
+    move(env.task, env.simulation, b, a)
+    move(env.task, env.simulation, gate.center-gate.rotation[:, 0], gate.center+gate.rotation[:, 0])
+    assert env.task.reason == "missed_gate" and env.task.gate_index == 0
+    assert not env.task.info(env.simulation)["success"]
+
+
+def test_gate_front_adjustment_and_reverse_do_not_score(env):
+    move(env.task, env.simulation, [7, 0, -2], [6, 0, -2])
+    assert env.task.reason is None and env.task.gate_index == 0
+    move(env.task, env.simulation, [9, 0, -2], [7, 0, -2])
+    assert env.task.gate_index == 0 and env.task.reason == "missed_gate"
+
+
+def test_target_already_behind_at_switch_fails(env):
+    env.task.gates = [Gate(np.array([x, 0., -2.]), np.eye(3), np.ones(2)) for x in [8., 7.]]
+    move(env.task, env.simulation, [6, 0, -2], [9, 0, -2])
+    assert env.task.gate_index == 1 and env.task.reason == "missed_gate"
+
+
+def test_multiple_gates_then_miss_in_same_segment(env):
+    env.task.gates = [Gate(np.array([8., 0., -2.]), np.eye(3), np.ones(2)),
+                      Gate(np.array([9., 2., -2.]), np.eye(3), np.ones(2))]
+    move(env.task, env.simulation, [7, 0, -2], [10, 0, -2])
+    assert env.task.gate_index == 1 and env.task.reason == "missed_gate"
+
+
+def test_valid_tilted_gate_and_missed_gate_collision_priority(env):
+    gate = Gate(np.array([8., 0., -3.]),
+                Rotation.from_euler("ZYX", [35, 15, -12], degrees=True).as_matrix(), np.ones(2))
+    env.task.gates = [gate]
+    move(env.task, env.simulation, gate.center-gate.rotation[:, 0], gate.center+gate.rotation[:, 0])
+    assert env.task.reason == "success"
+    env.reset()
+    move(env.task, env.simulation, [7, 2, -2], [9, 2, -2], collision=True)
+    assert env.task.reason == "collision"

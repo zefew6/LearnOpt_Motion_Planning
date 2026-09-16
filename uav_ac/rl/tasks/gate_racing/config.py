@@ -10,6 +10,7 @@ import numpy as np
 
 from uav_ac.control.rl_controller import quad_parameters
 from uav_ac.tasks.gate_racing import FEATURE_SCALES, SCENE_PATH
+from uav_ac.tasks.gate_course import COURSE_DEFAULTS, COURSE_VERSION, course_settings
 from ...acmpc.solver import MPCSettings, SOLVER_VERSION
 from ...common.config import COMMON_TRAINING_DEFAULTS, deep_merge
 
@@ -19,7 +20,7 @@ def settings_from(values):
     defaults.update(task="gate_racing", scene="gate_racing", device="cpu", n_envs=4,
                     total_timesteps=8192, evaluation_interval=8192, checkpoint_interval=8192,
                     episode_seconds=30., evaluation_episodes=20, torch_threads=1,
-                    mpc=asdict(MPCSettings()))
+                    mpc=asdict(MPCSettings()), course=deepcopy(COURSE_DEFAULTS))
     defaults["ppo"].update(n_steps=128, batch_size=64, n_epochs=3)
     unknown = set(values) - set(defaults)
     if unknown:
@@ -27,7 +28,11 @@ def settings_from(values):
     for key in ("ppo", "mpc"):
         if key in values and (not isinstance(values[key], dict) or set(values[key])-set(defaults[key])):
             raise ValueError(f"invalid gate-racing {key} settings")
+    if "course" in values and not isinstance(values["course"], dict):
+        raise ValueError("invalid course settings")
+    course = course_settings(values.get("course", {}))
     settings = deep_merge(defaults, values)
+    settings["course"] = course
     if settings["task"] != "gate_racing" or settings["policy_type"] not in {"mlp", "acmpc"}:
         raise ValueError("gate racing requires policy_type mlp or acmpc")
     scene = Path(settings["scene"])
@@ -71,7 +76,8 @@ def scene_path(settings):
 
 
 def contract(settings, env):
-    return {"schema_version": 3, "task": "gate_racing", "task_version": 1,
+    return {"schema_version": 3, "task": "gate_racing", "task_version": 2,
+            "course_version": COURSE_VERSION, "course": settings["course"],
             "policy_type": settings["policy_type"], "scene": settings["scene"],
             "scene_sha256": hashlib.sha256(scene_path(settings).read_bytes()).hexdigest(),
             "feature_layout": "q_wxyz,v_body,omega_body,previous_action,two_gate_corners,two_valid",
@@ -87,6 +93,8 @@ def read_run(run_dir):
     from .environment import make_environment
 
     metadata = json.loads((Path(run_dir) / "rl_config.json").read_text())
+    if metadata["contract"].get("task_version") != 2:
+        raise ValueError("incompatible gate-racing task version; train a new run with strict missed-gate rules")
     settings = settings_from(metadata["settings"])
     env = make_environment(settings)
     try:

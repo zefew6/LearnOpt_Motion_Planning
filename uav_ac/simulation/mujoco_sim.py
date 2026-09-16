@@ -81,6 +81,7 @@ class MujocoSimulation:
                     type=mujoco.mjtGeom.mjGEOM_CAPSULE, size=[0.025, 0.01, 0.0],
                     pos=[0, 0, -100], contype=0, conaffinity=0,
                     rgba=[0, 0, 0, 0], group=2)
+        self.scene_specification = specification.copy()
         self.model = specification.compile()
         self.data = mujoco.MjData(self.model)
         self._planning_path_ids = [np.array([
@@ -195,6 +196,23 @@ class MujocoSimulation:
         self.model.site_pos[goal_id] = ENU_TO_NED @ position_ned
         self.goal_position = position_ned.copy()
         mujoco.mj_forward(self.model, self.data)
+
+    def replace_static_scene(self, specification):
+        """Rebuild static geometry between episodes, preserving topology and vehicle.
+
+        Call before reset and before attaching a viewer/renderer for the episode.
+        Compilation refreshes all collision bounds after geometry resizing.
+        """
+        model = specification.compile()
+        if (model.nbody, model.ngeom, model.nsite, model.nq, model.nv, model.names) != (
+                self.model.nbody, self.model.ngeom, self.model.nsite,
+                self.model.nq, self.model.nv, self.model.names):
+            raise ValueError("static scene replacement must preserve model topology")
+        self.model = model
+        self.data = mujoco.MjData(model)
+        self._corridor_visualizer = CorridorMeshVisualizer(model)
+        self._corridor_region_ids = self._corridor_visualizer.region_ids
+        self._corridor_mesh_ids = self._corridor_visualizer.mesh_ids
 
     def reset(
             self,

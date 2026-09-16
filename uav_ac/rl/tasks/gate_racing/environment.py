@@ -10,7 +10,7 @@ from .config import scene_path
 
 def make_environment(settings, *, perturb=True, record_actual_trajectory=False):
     env = MujocoEnv(GateRacingTask(acmpc=settings["policy_type"] == "acmpc",
-                                 perturb_initial_state=perturb),
+                                 perturb_initial_state=perturb, course=settings["course"]),
                     model_path=scene_path(settings), steps_per_action=settings["steps_per_action"],
                     record_actual_trajectory=record_actual_trajectory)
     if settings["policy_type"] == "acmpc" and not np.isclose(env.control_dt, settings["mpc"]["dt"], rtol=0, atol=1e-12):

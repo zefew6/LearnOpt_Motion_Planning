@@ -1,5 +1,7 @@
 task: gate_racing
 scene: gate_racing
+course:
+  mode: random
 policy_type: acmpc
 device: cpu
 seed: 42

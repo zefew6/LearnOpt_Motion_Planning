@@ -38,7 +38,7 @@ class RacingEvaluationCallback(BaseCallback):
         result = evaluate_model(self.model, self.settings, tuple(range(10000, 10000+self.settings["evaluation_episodes"])))
         result["timesteps"] = self.model.num_timesteps
         (self.run_dir / "evaluation.json").write_text(json.dumps(result, indent=2) + "\n")
-        for key in ("success_rate", "mean_gates_passed", "collision_rate", "out_of_bounds_rate", "solver_failure_rate"):
+        for key in ("success_rate", "mean_gates_passed", "collision_rate", "missed_gate_rate", "out_of_bounds_rate", "solver_failure_rate"):
             self.logger.record(f"racing/{key}", result[key])
         self.logger.dump(step=self.model.num_timesteps)
         if self.rank(result) > self.best:

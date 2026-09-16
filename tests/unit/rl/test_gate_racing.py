@@ -71,7 +71,8 @@ def test_ppo_physical_buffer_and_save_load(tmp_path):
 
 
 @pytest.mark.parametrize("change", [{"trajectory_bank_path":"unused"}, {"scene":"../other"},
-    {"n_envs":0}, {"ppo":{"batch_size":1}}, {"mpc":{"dt":-1}}, {"typo":1}])
+    {"n_envs":0}, {"ppo":{"batch_size":1}}, {"mpc":{"dt":-1}}, {"typo":1},
+    {"course":{"typo":1}}, {"course":None}, {"course":{"mode":"moving"}}])
 def test_invalid_settings(change):
     with pytest.raises((ValueError, FileNotFoundError)):
         settings_from(change)
@@ -96,7 +97,7 @@ def test_config_contract_and_timing(tmp_path):
 
 @pytest.mark.parametrize("policy", ["mlp", "acmpc"])
 def test_train_resume_evaluate(tmp_path, policy):
-    settings = settings_from({"policy_type":policy, "n_envs":1, "total_timesteps":8,
+    settings = settings_from({"policy_type":policy, "course":{"mode":"random"}, "n_envs":1, "total_timesteps":8,
         "episode_seconds":.02, "evaluation_episodes":2, "evaluation_interval":8,
         "checkpoint_interval":8, "mpc":{"horizon_steps":3},
         "ppo":{"n_steps":4, "batch_size":4, "n_epochs":1, "net_arch":{"pi":[16],"vf":[16]}}})
@@ -109,6 +110,8 @@ def test_train_resume_evaluate(tmp_path, policy):
     metrics = evaluate_metrics(resumed, seeds=(4,5))
     assert metrics["timeout_rate"] == 1
     assert metrics["solver_failure_rate"] == 0
+    assert metrics["missed_gate_rate"] == 0
+    assert len(metrics["episodes"][0]["course"]) == 6
     changed = deepcopy(settings)
     changed["episode_seconds"] = .03
     with pytest.raises(ValueError, match="incompatible"):
@@ -116,7 +119,7 @@ def test_train_resume_evaluate(tmp_path, policy):
 
 
 def test_batched_evaluation_matches_single_and_frame_path():
-    settings = settings_from({"episode_seconds":.04})
+    settings = settings_from({"episode_seconds":.04, "course":{"mode":"random"}})
     class HoverPolicy:
         device = torch.device("cpu")
         policy = object()
@@ -131,6 +134,22 @@ def test_batched_evaluation_matches_single_and_frame_path():
     assert frames[0] == (0., False)
     assert frames[-1] == pytest.approx((.04, True))
     assert batch["episodes"][0]["termination_reason"] == "timeout"
+    assert batch["episodes"][0]["course"] == single["episodes"][0]["course"]
+
+
+def test_old_contract_rejected_and_course_is_part_of_contract(tmp_path):
+    settings = settings_from({})
+    env = make_environment(settings)
+    try:
+        signature = contract(settings, env)
+        changed = settings_from({"course":{"mode":"random"}})
+        assert contract(changed, env) != signature
+        signature["task_version"] = 1
+        (tmp_path / "rl_config.json").write_text(json.dumps({"settings":settings, "contract":signature}))
+        with pytest.raises(ValueError, match="train a new run"):
+            read_run(tmp_path)
+    finally:
+        env.close()
 
 
 def test_replay_existing_video_rejected_before_loading(tmp_path):

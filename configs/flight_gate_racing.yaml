@@ -6,8 +6,8 @@ controller: rl
 
 wind: none
 follow_camera: true
-seed: 0
+seed: 1
 
 rl:
-  checkpoint: ../runs/gate_racing/mlp_validation_01/best_model.zip
-  device: cpu
+  checkpoint: ../runs/gate_racing/mlp_large_seed42/best_model.zip
+  device: cuda

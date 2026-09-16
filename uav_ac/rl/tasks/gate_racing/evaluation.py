@@ -61,7 +61,9 @@ def evaluate_model(model, settings, seeds, *, perturb=True, frame=None):
                 if terminated or truncated:
                     if truncated and not terminated:
                         info["termination_reason"] = "timeout"
-                    results[index] = {**info, "seed": int(seeds[index]), "timeout": bool(truncated and not terminated),
+                    results[index] = {**info, "seed": int(seeds[index]),
+                                      "course": env.unwrapped.task.course_description,
+                                      "timeout": bool(truncated and not terminated),
                                       "return": float(totals[index]), "solver_failures": int(failures[index]),
                                       "policy_calls": int(calls[index]), "inference_seconds": float(seconds[index])}
                 else:
@@ -77,6 +79,7 @@ def evaluate_model(model, settings, seeds, *, perturb=True, frame=None):
     return {"episodes": results, "success_rate": len(successes)/len(results),
             "mean_gates_passed": float(np.mean([r["gates_passed"] for r in results])),
             "collision_rate": float(np.mean([r["collision"] for r in results])),
+            "missed_gate_rate": float(np.mean([r["termination_reason"] == "missed_gate" for r in results])),
             "out_of_bounds_rate": float(np.mean([r["termination_reason"] == "out_of_bounds" for r in results])),
             "timeout_rate": float(np.mean([r["timeout"] for r in results])),
             "mean_success_seconds": float(np.mean([r["elapsed_seconds"] for r in successes])) if successes else None,
