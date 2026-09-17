@@ -7,8 +7,8 @@ collective-thrust/body-moment actions. This is a custom three-dimensional
 track, not a reproduction of the paper's Split-S geometry or thrust/body-rate
 interface. MPVE, wind and dynamics randomization are outside this version.
 
-Task version 2 uses strict missed-gate termination. Both supplied training
-YAMLs now generate a fresh static six-gate course at each reset. Version 1
+Task version 3 uses geometric gate MPC and diameter-relative openings. Both supplied training
+YAMLs generate a fresh static six-gate course at each reset. Version 1/2
 checkpoints are incompatible: keep old runs and start a new run directory.
 
 ## Train, resume and evaluate
@@ -16,18 +16,23 @@ checkpoints are incompatible: keep old runs and start a new run directory.
 Run from the repository root with the existing Python 3.13 environment:
 
 ```bash
-.venv/bin/python -m uav_ac.rl.training --config configs/ppo_gate_racing.yaml --run-dir runs/gate_racing/mlp_random_v2
-.venv/bin/python -m uav_ac.rl.training --config configs/acmpc_gate_racing.yaml --run-dir runs/gate_racing/acmpc_random_v2
-.venv/bin/python -m uav_ac.rl.training --config configs/acmpc_gate_racing.yaml --run-dir runs/gate_racing/acmpc_random_v2 --resume runs/gate_racing/acmpc_random_v2/final_model.zip --total-timesteps 8192
-.venv/bin/python -m uav_ac.rl.evaluate runs/gate_racing/acmpc_random_v2 --mode metrics --episodes 20
-.venv/bin/python -m uav_ac.rl.evaluate runs/gate_racing/acmpc_random_v2 --mode interactive --seed 17
-.venv/bin/python -m uav_ac.rl.evaluate runs/gate_racing/acmpc_random_v2 --mode record --seed 17 --output runs/gate_racing/acmpc_random_v2/replay.mp4
+.venv/bin/python -m uav_ac.rl.training --config configs/ppo_gate_racing.yaml --run-dir runs/gate_racing/mlp_random_v3
+.venv/bin/python -m uav_ac.rl.training --config configs/acmpc_gate_racing.yaml --run-dir runs/gate_racing/acmpc_random_v3
+.venv/bin/python -m uav_ac.rl.training --config configs/acmpc_gate_racing.yaml --run-dir runs/gate_racing/acmpc_random_v3 --resume runs/gate_racing/acmpc_random_v3/final_model.zip --total-timesteps 1000000
+.venv/bin/python -m uav_ac.rl.evaluate runs/gate_racing/acmpc_random_v3 --mode metrics --episodes 20
+.venv/bin/python -m uav_ac.rl.evaluate runs/gate_racing/acmpc_random_v3 --mode metrics --episodes 1 --seed 17
+.venv/bin/python -m uav_ac.rl.evaluate runs/gate_racing/acmpc_random_v3 --mode interactive --seed 17
+.venv/bin/python -m uav_ac.rl.evaluate runs/gate_racing/acmpc_random_v3 --mode record --seed 17 --output runs/gate_racing/acmpc_random_v3/replay.mp4
 ```
 
 For headless recording, use `MUJOCO_GL=egl` or an available offscreen MuJoCo
 backend. Recording requires FFmpeg. Viewer and video use exactly the evaluation
 environment and deterministic policy actions. The viewer closes at episode end;
 closing its window stops replay. Existing video files are not overwritten.
+Both replay modes default to a camera 6 m behind/above the drone, looking down
+35 degrees at a point 0.3 m above its center. Flight YAML `follow_camera: false`
+selects the fixed overview; `true` follows each frame. The flight entry point
+loads the exact `rl.checkpoint` file, including final or periodic checkpoints.
 
 Defaults are 8,192 training transitions, four environments, seed 42, CPU, one
 Torch thread, 128 rollout steps per environment, minibatches of 64 and three
@@ -69,17 +74,20 @@ course:
   height: [2.0, 6.0]           # height above z=0, positive upward
   height_step: 1.0
   turn_degrees: 60.0           # change in horizontal path heading
-  width: [1.5, 2.5]            # full clear aperture width
-  aperture_height: [1.5, 2.5]  # full clear aperture height
+  width_ratio: [1.3, 4.0]      # full aperture width / vehicle diameter
+  height_ratio: [1.3, 4.0]     # full aperture height / vehicle diameter
   yaw_degrees: 15.0            # offset from incoming path heading
   tilt_degrees: 15.0           # independently sampled pitch and roll
 ```
 
 The first gate is 5–8 m from the XML start, directed toward the field interior;
 successive headings, heights, dimensions and orientations are sampled anew.
-The generator checks full frame bounds with 0.25 m margin, nonoverlap using
-conservative enclosing spheres, approach sides, and center-connecting segments
-against every frame box expanded by 0.25 m. A short segment beyond the finish is
+The diameter is twice the maximum collision-geometry bounding radius measured
+from the vehicle origin, including rotor disks (about 0.45 m in this XML).
+Widths and heights are sampled independently: approximately 0.59–1.80 m.
+The generator checks full frame bounds with vehicle-radius + 0.02 m margin,
+nonoverlap using conservative enclosing spheres, approach sides, and ordered
+entry/center/exit connections against every expanded frame box. A short segment beyond the finish is
 also checked. These are conservative geometry checks, not a dynamics feasibility
 certificate. Up to 100 complete candidate courses are tried; exhaustion reports
 an error without falling back to a fixed track. MuJoCo recompiles the pristine
@@ -125,20 +133,49 @@ Missing gates are zero-padded and masked. ACMPC additionally receives the
 unclipped float64 13-state vector and previous action. These physical fields
 retain float64 in the PPO rollout buffer.
 
-The racing cost network emits diagonal quadratic and linear coefficients for
-20 control stages and a terminal state. The positive diagonal is bounded to
-0.1–10 times fixed base weights; linear corrections are bounded to ±2 times
-base weights in scaled coordinates. The local position origin is the current
-vehicle position. Zero network output initializes level hover at the current
-yaw; no gate reference or desired time trajectory is supplied. The terminal
+The racing network emits 17 positive weight multipliers per stage, bounded to
+0.1–10 times fixed base weights. It does not emit arbitrary linear coefficients.
+The geometric task reconstructs the next two gates from corners and builds an
+ordered entry/center/exit route, with an exit one vehicle diameter beyond each
+gate. Previewing the next gate never changes the environment's active gate or
+awards credit. Position penalties use the current gate axes and available
+clearance; velocity targets follow the route. Linear terms come from these
+targets. Attitude, angular-rate and control penalties stabilize the vehicle.
+With no active gates the target is local hover. The terminal
 dummy input is fixed at zero, with positive numerical curvature to keep the
 box-QP factorization nonsingular.
+
+Default prediction is 50 steps at 0.02 s (1 s horizon), while actions are still
+updated every 0.01 s. Prediction dt must be an integer multiple of control dt;
+trajectory tracking retains its original timing contract. Each solve gets a
+stateless stabilizing nominal rollout instead of holding the previous torque
+over the entire horizon. This rollout initializes the optimizer; the returned
+action and training gradient come from the differentiable MPC layer.
+
+```yaml
+racing:
+  cruise_speed: 7.0           # configurable up to 8 m/s
+  minimum_speed: 2.0         # target floor, not minimum actual speed
+  lateral_acceleration: 5.0  # turn-speed scheduling budget, m/s²
+  braking_acceleration: 3.0  # target acceleration/deceleration budget, m/s²
+  clearance_margin: 0.02
+```
+
+The aperture speed target rises from 2 m/s at 1.3 diameters to cruise speed at
+4 diameters. Turn geometry and alignment can lower it, and a braking envelope
+reduces speed before the gate. These are soft targets, not hard dynamic or
+collision guarantees. Fixed base weights must first pass the real MuJoCo
+wide/narrow-gate integration tests before training the weight network.
 
 Racing and tracking share the existing dynamics and quadratic solver. The
 default uses one iLQR update and its approximate differentiable backward,
 not an exact nonlinear sensitivity. Input boxes do not represent joint rotor
 feasibility; the MuJoCo plant still applies allocation and motor lag. Gate
-avoidance is learned from reward rather than enforced as MPC state constraints.
+alignment is represented in the task cost; collision avoidance is not enforced
+as a hard MPC state constraint. For convergence diagnostics, copy the training
+YAML and set `mpc.iterations: 5`, `mpc.retry_iterations: 10`; these settings form
+part of the checkpoint contract and require a separate run. A one-iteration
+finite result is not a convergence certificate.
 
 ## Metrics and interpretation
 
@@ -147,6 +184,18 @@ defaults to held-out seeds 0–19. Best-model selection prioritizes completion
 rate, then successful completion time; before any completions it uses mean
 gates passed. `evaluation_metrics.json` reports completion/collision/out-of-bounds/timeout
 rates, gate counts, speed, completion time, and solver fallback counts.
+Each episode also reports interpolated gate-crossing speeds, vehicle diameter
+and mean speed on aligned approach segments (at least 2 m before the gate,
+lateral distance less than one diameter). Segments with no samples report
+`null`. `max_solver_residual` is reported separately from failures.
+
+Use `--episodes 1` for single-environment action latency P50/P95/P99 and the
+fraction above 10 ms. This includes observation batching, policy inference,
+MPC and returned action, but excludes simulation stepping and rendering; the
+cold first call is included. Multi-episode metrics retain amortized batched
+timing and leave single-environment latency `null`. A simulated 7 m/s flight
+does not demonstrate 100 Hz wall-clock execution. The 8,192-step ACMPC preset
+is a smoke budget, not evidence of convergence or random-course success.
 
 Evaluation batches active episodes. Inference time is amortized policy-call
 wall time per action (CUDA synchronized), excludes physics, and is not a
@@ -159,7 +208,30 @@ Passing the smoke checks establishes runnable training, finite gradients and
 save/load/replay compatibility. It does not establish high-speed racing skill,
 sample-efficiency superiority or paper-level performance.
 
-## Initial smoke validation (2026-09-12)
+## Version 3 base-controller validation (2026-09-17)
+
+With zero network outputs, 50 x 0.02 s prediction, 0.01 s control updates and
+the real MuJoCo vehicle starting at rest 10 m before an aligned gate:
+
+| Opening / diameter | Crossing speed | Peak speed | Time to cross |
+| --- | ---: | ---: | ---: |
+| 4.0 | 7.018 m/s | 7.018 m/s | 2.656 s |
+| 1.3 | 2.069 m/s | 5.065 m/s | 3.323 s |
+
+Both cases passed without collision. On this shared i5-12400F CPU, one Torch
+thread, wide-gate action latency P50/P95/P99 was approximately 130/143/156 ms;
+narrow-gate latency was 143/177/198 ms. All measured calls exceeded 10 ms.
+These tests prove simulated closed-loop behavior, not 100 Hz real-time execution
+or performance on arbitrary random courses. Run the same acceptance check with:
+
+```bash
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 .venv/bin/python -m pytest -o addopts='' -q -s tests/integration/test_gate_racing_control.py
+```
+
+The follow camera was also rendered with the EGL backend and its actual camera
+position checked behind/above the drone for multiple yaw angles.
+
+## Historical version 1 smoke validation (2026-09-12)
 
 Both default configurations completed 8,192 training transitions on CPU.
 Their saved best policies were evaluated on seeds 0–19 and recorded through

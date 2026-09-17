@@ -12,6 +12,9 @@ from uav_ac.control.rl_controller import quad_parameters
 from uav_ac.tasks.gate_racing import FEATURE_SCALES, SCENE_PATH
 from uav_ac.tasks.gate_course import COURSE_DEFAULTS, COURSE_VERSION, course_settings
 from ...acmpc.solver import MPCSettings, SOLVER_VERSION
+from ...acmpc.racing_targets import RacingSettings
+from ...acmpc.racing import COST_VERSION
+from uav_ac.tasks.gate_course import vehicle_diameter
 from ...common.config import COMMON_TRAINING_DEFAULTS, deep_merge
 
 
@@ -20,12 +23,14 @@ def settings_from(values):
     defaults.update(task="gate_racing", scene="gate_racing", device="cpu", n_envs=4,
                     total_timesteps=8192, evaluation_interval=8192, checkpoint_interval=8192,
                     episode_seconds=30., evaluation_episodes=20, torch_threads=1,
-                    mpc=asdict(MPCSettings()), course=deepcopy(COURSE_DEFAULTS))
+                    mpc=asdict(MPCSettings(horizon_steps=50, dt=.02)),
+                    racing={k:v for k,v in asdict(RacingSettings()).items() if k != "vehicle_diameter"},
+                    course=deepcopy(COURSE_DEFAULTS))
     defaults["ppo"].update(n_steps=128, batch_size=64, n_epochs=3)
     unknown = set(values) - set(defaults)
     if unknown:
         raise ValueError(f"unknown gate-racing settings: {sorted(unknown)}")
-    for key in ("ppo", "mpc"):
+    for key in ("ppo", "mpc", "racing"):
         if key in values and (not isinstance(values[key], dict) or set(values[key])-set(defaults[key])):
             raise ValueError(f"invalid gate-racing {key} settings")
     if "course" in values and not isinstance(values["course"], dict):
@@ -68,6 +73,7 @@ def settings_from(values):
         if type(settings["mpc"][key]) is not int:
             raise ValueError(f"mpc.{key} must be an integer")
     MPCSettings(**settings["mpc"])
+    RacingSettings(**settings["racing"])
     return settings
 
 
@@ -76,7 +82,10 @@ def scene_path(settings):
 
 
 def contract(settings, env):
-    return {"schema_version": 3, "task": "gate_racing", "task_version": 2,
+    return {"schema_version": 3, "task": "gate_racing", "task_version": 3,
+            "racing_cost_version": COST_VERSION, "racing": settings["racing"],
+            "vehicle_diameter": vehicle_diameter(env.unwrapped.simulation),
+            "diameter_definition": "origin_centered_collision_bounding_sphere",
             "course_version": COURSE_VERSION, "course": settings["course"],
             "policy_type": settings["policy_type"], "scene": settings["scene"],
             "scene_sha256": hashlib.sha256(scene_path(settings).read_bytes()).hexdigest(),
@@ -93,8 +102,8 @@ def read_run(run_dir):
     from .environment import make_environment
 
     metadata = json.loads((Path(run_dir) / "rl_config.json").read_text())
-    if metadata["contract"].get("task_version") != 2:
-        raise ValueError("incompatible gate-racing task version; train a new run with strict missed-gate rules")
+    if metadata["contract"].get("task_version") != 3:
+        raise ValueError("incompatible gate-racing task version; train a new run with geometric MPC and diameter-relative gates")
     settings = settings_from(metadata["settings"])
     env = make_environment(settings)
     try:

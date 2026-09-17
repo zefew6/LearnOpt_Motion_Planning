@@ -1,25 +1,60 @@
-task: gate_racing
-scene: gate_racing
-course:
-  mode: random
-policy_type: acmpc
-device: cpu
-seed: 42
-n_envs: 4
-total_timesteps: 8192
-steps_per_action: 10
-episode_seconds: 30.0
-evaluation_episodes: 20
-evaluation_interval: 8192
-checkpoint_interval: 8192
-torch_threads: 1
-mpc:
-  horizon_steps: 20
-  dt: 0.01
-  iterations: 1
-  retry_iterations: 1
-  chunk_size: 32
-ppo:
-  n_steps: 128
-  batch_size: 64
-  n_epochs: 3
+  task: gate_racing
+  scene: gate_racing
+
+  course:
+    mode: random
+    spacing: [5.0, 8.0]
+    height: [2.0, 6.0]
+    height_step: 1.0
+    turn_degrees: 60.0
+    width_ratio: [1.3, 4.0]
+    height_ratio: [1.3, 4.0]
+    yaw_degrees: 15.0
+    tilt_degrees: 15.0
+
+  policy_type: acmpc
+  device: cuda
+  seed: 42
+
+  n_envs: 8
+  total_timesteps: 10000000
+  # Match the MPC discretization: 20 MuJoCo substeps × 1 ms = 50 Hz.
+  steps_per_action: 20
+  episode_seconds: 30.0
+
+  evaluation_episodes: 100
+  evaluation_interval: 100000
+  checkpoint_interval: 500000
+  torch_threads: 4
+
+  mpc:
+    horizon_steps: 50
+    dt: 0.02
+    iterations: 1
+    retry_iterations: 1
+    tolerance: 0.0001
+    chunk_size: 32
+    terminal_scale: 4.0
+
+  racing:
+    cruise_speed: 7.0
+    minimum_speed: 2.0
+    lateral_acceleration: 5.0
+    braking_acceleration: 3.0
+    clearance_margin: 0.02
+
+  ppo:
+    n_steps: 256
+    batch_size: 1024
+    n_epochs: 5
+    gamma: 0.995
+    gae_lambda: 0.95
+    learning_rate_start: 0.0003
+    learning_rate_end: 0.00003
+    clip_range: 0.2
+    ent_coef: 0.002
+    max_grad_norm: 0.5
+    activation: relu
+    net_arch:
+      pi: [512, 512]
+      vf: [512, 512]

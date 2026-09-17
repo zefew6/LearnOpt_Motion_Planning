@@ -60,6 +60,23 @@ def test_nontrajectory_task_passes_gym_checker(vehicle_scene):
     assert environment.step(np.zeros(4))[2] is True
 
 
+def test_post_terminal_continuation_keeps_full_physics_stride(vehicle_scene):
+    class EarlyTerminalTask(AltitudeTask):
+        def terminated(self, simulation):
+            return simulation.data.time >= 0.011
+
+    environment = MujocoEnv(EarlyTerminalTask(), model_path=vehicle_scene,
+                            steps_per_action=10)
+    environment.continue_after_terminal = True
+    environment.reset(seed=4, options={"altitude": 1.5})
+    environment.step(np.zeros(4))
+    _, _, terminated, _, _ = environment.step(np.zeros(4))
+    assert terminated
+    # The terminal condition is reached on the first substep of this action,
+    # but continuation mode must still advance the remaining substeps.
+    assert environment.simulation.data.time == pytest.approx(0.02)
+
+
 def test_optional_metadata_and_visualization_allow_vehicle_only_scene(vehicle_scene):
     scene = load_scene(vehicle_scene)
     assert scene.model_path == vehicle_scene.resolve()

@@ -3,7 +3,7 @@ task: trajectory_tracking
 policy_type: acmpc
 trajectory_bank_path: runs/ppo_trajectory/multitraj01/trajectory_bank
 seed: 42
-device: cpu
+device: cuda
 torch_threads: 1
 n_envs: 24              # parallel MuJoCo workers; rollout collection is CPU-side
 total_timesteps: 10000000

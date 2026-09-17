@@ -7,7 +7,7 @@ import mujoco
 import numpy as np
 
 from uav_ac.scenes.loader import ENU_TO_NED
-from .gate_course import apply_course, course_settings, describe_course, sample_course
+from .gate_course import apply_course, course_settings, describe_course, sample_course, vehicle_diameter
 
 SCENE_PATH = Path(__file__).resolve().parents[1] / "simulation/models/gate_racing.xml"
 FEATURE_SCALES = np.array([1.] * 4 + [10.] * 3 + [10.] * 3 + [1.] * 4
@@ -76,6 +76,7 @@ class GateRacingTask:
         if simulation.space_limits is None:
             raise ValueError("gate racing requires scene planning_bounds")
         state = simulation.quad.X.copy()
+        self.vehicle_diameter = vehicle_diameter(simulation)
         # Always consume the same two seeds, independently of initial perturbation.
         course_seed, state_seed = rng.integers(0, 2**63, size=2, dtype=np.int64)
         state_rng = np.random.default_rng(state_seed)
@@ -83,7 +84,7 @@ class GateRacingTask:
             if len(read_gates(simulation)) != 6:
                 raise ValueError("random courses require exactly six gates")
             gates = sample_course(np.random.default_rng(course_seed), state[:3],
-                                  simulation.space_limits, self.course)
+                                  simulation.space_limits, self.course, self.vehicle_diameter)
             apply_course(simulation, gates)
         if options.get("perturb_initial_state", self.perturb_initial_state):
             state[:3] += state_rng.uniform(-.2, .2, 3)
@@ -102,6 +103,8 @@ class GateRacingTask:
         self.pending_reward = 0.
         self.reason = None
         self.speed_integral = self.peak_speed = self.elapsed = 0.
+        self.gate_speeds = []
+        self.straight_speed_integral = self.straight_elapsed = 0.
         return self.info(simulation)
 
     def after_substep(self, simulation, previous_state, action):
@@ -116,6 +119,12 @@ class GateRacingTask:
         self.elapsed += dt
         self.speed_integral += speed * dt
         self.peak_speed = max(self.peak_speed, speed)
+        gate = self.gates[self.gate_index]
+        direction = gate.rotation.T @ (state[:3]-gate.center)
+        # Geometric approach segment: aligned, at least 2 m before the gate.
+        if direction[0] < -2 and np.linalg.norm(direction[1:]) < self.vehicle_diameter:
+            self.straight_speed_integral += speed * dt
+            self.straight_elapsed += dt
         low, high = simulation.space_limits
         if simulation.collision_detected or np.any(state[:3] < low) or np.any(state[:3] > high):
             self.reason = "collision" if simulation.collision_detected else "out_of_bounds"
@@ -137,6 +146,8 @@ class GateRacingTask:
             if fraction is None:
                 break
             self.gate_index += 1
+            crossing_velocity = previous_state[7:10] + fraction * (state[7:10]-previous_state[7:10])
+            self.gate_speeds.append(float(np.linalg.norm(crossing_velocity)))
             self.pending_reward += 10.
             if self.gate_index == len(self.gates):
                 self.pending_reward += 10.
@@ -172,4 +183,7 @@ class GateRacingTask:
         return {"success": self.reason == "success", "gates_passed": self.gate_index,
                 "collision": self.reason == "collision", "termination_reason": self.reason or "running",
                 "elapsed_seconds": self.elapsed, "mean_speed": self.speed_integral / max(self.elapsed, 1e-12),
-                "peak_speed": self.peak_speed}
+                "peak_speed": self.peak_speed, "gate_speeds": self.gate_speeds.copy(),
+                "vehicle_diameter": self.vehicle_diameter,
+                "straight_seconds": self.straight_elapsed,
+                "mean_straight_speed": self.straight_speed_integral / self.straight_elapsed if self.straight_elapsed else None}

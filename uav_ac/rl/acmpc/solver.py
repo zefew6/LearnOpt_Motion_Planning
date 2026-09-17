@@ -123,7 +123,7 @@ class DifferentiableMPC(nn.Module):
         local_state, cost = self.build_cost(state.double(), ref.double(), residual)
         return self.solve_cost(local_state, cost, previous_action, strict=strict)
 
-    def solve_cost(self, state, cost, previous_action, *, strict):
+    def solve_cost(self, state, cost, previous_action, *, strict, initial_controls=None):
         """Solve a batched quadratic objective, independent of its task source."""
         started = time.perf_counter()
         outer_grad = torch.is_grad_enabled()
@@ -150,6 +150,10 @@ class DifferentiableMPC(nn.Module):
             lower[-1] = 0
             upper[-1] = 0  # terminal dummy control never applied to dynamics
             initial = self.dynamics.to_internal(previous).unsqueeze(0).expand(cfg.horizon_steps+1, -1, -1).clone()
+            if initial_controls is not None:
+                if initial_controls.shape != (cfg.horizon_steps+1, len(state), 4) or not bool(torch.isfinite(initial_controls).all()):
+                    raise ValueError("invalid MPC initial_controls")
+                initial = initial_controls[:, start:end].detach().clone().clamp(-1, 1)
             initial[-1] = 0
             retried = torch.zeros(batch, dtype=torch.bool, device=x0.device)
             for iterations in (cfg.iterations, cfg.retry_iterations):

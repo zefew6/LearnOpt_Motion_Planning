@@ -40,6 +40,9 @@ class RacingEvaluationCallback(BaseCallback):
         (self.run_dir / "evaluation.json").write_text(json.dumps(result, indent=2) + "\n")
         for key in ("success_rate", "mean_gates_passed", "collision_rate", "missed_gate_rate", "out_of_bounds_rate", "solver_failure_rate"):
             self.logger.record(f"racing/{key}", result[key])
+        for key in ("mean_gate_speed", "mean_straight_speed", "max_solver_residual"):
+            if result[key] is not None:
+                self.logger.record(f"racing/{key}", result[key])
         self.logger.dump(step=self.model.num_timesteps)
         if self.rank(result) > self.best:
             self.best = self.rank(result)
@@ -98,7 +101,8 @@ def train(run_dir, settings, *, resume=None, **overrides):
             model = PPO.load(resume, env=vector, device=settings["device"])
             model.set_random_seed(settings["seed"])
         else:
-            extra = {"quad_parameters": signature["physical_parameters"], "mpc_settings": settings["mpc"]} if settings["policy_type"] == "acmpc" else {}
+            extra = {"quad_parameters": signature["physical_parameters"], "mpc_settings": settings["mpc"],
+                     "racing_settings": {**settings["racing"], "vehicle_diameter": signature["vehicle_diameter"]}} if settings["policy_type"] == "acmpc" else {}
             model = PPO(RacingACMPCPolicy if extra else "MlpPolicy", vector,
                         policy_kwargs={**extra, "net_arch": ppo["net_arch"], "activation_fn": torch.nn.ReLU,
                                        "log_std_init": -2.},

@@ -20,35 +20,36 @@ def single_thread():
     torch.set_num_threads(old)
 
 
-def test_cost_gradient_batch_and_hover():
+def test_cost_gradient_batch_and_gate_response():
     settings = settings_from({"policy_type": "acmpc", "mpc": {"horizon_steps": 5}})
     env = make_environment(settings, perturb=False)
     obs, _ = env.reset()
     layer = RacingMPC(quad_parameters(env.unwrapped.quad), settings["mpc"])
     state = torch.tensor(np.stack([obs["mpc_state"]]*2))
+    features = torch.tensor(np.stack([obs["features"]]*2))
     outputs = torch.zeros(2, layer.cost_size, requires_grad=True)
     previous = torch.zeros(2,4, dtype=torch.float64)
-    local, cost = layer.build_racing_cost(state, outputs)
+    local, cost = layer.build_racing_cost(state, features, outputs)
     assert cost.C.shape == (6,2,17,17)
     assert (cost.C.diagonal(dim1=-2, dim2=-1) > 0).all()
     assert torch.count_nonzero(cost.c[-1,:,13:]) == 0
-    action = layer(state, previous, outputs, strict=True)
-    torch.testing.assert_close(action, torch.zeros_like(action), atol=1e-5, rtol=0)
+    action = layer(state, previous, features, outputs, strict=True)
+    assert action.abs().max() > 1e-5
     action.sum().backward()
     assert torch.isfinite(outputs.grad).all() and outputs.grad.norm() > 0
     changed = outputs.detach().clone()
     changed[:, layer.cost_size//2:] = .2
-    batch = layer(state, previous, changed, strict=True)
-    one = layer(state[:1], previous[:1], changed[:1], strict=True)
+    batch = layer(state, previous, features, changed, strict=True)
+    one = layer(state[:1], previous[:1], features[:1], changed[:1], strict=True)
     torch.testing.assert_close(batch[:1], one)
     assert batch.abs().max() <= 1
     assert not torch.allclose(batch, action)
     translated = state.clone()
     translated[:,:3] += 1000
-    torch.testing.assert_close(layer(translated, previous, changed, strict=True), batch)
+    torch.testing.assert_close(layer(translated, previous, features, changed, strict=True), batch)
     state[0,0] = float("nan")
     with pytest.raises(ValueError, match="finite physical state"):
-        layer(state, previous, changed, strict=True)
+        layer(state, previous, features, changed, strict=True)
     env.close()
 
 
@@ -68,6 +69,28 @@ def test_ppo_physical_buffer_and_save_load(tmp_path):
     loaded = PPO.load(tmp_path / "model.zip", env=env)
     np.testing.assert_allclose(loaded.predict(obs, deterministic=True)[0], expected)
     env.close()
+
+
+def test_geometric_cost_turns_toward_gate_without_tracking_reference(monkeypatch):
+    from uav_ac.rl.acmpc import solver
+    from uav_ac.tasks.gate_racing import Gate
+    monkeypatch.setattr(solver, "reference_targets", lambda *args: pytest.fail("tracking target used for racing"))
+    settings = settings_from({"policy_type":"acmpc","mpc":{"horizon_steps":10}})
+    env = make_environment(settings,perturb=False)
+    try:
+        env.reset()
+        layer = RacingMPC(quad_parameters(env.unwrapped.quad),settings["mpc"])
+        actions = []
+        for sign in [1,-1]:
+            rotation = np.diag([sign,sign,1.])
+            env.unwrapped.task.gates = [Gate(np.array([8.*sign,0.,-2.]),rotation,np.ones(2))]
+            obs = env.unwrapped.task.observation(env.unwrapped.simulation)
+            with torch.no_grad():
+                actions.append(layer(torch.tensor(obs["mpc_state"][None]),torch.zeros(1,4),
+                                     torch.tensor(obs["features"][None]),torch.zeros(1,layer.cost_size),strict=True))
+        assert actions[0][0,2] < 0 < actions[1][0,2]
+    finally:
+        env.close()
 
 
 @pytest.mark.parametrize("change", [{"trajectory_bank_path":"unused"}, {"scene":"../other"},
@@ -90,7 +113,8 @@ def test_config_contract_and_timing(tmp_path):
     (tmp_path / "rl_config.json").write_text(json.dumps(metadata))
     with pytest.raises(ValueError, match="contract"):
         read_run(tmp_path)
-    settings["mpc"]["dt"] = .02
+    assert env.unwrapped.control_dt == .01 and settings["mpc"]["dt"] == .02
+    settings["mpc"]["dt"] = .015
     with pytest.raises(ValueError, match="dt"):
         make_environment(settings)
 
@@ -135,6 +159,9 @@ def test_batched_evaluation_matches_single_and_frame_path():
     assert frames[-1] == pytest.approx((.04, True))
     assert batch["episodes"][0]["termination_reason"] == "timeout"
     assert batch["episodes"][0]["course"] == single["episodes"][0]["course"]
+    assert batch["single_environment_latency"] is None
+    assert single["single_environment_latency"]["samples"] == 4
+    assert single["single_environment_latency"]["p99_ms"] >= single["single_environment_latency"]["p50_ms"]
 
 
 def test_old_contract_rejected_and_course_is_part_of_contract(tmp_path):

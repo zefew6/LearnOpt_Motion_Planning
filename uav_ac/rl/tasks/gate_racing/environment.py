@@ -13,8 +13,11 @@ def make_environment(settings, *, perturb=True, record_actual_trajectory=False):
                                  perturb_initial_state=perturb, course=settings["course"]),
                     model_path=scene_path(settings), steps_per_action=settings["steps_per_action"],
                     record_actual_trajectory=record_actual_trajectory)
-    if settings["policy_type"] == "acmpc" and not np.isclose(env.control_dt, settings["mpc"]["dt"], rtol=0, atol=1e-12):
-        raise ValueError("MPC dt must equal environment control_dt")
+    if settings["policy_type"] == "acmpc":
+        ratio = settings["mpc"]["dt"] / env.control_dt
+        if ratio < 1 or not np.isclose(ratio, round(ratio), rtol=0, atol=1e-10):
+            env.close()
+            raise ValueError("MPC dt must be an integer multiple of environment control_dt")
     steps = settings["episode_seconds"] / env.control_dt
     if not np.isclose(steps, round(steps), rtol=0, atol=1e-8):
         raise ValueError("episode_seconds must be an integer number of control intervals")

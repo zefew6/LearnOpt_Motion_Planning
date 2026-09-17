@@ -5,9 +5,10 @@ planner: none
 controller: rl
 
 wind: none
+# Match the MLP replay: follow the vehicle from behind.
 follow_camera: true
-seed: 1
+seed: 6
 
 rl:
-  checkpoint: ../runs/gate_racing/mlp_large_seed42/best_model.zip
-  device: cuda
+  checkpoint: ../runs/gate_racing/mlp_random_v3/best_model.zip
+  device: cpu

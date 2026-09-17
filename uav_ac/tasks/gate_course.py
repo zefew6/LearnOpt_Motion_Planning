@@ -8,14 +8,31 @@ from scipy.spatial.transform import Rotation
 
 from uav_ac.scenes.loader import ENU_TO_NED
 
-COURSE_VERSION = 1
+COURSE_VERSION = 2
 COURSE_DEFAULTS = {
     "mode": "fixed", "spacing": [5., 8.], "height": [2., 6.],
-    "height_step": 1., "turn_degrees": 60., "width": [1.5, 2.5],
-    "aperture_height": [1.5, 2.5], "yaw_degrees": 15., "tilt_degrees": 15.,
+    "height_step": 1., "turn_degrees": 60., "width_ratio": [1.3, 4.],
+    "height_ratio": [1.3, 4.], "yaw_degrees": 15., "tilt_degrees": 15.,
 }
 FRAME_HALF_THICKNESS = .08
 CLEARANCE = .25
+
+
+def vehicle_diameter(simulation):
+    """Conservative origin-centered collision sphere, including rotor disks."""
+    model = simulation.model
+    body = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "quadrotor")
+    descendants = {body}
+    for i in range(body+1, model.nbody):
+        if int(model.body_parentid[i]) in descendants:
+            descendants.add(i)
+    ids = [i for i in range(model.ngeom) if int(model.geom_bodyid[i]) in descendants
+           and (model.geom_contype[i] or model.geom_conaffinity[i])]
+    # qpos0 geometry, independent of the current attitude and episode state.
+    data = mujoco.MjData(model)
+    mujoco.mj_forward(model, data)
+    return 2 * max(float(np.linalg.norm(data.geom_xpos[i]-data.xpos[body]) + model.geom_rbound[i])
+                   for i in ids)
 
 
 def course_settings(values=None):
@@ -26,7 +43,7 @@ def course_settings(values=None):
     result.update(values)
     if not isinstance(result["mode"], str) or result["mode"] not in {"fixed", "random"}:
         raise ValueError("course.mode must be fixed or random")
-    for key in ("spacing", "height", "width", "aperture_height"):
+    for key in ("spacing", "height", "width_ratio", "height_ratio"):
         value = result[key]
         if (not isinstance(value, (list, tuple)) or len(value) != 2
                 or any(isinstance(x, bool) or not isinstance(x, (int, float)) for x in value)
@@ -38,7 +55,7 @@ def course_settings(values=None):
             raise ValueError(f"invalid course.{key}")
     if (result["turn_degrees"] > 100 or result["yaw_degrees"] > 30
             or result["tilt_degrees"] > 30 or result["height_step"] >= result["spacing"][0]
-            or min(result["width"][0], result["aperture_height"][0]) <= 2 * CLEARANCE):
+            or min(result["width_ratio"][0], result["height_ratio"][0]) < 1.3):
         raise ValueError("course ranges cannot provide a forward, clear approach")
     return result
 
@@ -68,37 +85,42 @@ def segment_hits_box(start, end, center, rotation, size, padding=CLEARANCE):
     return True
 
 
-def valid_course(gates, start, bounds):
+def valid_course(gates, start, bounds, clearance=CLEARANCE):
     """Conservative geometry checks, not a dynamics feasibility certificate."""
     low, high = bounds
     signs = np.array(np.meshgrid(*[[-1, 1]]*3)).T.reshape(-1, 3)
     for i, gate in enumerate(gates):
         previous = start if i == 0 else gates[i-1].center
-        if (gate.rotation.T @ (previous-gate.center))[0] >= -CLEARANCE:
+        if (gate.rotation.T @ (previous-gate.center))[0] >= -clearance:
             return False
         outer = np.r_[FRAME_HALF_THICKNESS, gate.half_size + 2*FRAME_HALF_THICKNESS]
         vertices = gate.center + (signs * outer) @ gate.rotation.T
-        if np.any(vertices < low + CLEARANCE) or np.any(vertices > high - CLEARANCE):
+        if np.any(vertices < low + clearance) or np.any(vertices > high - clearance):
             return False
         # Disjoint enclosing spheres guarantee nonoverlapping gate frames.
         for other in gates[:i]:
             other_outer = np.r_[FRAME_HALF_THICKNESS, other.half_size + 2*FRAME_HALF_THICKNESS]
-            if np.linalg.norm(gate.center-other.center) <= np.linalg.norm(outer)+np.linalg.norm(other_outer)+CLEARANCE:
+            if np.linalg.norm(gate.center-other.center) <= np.linalg.norm(outer)+np.linalg.norm(other_outer)+clearance:
                 return False
-    points = [start] + [g.center for g in gates]
+    # Narrow, rotated apertures need an entry/exit corridor along their normals;
+    # a center-to-center chord can cut through a frame even for a flyable layout.
+    points = [start]
+    for gate in gates:
+        offset = 2*clearance*gate.rotation[:, 0]
+        points.extend((gate.center-offset, gate.center, gate.center+offset))
     # Include clearance beyond the finish plane.
     points.append(gates[-1].center + gates[-1].rotation[:, 0] * .5)
-    if np.any(points[-1] < low+CLEARANCE) or np.any(points[-1] > high-CLEARANCE):
+    if np.any(points[-1] < low+clearance) or np.any(points[-1] > high-clearance):
         return False
     for a, b in zip(points, points[1:]):
         for gate in gates:
             for center, size in frame_boxes(gate):
-                if segment_hits_box(a, b, gate.center + gate.rotation @ center, gate.rotation, size):
+                if segment_hits_box(a, b, gate.center + gate.rotation @ center, gate.rotation, size, clearance):
                     return False
     return True
 
 
-def sample_course(rng, start, bounds, settings):
+def sample_course(rng, start, bounds, settings, diameter=.45):
     from .gate_racing import Gate
 
     midpoint = (bounds[0] + bounds[1]) / 2
@@ -122,10 +144,10 @@ def sample_course(rng, start, bounds, settings):
             yaw = heading + np.deg2rad(rng.uniform(-settings["yaw_degrees"], settings["yaw_degrees"]))
             pitch, roll = np.deg2rad(rng.uniform(-settings["tilt_degrees"], settings["tilt_degrees"], 2))
             rotation = Rotation.from_euler("ZYX", [yaw, pitch, roll]).as_matrix()
-            size = np.array([rng.uniform(*settings["width"]), rng.uniform(*settings["aperture_height"])]) / 2
+            size = diameter * np.array([rng.uniform(*settings["width_ratio"]), rng.uniform(*settings["height_ratio"])]) / 2
             gates.append(Gate(center, rotation, size))
             previous = center
-        if valid_course(gates, start, bounds):
+        if valid_course(gates, start, bounds, diameter/2+.02):
             return gates
     raise ValueError("could not generate a valid six-gate course after 100 attempts; check course ranges and scene bounds")
 

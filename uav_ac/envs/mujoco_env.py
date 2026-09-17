@@ -28,6 +28,9 @@ class MujocoEnv(gym.Env):
         self.quad = self.simulation.quad
         self.steps_per_action = int(steps_per_action)
         self.control_dt = self.quad.dt * self.steps_per_action
+        # Replay can request post-terminal physics continuation.  Normal Gym
+        # episodes keep the early-exit behavior for accurate termination.
+        self.continue_after_terminal = False
         self.action_space = gym.spaces.Box(-1.0, 1.0, (ACTION_SIZE,), np.float32)
         self.observation_space = task.observation_space
 
@@ -52,7 +55,8 @@ class MujocoEnv(gym.Env):
             self.simulation.step()
             if substep is not None:
                 substep(self.simulation, previous_state, action)
-                if self.task.terminated(self.simulation):
+                if (self.task.terminated(self.simulation)
+                        and not self.continue_after_terminal):
                     break
         observation = self.task.observation(self.simulation)
         reward = float(self.task.reward(self.simulation, action))

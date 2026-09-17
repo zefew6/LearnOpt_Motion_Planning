@@ -110,7 +110,7 @@ def load_config(path: str | Path = DEFAULT_CONFIG) -> dict:
     config.setdefault("speed", 3.0)
     config.setdefault("wind", "none")
     config.setdefault("visualize", False)
-    config.setdefault("follow_camera", False)
+    config.setdefault("follow_camera", config["task"] == "gate_racing")
     config.setdefault("seed", 7)
     _positive(config["speed"], "speed")
     if not isinstance(config["visualize"], bool):
@@ -321,6 +321,8 @@ def _run_gate_racing(config: dict):
         checkpoint.parent,
         device=config["rl"]["device"],
         seed=config["seed"],
+        checkpoint=checkpoint,
+        follow_camera=config.get("follow_camera", True),
     )
     print(f"Finished gate racing: success={result['success_rate']:.3f} | "
           f"gates={result['mean_gates_passed']:.2f} | "

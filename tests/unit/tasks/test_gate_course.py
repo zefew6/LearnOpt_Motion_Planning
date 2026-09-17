@@ -15,7 +15,7 @@ def test_thousand_seeded_courses():
     settings = course_settings({"mode": "random"})
     for seed in range(1000):
         gates = sample_course(np.random.default_rng(seed), start, bounds, settings)
-        assert len(gates) == 6 and valid_course(gates, start, bounds)
+        assert len(gates) == 6 and valid_course(gates, start, bounds, .45/2+.02)
         points = np.array([start] + [g.center for g in gates])
         steps = np.diff(points, axis=0)
         assert np.all((np.linalg.norm(steps, axis=1) >= 5) & (np.linalg.norm(steps, axis=1) <= 8))
@@ -24,16 +24,16 @@ def test_thousand_seeded_courses():
         headings = np.unwrap(np.arctan2(steps[:, 1], steps[:, 0]))
         assert np.all(np.abs(np.diff(headings)) <= np.pi/3 + 1e-12)
         for gate in gates:
-            assert np.all((gate.half_size >= .75) & (gate.half_size <= 1.25))
+            assert np.all((gate.half_size >= 1.3*.45/2) & (gate.half_size <= 4*.45/2))
             np.testing.assert_allclose(gate.rotation.T @ gate.rotation, np.eye(3), atol=1e-12)
         if seed < 10:
             again = sample_course(np.random.default_rng(seed), start, bounds, settings)
             assert describe_course(gates) == describe_course(again)
 
 
-@pytest.mark.parametrize("settings", [{"typo": 1}, {"mode": "moving"}, {"width": [2, 1]},
+@pytest.mark.parametrize("settings", [{"typo": 1}, {"mode": "moving"}, {"width_ratio": [2, 1]},
     {"spacing": [float("nan"), 8]}, {"tilt_degrees": 90}, {"height_step": 5},
-    {"width": [.2, 2]}, {"yaw_degrees": True}, {"mode": []}, {"width": "large"}])
+    {"width_ratio": [.2, 2]}, {"yaw_degrees": True}, {"mode": []}, {"width_ratio": "large"}])
 def test_invalid_course(settings):
     with pytest.raises(ValueError):
         course_settings(settings)
@@ -64,7 +64,7 @@ def test_random_reset_reproducibility_and_geometry(acmpc):
         sim = env.simulation
         course_seed = np.random.default_rng(17).integers(0, 2**63, size=2, dtype=np.int64)[0]
         sampled = sample_course(np.random.default_rng(course_seed), sim.start_position,
-                                sim.space_limits, env.task.course)
+                                sim.space_limits, env.task.course, env.task.vehicle_diameter)
         for index, gate in enumerate(env.task.gates):
             np.testing.assert_allclose(gate.rotation, sampled[index].rotation, atol=1e-12)
             np.testing.assert_allclose(gate.center, sampled[index].center, atol=1e-12)

@@ -48,7 +48,11 @@ def test_gate_racing_run_uses_reference_free_replay(monkeypatch, tmp_path):
         "rl": {"checkpoint": str(checkpoint), "device": "cpu"},
     })
     assert result["success_rate"] == 0.5
-    replay.assert_called_once_with(tmp_path, device="cpu", seed=7)
+    replay.assert_called_once_with(tmp_path, device="cpu", seed=7, checkpoint=checkpoint, follow_camera=True)
+    replay.reset_mock()
+    main.run({"task":"gate_racing", "seed":7, "follow_camera":False,
+              "rl":{"checkpoint":str(checkpoint),"device":"cpu"}})
+    assert replay.call_args.kwargs["follow_camera"] is False
 
 
 def test_minimal_config_receives_runtime_defaults(tmp_path):

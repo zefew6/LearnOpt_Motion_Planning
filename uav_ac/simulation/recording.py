@@ -106,6 +106,17 @@ class Mp4Recorder:
         self.close()
 
 
+def update_chase_camera(camera, simulation):
+    """Place the free camera behind and above the vehicle's horizontal heading."""
+    body = mujoco.mj_name2id(simulation.model, mujoco.mjtObj.mjOBJ_BODY, "quadrotor")
+    forward = simulation.data.xmat[body].reshape(3, 3)[:, 0]
+    camera.type = mujoco.mjtCamera.mjCAMERA_FREE
+    camera.lookat[:] = simulation.data.xpos[body] + np.array([0., 0., .5])
+    camera.distance = 8.
+    camera.elevation = -20.
+    camera.azimuth = np.degrees(np.arctan2(forward[1], forward[0]))
+
+
 def default_camera(model: mujoco.MjModel) -> mujoco.MjvCamera:
     """Return a stable camera matching the scene's MuJoCo visual defaults."""
     camera = mujoco.MjvCamera()
