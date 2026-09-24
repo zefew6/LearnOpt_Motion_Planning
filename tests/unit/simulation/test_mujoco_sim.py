@@ -534,9 +534,10 @@ def test_mujoco_simulation_should_reject_scene_without_required_vehicle(tmp_path
         create_simulation()
 
 
-def test_mujoco_simulation_should_reject_non_consecutive_mandatory_waypoints(tmp_path):
+def test_mujoco_simulation_should_reject_non_consecutive_mandatory_waypoints(
+        tmp_path, copy_scene_with_models):
     # Arrange
-    invalid_scene = tmp_path / "invalid_waypoints.xml"
+    invalid_scene = copy_scene_with_models(DEFAULT_SCENE_PATH, "invalid_waypoints.xml")
     scene_content = DEFAULT_SCENE_PATH.read_text().replace(
         'name="waypoint_01"',
         'name="waypoint_07"',

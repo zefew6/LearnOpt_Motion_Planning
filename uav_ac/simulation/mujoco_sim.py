@@ -7,6 +7,10 @@ import numpy as np
 
 from uav_ac.planning.corridor.firi import FIRI3D, FIRIRegion
 from uav_ac.robot.quadrotor import Quad
+from uav_ac.robot.quadrotor.quad import (
+    DEFAULT_DRAG_TO_THRUST, DEFAULT_FORCE_COEFFICIENT,
+    DEFAULT_MOTOR_TIME_CONSTANTS, DEFAULT_THRUST_LIMITS,
+)
 from uav_ac.robot.aerial_manipulator import (
     AerialManipulator, AerialManipulatorCommand, AerialManipulatorState,
     GRIPPER_MAX_OPENING, GRIPPER_MIN_OPENING,
@@ -74,7 +78,7 @@ class MujocoSimulation:
         :param model_path: MJCF scene containing the quadrotor; mission data is optional
         :param record_actual_trajectory: update the blue flown-path geometry while stepping
         """
-        specification = mujoco.MjSpec.from_file(str(model_path))
+        specification = mujoco.MjSpec.from_file(str(Path(model_path).expanduser().absolute()))
         add_corridor_mesh_pool(specification)
         if not 0 <= planning_path_capacity <= 8:
             raise ValueError("planning_path_capacity must be between 0 and 8")
@@ -814,10 +818,10 @@ def _create_quad(model: mujoco.MjModel, body_id: int, rotor_site_ids: np.ndarray
         mass=model.body_mass[body_id],
         inertia=model.body_inertia[body_id],
         arm_length=arm_lengths[0, 0],
-        force_coefficient=_numeric(model, "rotor_force_coefficient", 1)[0],
-        drag_to_thrust=_numeric(model, "rotor_drag_to_thrust", 1)[0],
-        thrust_limits=_numeric(model, "rotor_thrust_limits", 2),
-        motor_time_constants=_numeric(model, "motor_time_constants", 2),
+        force_coefficient=DEFAULT_FORCE_COEFFICIENT,
+        drag_to_thrust=DEFAULT_DRAG_TO_THRUST,
+        thrust_limits=np.asarray(DEFAULT_THRUST_LIMITS),
+        motor_time_constants=np.asarray(DEFAULT_MOTOR_TIME_CONSTANTS),
         flight_limits=_numeric(model, "flight_limits", 5),
     )
 

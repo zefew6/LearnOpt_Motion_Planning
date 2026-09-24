@@ -3,10 +3,16 @@ import mujoco
 import pytest
 
 from uav_ac.robot.aerial_manipulator import AerialManipulatorCommand
-from uav_ac.simulation.mujoco_sim import ENU_TO_NED, MujocoSimulation
+from uav_ac.simulation.mujoco_sim import DEFAULT_SCENE_PATH, ENU_TO_NED, MujocoSimulation
 
 
 MODEL = "uav_ac/simulation/models/aerial_manipulator_hover.xml"
+
+
+def test_aerial_manipulator_physics_step_matches_quadrotor():
+    quadrotor = MujocoSimulation(DEFAULT_SCENE_PATH)
+    manipulator = MujocoSimulation(MODEL)
+    assert manipulator.model.opt.timestep == quadrotor.model.opt.timestep == 0.001
 
 
 def test_model_state_and_queries_are_consistent_and_non_mutating():

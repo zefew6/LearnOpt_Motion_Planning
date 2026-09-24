@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from uav_ac.quadrotor.quad import Quad
+from uav_ac.robot.quadrotor.quad import Quad
 from uav_ac.simulation.mujoco_sim import MujocoSimulation
 
 

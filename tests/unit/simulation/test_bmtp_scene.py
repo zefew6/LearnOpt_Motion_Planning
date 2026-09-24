@@ -1,7 +1,6 @@
 """Scene contract independent of any BMTP route loader or planner."""
 
 from itertools import product
-import xml.etree.ElementTree as ET
 
 import mujoco
 import numpy as np
@@ -9,6 +8,10 @@ import pytest
 
 from uav_ac.simulation.mujoco_sim import DEFAULT_SCENE_PATH, MujocoSimulation
 from uav_ac.simulation.recording import default_camera
+from uav_ac.robot.quadrotor.quad import (
+    DEFAULT_DRAG_TO_THRUST, DEFAULT_FORCE_COEFFICIENT,
+    DEFAULT_MOTOR_TIME_CONSTANTS, DEFAULT_THRUST_LIMITS,
+)
 
 
 SCENE_PATH = DEFAULT_SCENE_PATH.with_name("bmtp_village.xml")
@@ -99,23 +102,42 @@ def test_segment_box_helper_checks_full_segments(start, end, expected):
     assert _segment_hits_box(np.array(start), np.array(end), np.zeros(3), np.ones(3)) == expected
 
 
-def _xml_signature(element):
-    return element.tag, element.attrib, [_xml_signature(child) for child in element]
-
-
 def test_bmtp_reuses_laboratory_vehicle_physics():
-    village = ET.parse(SCENE_PATH).getroot()
-    lab = ET.parse(DEFAULT_SCENE_PATH).getroot()
-    for tag in ("compiler", "option", "size"):
-        assert _xml_signature(village.find(tag)) == _xml_signature(lab.find(tag))
-    for numeric in lab.findall("custom/numeric"):
-        if numeric.get("name") != "planning_bounds":
-            assert village.find(f"custom/numeric[@name='{numeric.get('name')}']").attrib == numeric.attrib
-    vehicle = village.find("worldbody/body[@name='quadrotor']")
-    reference = lab.find("worldbody/body[@name='quadrotor']")
-    # Only the initial world position differs, not the vehicle definition.
-    vehicle.attrib["pos"] = reference.attrib["pos"]
-    assert _xml_signature(vehicle) == _xml_signature(reference)
+    village = mujoco.MjModel.from_xml_path(str(SCENE_PATH.resolve()))
+    lab = mujoco.MjModel.from_xml_path(str(DEFAULT_SCENE_PATH.resolve()))
+    village_body = mujoco.mj_name2id(village, mujoco.mjtObj.mjOBJ_BODY, "quadrotor")
+    lab_body = mujoco.mj_name2id(lab, mujoco.mjtObj.mjOBJ_BODY, "quadrotor")
+    assert village.body_mass[village_body] == lab.body_mass[lab_body]
+    np.testing.assert_array_equal(village.body_inertia[village_body], lab.body_inertia[lab_body])
+
+    def vehicle_geometry(model, body_id):
+        start = model.body_geomadr[body_id]
+        stop = start + model.body_geomnum[body_id]
+        return {
+            mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_GEOM, geom_id): (
+                model.geom_type[geom_id], model.geom_size[geom_id].copy(),
+                model.geom_pos[geom_id].copy(), model.geom_rgba[geom_id].copy(),
+                model.geom_contype[geom_id], model.geom_conaffinity[geom_id],
+            )
+            for geom_id in range(start, stop)
+        }
+
+    village_geometry = vehicle_geometry(village, village_body)
+    lab_geometry = vehicle_geometry(lab, lab_body)
+    assert village_geometry.keys() == lab_geometry.keys()
+    for name in village_geometry:
+        for village_value, lab_value in zip(village_geometry[name], lab_geometry[name]):
+            np.testing.assert_array_equal(village_value, lab_value)
+
+    village_quad = MujocoSimulation(SCENE_PATH, record_actual_trajectory=False).quad
+    lab_quad = MujocoSimulation(DEFAULT_SCENE_PATH, record_actual_trajectory=False).quad
+    assert village_quad.kf == lab_quad.kf == DEFAULT_FORCE_COEFFICIENT
+    assert village_quad.kappa == lab_quad.kappa == DEFAULT_DRAG_TO_THRUST
+    np.testing.assert_array_equal(
+        [village_quad.min_thrust, village_quad.max_thrust], DEFAULT_THRUST_LIMITS)
+    np.testing.assert_array_equal(
+        [village_quad.motor_rise_time_constant, village_quad.motor_fall_time_constant],
+        DEFAULT_MOTOR_TIME_CONSTANTS)
 
 
 def test_bmtp_vehicle_dynamics_match_laboratory_scene(simulation):

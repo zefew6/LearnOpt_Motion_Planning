@@ -200,6 +200,11 @@ simulation assumptions rather than measured hardware properties.
 
 `scene` names an XML file under `uav_ac/simulation/models/`, with or without the `.xml` suffix. Standard trajectory flights omit `task` (defaulting to `trajectory_tracking`). Reference-free gate-racing deployment uses `task: gate_racing`, `scene: gate_racing`, `planner: none`, and `controller: rl`; see [flight_gate_racing.yaml](configs/flight_gate_racing.yaml).
 
+Reusable MuJoCo robot models live under `uav_ac/simulation/model/`; rotor
+actuation defaults live with the quadrotor dynamics under `uav_ac/robot/`.
+Scene XML imports the applicable model and keeps its own initial pose, physics
+step, and flight limits.
+
 | Field | Values | Notes |
 | --- | --- | --- |
 | `planner` | `none`, `mini_snap`, `gcopter`, `gcs`, `bmtp` | `none` is valid for gate racing and the aerial-manipulator demo; GCS needs scene guide regions; BMTP needs `bmtp_route_*` sites |
@@ -325,11 +330,11 @@ uav_ac/
 │   ├── acmpc/                Differentiable MPC policy and solver
 │   └── mlp_baseline/         Existing training/evaluation entry points
 ├── simulation/
-│   └── models/               XML scenes and vehicle definitions
+│   ├── model/                Reusable quadrotor and aerial-manipulator MJCF
+│   └── models/               Complete simulation scenes
 ├── robot/
-│   ├── quadrotor/             Quadrotor state and rotor allocation
-│   └── aerial_manipulator/    Four-joint arm model and robot state/commands
-├── quadrotor/                Compatibility import for the original package
+│   ├── quadrotor/             Quadrotor dynamics state and rotor allocation
+│   └── aerial_manipulator/    Robot state, planning model, and commands
 └── visualization/            Planning overlays and plots
 tests/                        Unit and integration tests
 docs/                         Figures and documentation media

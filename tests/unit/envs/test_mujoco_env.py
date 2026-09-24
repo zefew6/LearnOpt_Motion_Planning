@@ -12,7 +12,7 @@ from uav_ac.tasks.trajectory_tracking import MujocoTrajectoryTrackingEnv
 
 
 @pytest.fixture
-def vehicle_scene(tmp_path):
+def vehicle_scene(copy_scene_with_models):
     """Keep only the vehicle, ground and physical numerics from a real scene."""
     root = ET.parse(OPEN_FIELD_SCENE_PATH).getroot()
     world = root.find("worldbody")
@@ -23,7 +23,7 @@ def vehicle_scene(tmp_path):
     for element in list(custom):
         if element.get("name") == "planning_bounds":
             custom.remove(element)
-    path = tmp_path / "vehicle.xml"
+    path = copy_scene_with_models(OPEN_FIELD_SCENE_PATH, "vehicle.xml")
     ET.ElementTree(root).write(path)
     return path
 

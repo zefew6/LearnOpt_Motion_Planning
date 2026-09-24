@@ -1,5 +1,11 @@
 <mujoco model="uav_open_field">
   <compiler angle="radian" autolimits="true"/>
+  <!-- Select arm and rotor contacts for this scene; the central body always collides. -->
+  <default>
+    <default class="quadrotor_parts">
+      <geom contype="1" conaffinity="1"/>
+    </default>
+  </default>
   <option timestep="0.001" gravity="0 0 -9.81" integrator="Euler"/>
   <size nuser_site="1"/>
   <statistic center="0 0 12" extent="105"/>
@@ -7,10 +13,6 @@
   <custom>
     <!-- NED bounds: north, east, down. -->
     <numeric name="planning_bounds" data="-100 -100 -5 100 100 0"/>
-    <numeric name="rotor_force_coefficient" data="1"/>
-    <numeric name="rotor_drag_to_thrust" data="0.016"/>
-    <numeric name="rotor_thrust_limits" data="0.1 4.5"/>
-    <numeric name="motor_time_constants" data="0.0125 0.025"/>
     <numeric name="flight_limits" data="3 2 8 12 0.7"/>
   </custom>
 
@@ -52,39 +54,26 @@
     </replicate>
     <site name="goal" type="sphere" pos="90 -4 1.5" size="0.25" rgba="0.1 0.9 0.2 0.8"/>
 
-    <body name="quadrotor" pos="0 0 1">
-      <freejoint name="quadrotor_freejoint"/>
-      <inertial pos="0 0 0" mass="0.5" diaginertia="0.0023 0.0023 0.0046"/>
-      <geom name="body" type="box" size="0.08 0.05 0.02" rgba="0.08 0.12 0.16 1"/>
-      <geom name="arm_0" type="capsule" fromto="-0.120208 0.120208 0 0.120208 -0.120208 0"
-            size="0.008" rgba="0.25 0.25 0.28 1"/>
-      <geom name="arm_1" type="capsule" fromto="-0.120208 -0.120208 0 0.120208 0.120208 0"
-            size="0.008" rgba="0.25 0.25 0.28 1"/>
-      <geom name="rotor_visual_0" type="cylinder" pos="0.120208 0.120208 0" size="0.055 0.002"
-            rgba="0.1 0.7 0.9 1"/>
-      <geom name="rotor_visual_1" type="cylinder" pos="0.120208 -0.120208 0" size="0.055 0.002"
-            rgba="0.1 0.7 0.9 1"/>
-      <geom name="rotor_visual_2" type="cylinder" pos="-0.120208 -0.120208 0" size="0.055 0.002"
-            rgba="0.1 0.7 0.9 1"/>
-      <geom name="rotor_visual_3" type="cylinder" pos="-0.120208 0.120208 0" size="0.055 0.002"
-            rgba="0.1 0.7 0.9 1"/>
-      <site name="rotor_0" pos="0.120208 0.120208 0" size="0.008" user="1" rgba="0 0.7 1 1"/>
-      <site name="rotor_1" pos="0.120208 -0.120208 0" size="0.008" user="-1" rgba="0 0.7 1 1"/>
-      <site name="rotor_2" pos="-0.120208 -0.120208 0" size="0.008" user="1" rgba="0 0.7 1 1"/>
-      <site name="rotor_3" pos="-0.120208 0.120208 0" size="0.008" user="-1" rgba="0 0.7 1 1"/>
-      <include file="../../robot/aerial_manipulator/arm.xml"/>
+    <!-- Scene sets the initial pose; the included file defines the vehicle. -->
+    <body name="quadrotor" pos="0 0 1" childclass="quadrotor_parts">
+      <include file="../model/aerial_manipulator.xml"/>
     </body>
   </worldbody>
+
+  <!-- Arm and gripper controls act on joints from aerial_manipulator.xml. -->
   <actuator>
-    <motor name="arm_motor_0" joint="arm_joint_0" ctrlrange="-0.8 0.8" ctrllimited="true"/>
-    <motor name="arm_motor_1" joint="arm_joint_1" ctrlrange="-0.8 0.8" ctrllimited="true"/>
-    <motor name="arm_motor_2" joint="arm_joint_2" ctrlrange="-0.6 0.6" ctrllimited="true"/>
-    <motor name="arm_motor_3" joint="arm_joint_3" ctrlrange="-0.4 0.4" ctrllimited="true"/>
-    <position name="gripper_position" joint="gripper_left_joint" kp="120" kv="3"
-              ctrlrange="0 0.025" ctrllimited="true" forcerange="-2 2" forcelimited="true"/>
+    <motor name="arm_motor_0" joint="arm_joint_0" ctrlrange="-0.8 0.8" ctrllimited="true" />
+    <motor name="arm_motor_1" joint="arm_joint_1" ctrlrange="-0.8 0.8" ctrllimited="true" />
+    <motor name="arm_motor_2" joint="arm_joint_2" ctrlrange="-0.6 0.6" ctrllimited="true" />
+    <motor name="arm_motor_3" joint="arm_joint_3" ctrlrange="-0.4 0.4" ctrllimited="true" />
+    <position name="gripper_position" joint="gripper_left_joint" kp="120" kv="3" ctrlrange="0 0.025" ctrllimited="true" forcerange="-2 2" forcelimited="true" />
   </actuator>
+
+
+  <!-- Keep the two gripper fingers moving symmetrically. -->
   <equality>
-    <joint name="gripper_finger_sync" joint1="gripper_right_joint"
-           joint2="gripper_left_joint" polycoef="0 1 0 0 0"/>
+    <joint name="gripper_finger_sync" joint1="gripper_right_joint" joint2="gripper_left_joint" polycoef="0 1 0 0 0" />
   </equality>
+
+
 </mujoco>

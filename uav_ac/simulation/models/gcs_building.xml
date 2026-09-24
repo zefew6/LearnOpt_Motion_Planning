@@ -1,15 +1,17 @@
 <mujoco model="uav_gcs_two_storey_building">
   <compiler angle="radian" autolimits="true"/>
+  <!-- Select arm and rotor contacts for this scene; the central body always collides. -->
+  <default>
+    <default class="quadrotor_parts">
+      <geom contype="0" conaffinity="0"/>
+    </default>
+  </default>
   <option timestep="0.001" gravity="0 0 -9.81" integrator="Euler"/>
   <size nuser_site="1"/>
   <statistic center="12 -7 3" extent="15"/>
 
   <custom>
     <numeric name="planning_bounds" data="0 0 -6 24 14 0"/>
-    <numeric name="rotor_force_coefficient" data="1"/>
-    <numeric name="rotor_drag_to_thrust" data="0.016"/>
-    <numeric name="rotor_thrust_limits" data="0.1 4.5"/>
-    <numeric name="motor_time_constants" data="0.0125 0.025"/>
     <numeric name="flight_limits" data="3 2 3 12 0.7"/>
   </custom>
 
@@ -27,12 +29,17 @@
     <material name="slab" rgba="0.46 0.48 0.50 0.42"/>
     <material name="stair" rgba="0.56 0.51 0.44 1"/>
     <material name="ceiling" rgba="0.68 0.72 0.75 0.05"/>
-    <material name="drone_orange" rgba="1.0 0.28 0.02 1" emission="0.42"
-              specular="0.75" shininess="0.65"/>
-    <material name="drone_halo" rgba="1.0 0.38 0.01 0.20" emission="0.30"/>
-    <material name="drone_beacon" rgba="1.0 0.82 0.02 1" emission="1.0"/>
-    <material name="navigation_red" rgba="1.0 0.02 0.01 1" emission="0.85"/>
-    <material name="navigation_green" rgba="0.02 1.0 0.08 1" emission="0.85"/>
+    <!-- Materials for the GCS-specific quadrotor appearance. -->
+    <material name="drone_orange" rgba="1.0 0.28 0.02 1" emission="0.42" specular="0.75" shininess="0.65" />
+
+    <material name="drone_halo" rgba="1.0 0.38 0.01 0.20" emission="0.30" />
+
+    <material name="drone_beacon" rgba="1.0 0.82 0.02 1" emission="1.0" />
+
+    <material name="navigation_red" rgba="1.0 0.02 0.01 1" emission="0.85" />
+
+    <material name="navigation_green" rgba="0.02 1.0 0.08 1" emission="0.85" />
+
   </asset>
 
   <worldbody>
@@ -153,36 +160,9 @@
             contype="0" conaffinity="0" rgba="0.1 0.4 1 0"/>
     </replicate>
 
-    <body name="quadrotor" pos="22 -2 0.021">
-      <freejoint name="quadrotor_freejoint"/>
-      <inertial pos="0 0 0" mass="0.5" diaginertia="0.0023 0.0023 0.0046"/>
-      <geom name="body" type="box" size="0.08 0.05 0.02" rgba="0.08 0.12 0.16 1"/>
-      <!-- Oversized visual shell; collision and inertia still use the small body above. -->
-      <geom name="drone_visual_shell" type="ellipsoid" pos="0 0 0.04"
-            size="0.19 0.14 0.06" material="drone_orange"
-            contype="0" conaffinity="0"/>
-      <geom name="drone_visibility_halo" type="sphere" pos="0 0 0.06" size="0.23"
-            material="drone_halo" contype="0" conaffinity="0"/>
-      <geom name="arm_0" type="capsule" fromto="-0.120208 0.120208 0 0.120208 -0.120208 0"
-            size="0.008" contype="0" conaffinity="0" rgba="0.25 0.25 0.28 1"/>
-      <geom name="arm_1" type="capsule" fromto="-0.120208 -0.120208 0 0.120208 0.120208 0"
-            size="0.008" contype="0" conaffinity="0" rgba="0.25 0.25 0.28 1"/>
-      <geom name="rotor_visual_0" type="cylinder" pos="0.120208 0.120208 0.02" size="0.085 0.003"
-            contype="0" conaffinity="0" rgba="1.0 0.62 0.06 0.82"/>
-      <geom name="rotor_visual_1" type="cylinder" pos="0.120208 -0.120208 0.02" size="0.085 0.003"
-            contype="0" conaffinity="0" rgba="1.0 0.62 0.06 0.82"/>
-      <geom name="rotor_visual_2" type="cylinder" pos="-0.120208 -0.120208 0.02" size="0.085 0.003"
-            contype="0" conaffinity="0" rgba="1.0 0.62 0.06 0.82"/>
-      <geom name="rotor_visual_3" type="cylinder" pos="-0.120208 0.120208 0.02" size="0.085 0.003"
-            contype="0" conaffinity="0" rgba="1.0 0.62 0.06 0.82"/>
-      <geom name="navigation_light_red" type="sphere" pos="0 0.17 0.08" size="0.028"
-            material="navigation_red" contype="0" conaffinity="0"/>
-      <geom name="navigation_light_green" type="sphere" pos="0 -0.17 0.08" size="0.028"
-            material="navigation_green" contype="0" conaffinity="0"/>
-      <site name="rotor_0" pos="0.120208 0.120208 0" size="0.008" user="1" rgba="0 0.7 1 1"/>
-      <site name="rotor_1" pos="0.120208 -0.120208 0" size="0.008" user="-1" rgba="0 0.7 1 1"/>
-      <site name="rotor_2" pos="-0.120208 -0.120208 0" size="0.008" user="1" rgba="0 0.7 1 1"/>
-      <site name="rotor_3" pos="-0.120208 0.120208 0" size="0.008" user="-1" rgba="0 0.7 1 1"/>
+    <!-- Scene sets the initial pose; the included file defines the vehicle. -->
+    <body name="quadrotor" pos="22 -2 0.021" childclass="quadrotor_parts">
+      <include file="../model/quadrotor_gcs.xml"/>
     </body>
   </worldbody>
 </mujoco>

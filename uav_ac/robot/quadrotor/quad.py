@@ -1,6 +1,12 @@
 import numpy as np
 
 
+DEFAULT_FORCE_COEFFICIENT = 1.0
+DEFAULT_DRAG_TO_THRUST = 0.016
+DEFAULT_THRUST_LIMITS = (0.1, 4.5)
+DEFAULT_MOTOR_TIME_CONSTANTS = (0.0125, 0.025)
+
+
 class Quad:
     """
     Quadrotor state, control parameters and rotor actuation in NED/FRD.

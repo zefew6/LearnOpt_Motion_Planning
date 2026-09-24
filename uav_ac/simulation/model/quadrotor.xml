@@ -1,0 +1,18 @@
+<mujocoinclude>
+  <!-- Shared rigid body; scene defaults choose arm and rotor collision behavior. -->
+  <freejoint name="quadrotor_freejoint" />
+  <inertial pos="0 0 0" mass="0.5" diaginertia="0.0023 0.0023 0.0046" />
+  <geom name="body" type="box" size="0.08 0.05 0.02" rgba="0.08 0.12 0.16 1" contype="1" conaffinity="1" />
+  <geom name="arm_0" type="capsule" fromto="-0.120208 0.120208 0 0.120208 -0.120208 0" size="0.008" rgba="0.25 0.25 0.28 1" />
+  <geom name="arm_1" type="capsule" fromto="-0.120208 -0.120208 0 0.120208 0.120208 0" size="0.008" rgba="0.25 0.25 0.28 1" />
+  <!-- Site order and signs match the quadrotor thrust and yaw mixer. -->
+  <site name="rotor_0" pos="0.120208 0.120208 0" size="0.008" user="1" rgba="0 0.7 1 1" />
+  <site name="rotor_1" pos="0.120208 -0.120208 0" size="0.008" user="-1" rgba="0 0.7 1 1" />
+  <site name="rotor_2" pos="-0.120208 -0.120208 0" size="0.008" user="1" rgba="0 0.7 1 1" />
+  <site name="rotor_3" pos="-0.120208 0.120208 0" size="0.008" user="-1" rgba="0 0.7 1 1" />
+  <!-- Rotor discs are visual only; thrust is applied at the sites above. -->
+  <geom name="rotor_visual_0" type="cylinder" pos="0.120208 0.120208 0" size="0.055 0.002" rgba="0.1 0.7 0.9 1" />
+  <geom name="rotor_visual_1" type="cylinder" pos="0.120208 -0.120208 0" size="0.055 0.002" rgba="0.1 0.7 0.9 1" />
+  <geom name="rotor_visual_2" type="cylinder" pos="-0.120208 -0.120208 0" size="0.055 0.002" rgba="0.1 0.7 0.9 1" />
+  <geom name="rotor_visual_3" type="cylinder" pos="-0.120208 0.120208 0" size="0.055 0.002" rgba="0.1 0.7 0.9 1" />
+</mujocoinclude>

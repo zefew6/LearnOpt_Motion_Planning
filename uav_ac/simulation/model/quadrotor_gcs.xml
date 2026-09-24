@@ -1,0 +1,22 @@
+<mujocoinclude>
+  <!-- Standalone GCS variant with the shared frame and GCS-specific visuals. -->
+  <freejoint name="quadrotor_freejoint" />
+  <inertial pos="0 0 0" mass="0.5" diaginertia="0.0023 0.0023 0.0046" />
+  <geom name="body" type="box" size="0.08 0.05 0.02" rgba="0.08 0.12 0.16 1" contype="1" conaffinity="1" />
+  <geom name="arm_0" type="capsule" fromto="-0.120208 0.120208 0 0.120208 -0.120208 0" size="0.008" rgba="0.25 0.25 0.28 1" />
+  <geom name="arm_1" type="capsule" fromto="-0.120208 -0.120208 0 0.120208 0.120208 0" size="0.008" rgba="0.25 0.25 0.28 1" />
+  <site name="rotor_0" pos="0.120208 0.120208 0" size="0.008" user="1" rgba="0 0.7 1 1" />
+  <site name="rotor_1" pos="0.120208 -0.120208 0" size="0.008" user="-1" rgba="0 0.7 1 1" />
+  <site name="rotor_2" pos="-0.120208 -0.120208 0" size="0.008" user="1" rgba="0 0.7 1 1" />
+  <site name="rotor_3" pos="-0.120208 0.120208 0" size="0.008" user="-1" rgba="0 0.7 1 1" />
+  <!-- Enlarged shell and propeller discs keep the aircraft visible over the building. -->
+  <geom name="drone_visual_shell" type="ellipsoid" pos="0 0 0.04" size="0.19 0.14 0.06" material="drone_orange" contype="0" conaffinity="0" />
+  <geom name="drone_visibility_halo" type="sphere" pos="0 0 0.06" size="0.23" material="drone_halo" contype="0" conaffinity="0" />
+  <geom name="rotor_visual_0" type="cylinder" pos="0.120208 0.120208 0.02" size="0.085 0.003" contype="0" conaffinity="0" rgba="1.0 0.62 0.06 0.82" />
+  <geom name="rotor_visual_1" type="cylinder" pos="0.120208 -0.120208 0.02" size="0.085 0.003" contype="0" conaffinity="0" rgba="1.0 0.62 0.06 0.82" />
+  <geom name="rotor_visual_2" type="cylinder" pos="-0.120208 -0.120208 0.02" size="0.085 0.003" contype="0" conaffinity="0" rgba="1.0 0.62 0.06 0.82" />
+  <geom name="rotor_visual_3" type="cylinder" pos="-0.120208 0.120208 0.02" size="0.085 0.003" contype="0" conaffinity="0" rgba="1.0 0.62 0.06 0.82" />
+  <!-- Red and green lights mark the aircraft sides. -->
+  <geom name="navigation_light_red" type="sphere" pos="0 0.17 0.08" size="0.028" material="navigation_red" contype="0" conaffinity="0" />
+  <geom name="navigation_light_green" type="sphere" pos="0 -0.17 0.08" size="0.028" material="navigation_green" contype="0" conaffinity="0" />
+</mujocoinclude>

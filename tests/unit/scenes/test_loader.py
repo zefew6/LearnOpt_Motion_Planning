@@ -23,14 +23,15 @@ def test_scene_loader_never_substitutes_a_missing_path(tmp_path):
 
 
 @pytest.mark.parametrize("missing", ["goal", "waypoints", "planning_bounds"])
-def test_tracking_validates_optional_scene_requirements_separately(tmp_path, missing):
+def test_tracking_validates_optional_scene_requirements_separately(
+        tmp_path, missing, copy_scene_with_models):
     root = ET.parse(OPEN_FIELD_SCENE_PATH).getroot()
     for parent in root.iter():
         for child in list(parent):
             name = child.get("name", "")
             if name == missing or (missing == "waypoints" and name.startswith("waypoint_")):
                 parent.remove(child)
-    path = tmp_path / "optional.xml"
+    path = copy_scene_with_models(OPEN_FIELD_SCENE_PATH, "optional.xml")
     ET.ElementTree(root).write(path)
     simulation = MujocoSimulation(path)
     simulation.step()

@@ -14,8 +14,9 @@ configs/flight.yaml → main.py → XML scene → planner → controller → MuJ
 | --- | --- |
 | `uav_ac/main.py` | Interactive configuration, planner/controller selection, wind, and viewer composition |
 | `uav_ac/simulation/` | MuJoCo physics, scene metadata, coordinate conversion, wind, and recording |
-| `uav_ac/robot/` | Quadrotor and articulated aerial-manipulator models, state, and actuator interfaces |
-| `uav_ac/simulation/models/` | XML scenes, vehicle parameters, waypoints, bounds, and planner guide sites |
+| `uav_ac/robot/` | Quadrotor and articulated aerial-manipulator dynamics, state, and actuation interfaces |
+| `uav_ac/simulation/model/` | Quadrotor, aerial-manipulator, and GCS MJCF models |
+| `uav_ac/simulation/models/` | Complete XML scenes, initial vehicle poses, waypoints, bounds, and planner guide sites |
 | `uav_ac/planning/` | Geometry, search, corridors, trajectory algorithms, and mission conversion |
 | `uav_ac/control/` | Cascaded/MPC/RL controllers and trajectory scheduling |
 | `uav_ac/rl/tasks/` | Task-owned configuration, environments, training, and evaluation |
@@ -73,8 +74,10 @@ Controller-ready trajectories contain `[x, y, z, vx, vy, vz, ax, ay, az, yaw, ..
 
 Preserve controller timing: cascaded feedback executes every physics step, the reference advances once per control interval, and RL actions are held between policy ticks. Vehicle physics and the physics timestep come from XML.
 
-Robot classes and XML components live under `uav_ac/robot/`; complete mission
-scenes remain under `uav_ac/simulation/models/`. The aerial manipulator uses a
+Robot classes, actuation parameters, and dynamics interfaces live under
+`uav_ac/robot/`; reusable robot MJCF components live under
+`uav_ac/simulation/model/`, and complete
+mission scenes remain under `uav_ac/simulation/models/`. The aerial manipulator uses a
 13-value NED/FRD base state plus four named arm-joint positions/rates and a
 gripper opening state. The base controller uses total vehicle mass and a
 configuration-dependent diagonal inertia approximation; MuJoCo integrates the

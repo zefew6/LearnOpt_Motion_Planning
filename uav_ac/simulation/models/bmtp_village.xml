@@ -1,15 +1,17 @@
 <mujoco model="uav_bmtp_village">
   <compiler angle="radian" autolimits="true"/>
+  <!-- Select arm and rotor contacts for this scene; the central body always collides. -->
+  <default>
+    <default class="quadrotor_parts">
+      <geom contype="0" conaffinity="0"/>
+    </default>
+  </default>
   <option timestep="0.001" gravity="0 0 -9.81" integrator="Euler"/>
   <size nuser_site="1"/>
   <statistic center="17 -17 5" extent="52"/>
 
   <custom>
     <numeric name="planning_bounds" data="-1 -1 -11 35 35 1"/>
-    <numeric name="rotor_force_coefficient" data="1"/>
-    <numeric name="rotor_drag_to_thrust" data="0.016"/>
-    <numeric name="rotor_thrust_limits" data="0.1 4.5"/>
-    <numeric name="motor_time_constants" data="0.0125 0.025"/>
     <numeric name="flight_limits" data="3 2 3 12 0.7"/>
   </custom>
 
@@ -582,28 +584,9 @@
     </replicate>
     <site name="goal" type="sphere" pos="34.2 -34.2 8" size="0.25" rgba="0.1 0.9 0.2 0.8"/>
 
-    <body name="quadrotor" pos="-0.2 0.2 2">
-      <freejoint name="quadrotor_freejoint"/>
-      <inertial pos="0 0 0" mass="0.5" diaginertia="0.0023 0.0023 0.0046"/>
-      <geom name="body" type="box" size="0.08 0.05 0.02" rgba="0.08 0.12 0.16 1"/>
-      <geom name="arm_0" type="capsule" fromto="-0.120208 0.120208 0 0.120208 -0.120208 0"
-            size="0.008" contype="0" conaffinity="0" rgba="0.25 0.25 0.28 1"/>
-      <geom name="arm_1" type="capsule" fromto="-0.120208 -0.120208 0 0.120208 0.120208 0"
-            size="0.008" contype="0" conaffinity="0" rgba="0.25 0.25 0.28 1"/>
-
-      <geom name="rotor_visual_0" type="cylinder" pos="0.120208 0.120208 0" size="0.055 0.002"
-            contype="0" conaffinity="0" rgba="0.1 0.7 0.9 1"/>
-      <geom name="rotor_visual_1" type="cylinder" pos="0.120208 -0.120208 0" size="0.055 0.002"
-            contype="0" conaffinity="0" rgba="0.1 0.7 0.9 1"/>
-      <geom name="rotor_visual_2" type="cylinder" pos="-0.120208 -0.120208 0" size="0.055 0.002"
-            contype="0" conaffinity="0" rgba="0.1 0.7 0.9 1"/>
-      <geom name="rotor_visual_3" type="cylinder" pos="-0.120208 0.120208 0" size="0.055 0.002"
-            contype="0" conaffinity="0" rgba="0.1 0.7 0.9 1"/>
-
-      <site name="rotor_0" pos="0.120208 0.120208 0" size="0.008" user="1" rgba="0 0.7 1 1"/>
-      <site name="rotor_1" pos="0.120208 -0.120208 0" size="0.008" user="-1" rgba="0 0.7 1 1"/>
-      <site name="rotor_2" pos="-0.120208 -0.120208 0" size="0.008" user="1" rgba="0 0.7 1 1"/>
-      <site name="rotor_3" pos="-0.120208 0.120208 0" size="0.008" user="-1" rgba="0 0.7 1 1"/>
+    <!-- Scene sets the initial pose; the included file defines the vehicle. -->
+    <body name="quadrotor" pos="-0.2 0.2 2" childclass="quadrotor_parts">
+      <include file="../model/quadrotor.xml"/>
     </body>
   </worldbody>
 </mujoco>
