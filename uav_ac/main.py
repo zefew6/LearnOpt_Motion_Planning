@@ -373,7 +373,7 @@ def _run_aerial_manipulator_hover(config: dict) -> dict:
         simulation.robot.reset()
 
     if config.get("visualize", False):
-        simulation.run_interactive(step, reset, chase_camera=True)
+        simulation.run_interactive(step, reset, chase_camera=config["follow_camera"])
     else:
         count = int(round(config["duration"] / dt))
         for _ in range(count):

@@ -3,6 +3,7 @@ scene: aerial_manipulator_hover
 planner: none
 controller: cascaded
 wind: none
-visualize: false
+visualize: true
+follow_camera: false  
 duration: 20.0
 control_dt: 0.01

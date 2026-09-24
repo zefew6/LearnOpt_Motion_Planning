@@ -16,11 +16,11 @@ Built on [Mdhvince/UAV-Autonomous-control](https://github.com/Mdhvince/UAV-Auton
 - [x] Train PPO trajectory-tracking policies with an MLP baseline
 - [x] Integrate differentiable MPC into PPO policies (ACMPC)
 - [x] Independently implement biconvex minimum-time planning (BMTP)
-- [x] Add a unified YAML entry for planning, training, deployment, and replay
 - [x] Add reference-free gate racing with PPO-MLP and PPO-ACMPC
+- [x] Add an aerial manipulator platform for research on whole-body motion planning and control
 - [ ] Implement diffusion-based motion planning
 
-The flight CLI supports trajectory tracking; the RL training/evaluation entrypoints also support gate racing without a planner or trajectory bank. Implementation details and experiment workflows are documented in the [planning library guide](uav_ac/planning/README.md), [RL workflow guide](uav_ac/rl/README.md), [gate racing guide](docs/gate_racing.md), and [contributor guide](AGENT.md).
+The flight CLI supports trajectory tracking; the RL training/evaluation entrypoints also support gate racing without a planner or trajectory bank. Implementation details and experiment workflows are documented in the [planning library guide](uav_ac/planning/README.md), [robot guide](uav_ac/robot/README.md), [RL workflow guide](uav_ac/rl/README.md), [gate racing guide](docs/gate_racing.md), and [contributor guide](AGENT.md).
 
 ## Experiment videos
 
@@ -153,48 +153,6 @@ Set `scene`, `planner`, and `controller` in `configs/flight.yaml`, then run:
 ```bash
 .venv/bin/python -m uav_ac.main --config configs/flight.yaml
 ```
-
-The generic four-axis aerial manipulator uses a floating quadrotor base, a
-simulation-only hanging `yaw + 3 pitch` arm, and a symmetric actuated parallel
-gripper. The `gripper_opening` command sets the inner-finger gap from 0.020 m
-closed to 0.070 m open. Run its 20-second headless hover
-and slow joint-motion check with `configs/aerial_manipulator_hover.yaml`; set
-`visualize: true` there to open the MuJoCo viewer. The arm dimensions and
-inertias are initial simulation assumptions: four arm links total 0.43 m and
-0.09 kg, and the gripper weighs 0.023 kg. With the 0.50 kg quadrotor body,
-the modeled takeoff mass is 0.613 kg. Planning/control in this demo
-do not provide whole-body obstacle avoidance or grasping.
-
-The public entry point is `simulation.robot`. Its 12-value configuration is
-`[position_NED(3), quaternion_FRD_to_NED_wxyz(4), arm_q(4), gripper_gap(1)]`;
-its 11-value velocity is `[linear_velocity_NED(3), angular_velocity_FRD_body(3),
-arm_qdot(4), gripper_gap_rate(1)]`. `robot.jacobian(q, frame)` returns a
-6×11 analytic geometric Jacobian with both twist rows in world NED. Frames
-`"tool"` and `"grasp"` select the wrist tool frame and center of the gripper.
-Configuration queries use separate MuJoCo data and do not change the running
-simulation. A minimal control loop is:
-
-```python
-state = simulation.robot.state
-q = simulation.robot.configuration
-J = simulation.robot.jacobian(q, frame="grasp")
-model = simulation.robot.dynamics(q, state.velocity)
-collision = simulation.robot.check_collision(q, clearance=0.02)
-command = controller.step(reference)  # AerialManipulatorReference
-simulation.robot.apply(command)
-simulation.step()
-```
-
-`robot.dynamics` returns the reduced mass matrix, bias and passive forces, and
-an actuation matrix for four actual rotor forces, four arm torques, and the
-left gripper servo force. Its gripper model assumes ideally synchronized
-fingers; MuJoCo enforces synchronization with a soft equality constraint and
-drives one finger with a position servo. Rotor commands are allocated to
-targets when applied, and motor response advances exactly once per physics
-step. `robot.check_collision` checks the supplied full configuration against
-collidable environment geometry and non-adjacent robot parts, returning named
-pairs and their distances. Physics masses, dimensions and inertias remain
-simulation assumptions rather than measured hardware properties.
 
 ## Flight configuration
 
