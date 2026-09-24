@@ -1,0 +1,8 @@
+task: aerial_manipulator_hover
+scene: aerial_manipulator_hover
+planner: none
+controller: cascaded
+wind: none
+visualize: false
+duration: 20.0
+control_dt: 0.01

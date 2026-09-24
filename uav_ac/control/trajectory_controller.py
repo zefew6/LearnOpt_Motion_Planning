@@ -13,7 +13,7 @@ from typing import Protocol, runtime_checkable
 
 import numpy as np
 
-from uav_ac.quadrotor.quad import Quad
+from uav_ac.robot.quadrotor import Quad
 
 
 @dataclass(frozen=True)

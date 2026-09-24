@@ -29,6 +29,7 @@ include = ["uav_ac*"]
 [tool.setuptools.package-data]
 uav_ac = [
     "simulation/models/*.xml",
+    "robot/**/*.xml",
     "rl/acmpc/vendor/LICENSE.mit",
     "rl/acmpc/vendor/SOURCE.md",
 ]

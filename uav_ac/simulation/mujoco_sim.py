@@ -6,7 +6,11 @@ import mujoco
 import numpy as np
 
 from uav_ac.planning.corridor.firi import FIRI3D, FIRIRegion
-from uav_ac.quadrotor.quad import Quad
+from uav_ac.robot.quadrotor import Quad
+from uav_ac.robot.aerial_manipulator import (
+    AerialManipulator, AerialManipulatorCommand, AerialManipulatorState,
+    GRIPPER_MAX_OPENING, GRIPPER_MIN_OPENING,
+)
 from uav_ac.scenes.loader import extract_scene_metadata
 from uav_ac.visualization import CorridorMeshVisualizer, add_corridor_mesh_pool
 
@@ -89,6 +93,10 @@ class MujocoSimulation:
             for index in range(TRAJECTORY_SEGMENT_COUNT)]) for route in range(planning_path_capacity)]
         self._body_id = _named_id(self.model, mujoco.mjtObj.mjOBJ_BODY, "quadrotor")
         self._body_geom_id = _named_id(self.model, mujoco.mjtObj.mjOBJ_GEOM, "body")
+        self._base_joint_id = _named_id(
+            self.model, mujoco.mjtObj.mjOBJ_JOINT, "quadrotor_freejoint")
+        self._base_qpos_address = int(self.model.jnt_qposadr[self._base_joint_id])
+        self._base_dof_address = int(self.model.jnt_dofadr[self._base_joint_id])
         self._tracking_beacon_id = mujoco.mj_name2id(
             self.model, mujoco.mjtObj.mjOBJ_GEOM, "drone_tracking_beacon")
         self._ground_geom_id = _named_id(self.model, mujoco.mjtObj.mjOBJ_GEOM, "ground")
@@ -113,6 +121,40 @@ class MujocoSimulation:
         self._corridor_region_ids = self._corridor_visualizer.region_ids
         self._corridor_mesh_ids = self._corridor_visualizer.mesh_ids
         self.quad = _create_quad(self.model, self._body_id, self._rotor_site_ids)
+        self._arm_joint_ids = np.array([
+            mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, f"arm_joint_{i}")
+            for i in range(4)], dtype=int)
+        self._arm_actuator_ids = np.array([
+            mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, f"arm_motor_{i}")
+            for i in range(4)], dtype=int)
+        self._tool_site_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SITE, "tool_frame")
+        gripper_joint_ids = [
+            mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, f"gripper_{side}_joint")
+            for side in ("left", "right")]
+        self._gripper_joint_ids = np.asarray(gripper_joint_ids, dtype=int)
+        self._gripper_actuator_id = mujoco.mj_name2id(
+            self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "gripper_position")
+        self._gripper_qpos_addresses = np.array([
+            self.model.jnt_qposadr[j] for j in self._gripper_joint_ids if j >= 0], dtype=int)
+        self._gripper_dof_addresses = np.array([
+            self.model.jnt_dofadr[j] for j in self._gripper_joint_ids if j >= 0], dtype=int)
+        self._arm_dof_addresses = np.array([self.model.jnt_dofadr[j] for j in self._arm_joint_ids
+                                            if j >= 0], dtype=int)
+        self._arm_qpos_addresses = np.array([self.model.jnt_qposadr[j] for j in self._arm_joint_ids
+                                             if j >= 0], dtype=int)
+        self._has_arm = len(self._arm_joint_ids) == 4 and np.all(self._arm_joint_ids >= 0)
+        if self._has_arm and (
+                not np.all(self._arm_actuator_ids >= 0) or self._tool_site_id < 0
+                or not np.all(self._gripper_joint_ids >= 0) or self._gripper_actuator_id < 0):
+            raise ValueError("aerial manipulator requires arm motors, tool_frame, and actuated gripper")
+        if self._has_arm:
+            self.quad.m = self.total_mass
+            hover_speed = np.sqrt(self.quad.m * self.quad.g / (4.0 * self.quad.kf))
+            self.quad.omega.fill(hover_speed)
+            self.quad.omega_command.fill(hover_speed)
+            self.robot = AerialManipulator(self)
+        else:
+            self.robot = self.quad
         self._collision_detected = False
         self._has_taken_off = False
         self._external_force_world = np.zeros(3)
@@ -121,6 +163,8 @@ class MujocoSimulation:
         self._record_actual_trajectory_enabled = bool(record_actual_trajectory)
 
         mujoco.mj_forward(self.model, self.data)
+        if self._has_arm:
+            self._update_composite_inertia()
         self._sync_quad_state()
         self.scene = extract_scene_metadata(model_path, self.model, self.data)
         self.start_position = self.scene.start_position.copy()
@@ -138,9 +182,124 @@ class MujocoSimulation:
         return self.data.ncon > 0
 
     @property
+    def time(self) -> float:
+        """Current simulation time in seconds."""
+        return float(self.data.time)
+
+    @property
     def collision_detected(self) -> bool:
         """Return whether any collision has occurred since initialization."""
         return self._collision_detected
+
+    @property
+    def robot_state(self) -> AerialManipulatorState | np.ndarray:
+        """Return the arm state for an aerial manipulator, otherwise legacy base state."""
+        if not self._has_arm:
+            return self.quad.X.copy()
+        return self.robot.state
+
+    @property
+    def total_mass(self) -> float:
+        """Mass of the complete articulated vehicle in kg."""
+        return float(self.model.body_subtreemass[self._body_id])
+
+    @property
+    def center_of_mass_ned(self) -> np.ndarray:
+        """Whole-vehicle center of mass in NED world coordinates."""
+        return ENU_TO_NED @ self.data.subtree_com[self._body_id]
+
+    def _update_composite_inertia(self) -> None:
+        """Update the flight controller's diagonal inertia approximation at the base origin."""
+        base_rotation = self.data.xmat[self._body_id].reshape(3, 3)
+        base_position = self.data.xpos[self._body_id]
+        inertia_world = np.zeros((3, 3))
+        for body_id in range(self._body_id, self.model.nbody):
+            ancestor = body_id
+            while ancestor > 0 and ancestor != self._body_id:
+                ancestor = self.model.body_parentid[ancestor]
+            if ancestor != self._body_id:
+                continue
+            mass = self.model.body_mass[body_id]
+            if mass <= 0.0:
+                continue
+            rotation = self.data.ximat[body_id].reshape(3, 3)
+            inertia_world += rotation @ np.diag(self.model.body_inertia[body_id]) @ rotation.T
+            offset = self.data.xipos[body_id] - base_position
+            inertia_world += mass * (
+                np.dot(offset, offset)*np.eye(3) - np.outer(offset, offset))
+        inertia_base = base_rotation.T @ inertia_world @ base_rotation
+        self.quad.i_x, self.quad.i_y, self.quad.i_z = np.diag(inertia_base)
+
+    def end_effector_pose(self) -> tuple[np.ndarray, np.ndarray]:
+        """Tool position and scalar-first quaternion in NED/FRD world convention."""
+        if not self._has_arm:
+            raise ValueError("scene does not contain an aerial manipulator")
+        position = ENU_TO_NED @ self.data.site_xpos[self._tool_site_id]
+        rotation = ENU_TO_NED @ self.data.site_xmat[self._tool_site_id].reshape(3, 3) @ ENU_TO_NED
+        quaternion = np.empty(4)
+        mujoco.mju_mat2Quat(quaternion, rotation.ravel())
+        return position, quaternion
+
+    def end_effector_jacobian(self) -> np.ndarray:
+        """Compatibility 6-by-nv Jacobian for native MuJoCo generalized velocity.
+
+        Rows are tool-origin linear velocity in NED followed by angular velocity
+        in world NED. Columns use native MuJoCo ordering (world translation,
+        base-local angular velocity), four arm rates, and two gripper slider rates.
+        The gripper columns are zero because its joints are downstream of the tool frame.
+        New planning/control code should use ``simulation.robot.jacobian`` instead,
+        whose 11 columns match the public reduced tangent-velocity coordinates.
+        """
+        if not self._has_arm:
+            raise ValueError("scene does not contain an aerial manipulator")
+        tool_position = self.data.site_xpos[self._tool_site_id]
+        base_position = self.data.xpos[self._body_id]
+        base_rotation = self.data.xmat[self._body_id].reshape(3, 3)
+        jacobian = np.zeros((6, self.model.nv))
+
+        # Free-joint translational velocity is world aligned; angular velocity
+        # uses the base-local axes. Apply each local basis vector in world space.
+        b = self._base_dof_address
+        jacobian[:3, b:b+3] = np.eye(3)
+        jacobian[:3, b+3:b+6] = -_skew(tool_position-base_position) @ base_rotation
+        jacobian[3:, b+3:b+6] = base_rotation
+
+        for joint_id, dof_address in zip(self._arm_joint_ids, self._arm_dof_addresses):
+            axis_world = self.data.xaxis[joint_id]
+            anchor_world = self.data.xanchor[joint_id]
+            jacobian[:3, dof_address] = np.cross(axis_world, tool_position-anchor_world)
+            jacobian[3:, dof_address] = axis_world
+
+        jacobian[:3] = ENU_TO_NED @ jacobian[:3]
+        jacobian[3:] = ENU_TO_NED @ jacobian[3:]
+        return jacobian
+
+    def apply_robot_command(self, command: AerialManipulatorCommand) -> None:
+        """Latch a whole-body command; rotor dynamics advance once in each step()."""
+        if not self._has_arm:
+            raise ValueError("scene does not contain an aerial manipulator")
+        self.quad.command_propeller_speed(command.thrust, command.moment)
+        limits = self.model.actuator_ctrlrange[self._arm_actuator_ids]
+        self.data.ctrl[self._arm_actuator_ids] = np.clip(command.joint_torques, limits[:, 0], limits[:, 1])
+        slider_position = 0.5 * (command.gripper_opening - GRIPPER_MIN_OPENING)
+        self.data.ctrl[self._gripper_actuator_id] = slider_position
+
+    def configuration_collision(self, joint_positions: np.ndarray) -> bool:
+        """Check arm/environment and self collision at joint positions without mutating live state."""
+        if not self._has_arm:
+            raise ValueError("scene does not contain an aerial manipulator")
+        positions = _vector(joint_positions, 4, "joint_positions")
+        for value, joint_id in zip(positions, self._arm_joint_ids):
+            if self.model.jnt_limited[joint_id]:
+                low, high = self.model.jnt_range[joint_id]
+                if value < low or value > high:
+                    raise ValueError("joint_positions exceed an arm joint limit")
+        data = mujoco.MjData(self.model)
+        data.qpos[:] = self.data.qpos
+        data.qvel[:] = 0
+        data.qpos[self._arm_qpos_addresses] = positions
+        mujoco.mj_forward(self.model, data)
+        return bool(data.ncon)
 
     def set_trajectory_visualization(self, positions: np.ndarray) -> None:
         """Display a sampled NED trajectory using non-colliding MuJoCo capsules."""
@@ -210,6 +369,8 @@ class MujocoSimulation:
             raise ValueError("static scene replacement must preserve model topology")
         self.model = model
         self.data = mujoco.MjData(model)
+        if self._has_arm:
+            self.robot.rebind(self.model, lambda: self.data)
         self._corridor_visualizer = CorridorMeshVisualizer(model)
         self._corridor_region_ids = self._corridor_visualizer.region_ids
         self._corridor_mesh_ids = self._corridor_visualizer.mesh_ids
@@ -235,7 +396,8 @@ class MujocoSimulation:
             state_ned[3:7] /= quaternion_norm
 
         if motor_speeds is None:
-            motor_speeds = np.zeros(4)
+            motor_speeds = (np.full(4, np.sqrt(self.quad.m * self.quad.g / (4.0 * self.quad.kf)))
+                            if self._has_arm else np.zeros(4))
         else:
             motor_speeds = _vector(motor_speeds, 4, "motor_speeds")
             maximum_speed = np.sqrt(self.quad.max_thrust / self.quad.kf)
@@ -245,14 +407,54 @@ class MujocoSimulation:
 
         mujoco.mj_resetData(self.model, self.data)
         if state_ned is not None:
-            self.data.qpos[:3] = ENU_TO_NED @ state_ned[:3]
-            self.data.qpos[3:7] = state_ned[3:7] * np.array([1.0, 1.0, -1.0, -1.0])
-            self.data.qvel[:3] = ENU_TO_NED @ state_ned[7:10]
-            self.data.qvel[3:6] = ENU_TO_NED @ state_ned[10:13]
+            qpos = self._base_qpos_address
+            dof = self._base_dof_address
+            self.data.qpos[qpos:qpos+3] = ENU_TO_NED @ state_ned[:3]
+            self.data.qpos[qpos+3:qpos+7] = state_ned[3:7] * np.array([1.0, 1.0, -1.0, -1.0])
+            self.data.qvel[dof:dof+3] = ENU_TO_NED @ state_ned[7:10]
+            self.data.qvel[dof+3:dof+6] = ENU_TO_NED @ state_ned[10:13]
         mujoco.mj_forward(self.model, self.data)
+        if self._has_arm:
+            self._update_composite_inertia()
         self._reset_runtime_state(motor_speeds)
         self._record_collisions()
         return self.quad.X.copy()
+
+    def reset_robot(self, configuration=None, velocity=None, motor_speeds=None):
+        """Reset base, arm, gripper and rotor state from public reduced coordinates."""
+        if not self._has_arm:
+            raise ValueError("scene does not contain an aerial manipulator")
+        if configuration is not None:
+            q = _vector(configuration, 12, "configuration")
+            norm = np.linalg.norm(q[3:7])
+            if norm < 1e-12:
+                raise ValueError("configuration quaternion cannot be zero")
+            q[3:7] /= norm
+            if (np.any(q[7:11] < self.robot.limits.joint_lower)
+                    or np.any(q[7:11] > self.robot.limits.joint_upper)
+                    or not GRIPPER_MIN_OPENING <= q[11] <= GRIPPER_MAX_OPENING):
+                raise ValueError("configuration exceeds robot limits")
+            base = q[:7]
+        else:
+            q = np.r_[np.zeros(3), 1., 0., 0., 0., np.zeros(4), GRIPPER_MIN_OPENING]
+            base = None
+        v = np.zeros(11) if velocity is None else _vector(velocity, 11, "velocity")
+        base_state = np.r_[base if base is not None else np.array([0., 0., 0., 1., 0., 0., 0.]),
+                           v[:6]]
+        self.reset(base_state if configuration is not None else None, motor_speeds)
+        base_dof = self._base_dof_address
+        self.data.qvel[base_dof:base_dof+6] = np.r_[
+            ENU_TO_NED @ v[:3], ENU_TO_NED @ v[3:6]]
+        self.data.qpos[self._arm_qpos_addresses] = q[7:11]
+        self.data.qpos[self._gripper_qpos_addresses] = .5*(q[11]-GRIPPER_MIN_OPENING)
+        self.data.qvel[self._arm_dof_addresses] = v[6:10]
+        self.data.qvel[self._gripper_dof_addresses] = .5*v[10]
+        self.data.ctrl[self._gripper_actuator_id] = .5*(q[11]-GRIPPER_MIN_OPENING)
+        mujoco.mj_forward(self.model, self.data)
+        self._update_composite_inertia()
+        self._sync_quad_state()
+        self._record_collisions()
+        return self.robot.state
 
     def get_planning_obstacle_points(
             self,
@@ -381,11 +583,15 @@ class MujocoSimulation:
 
     def step(self) -> np.ndarray:
         """Advance MuJoCo by one inner-loop time step using current rotor speeds."""
+        if self._has_arm:
+            self.quad.update_motor_response()
         self._apply_rotor_forces()
         if self._tracking_beacon_id >= 0:
             self.model.geom_pos[self._tracking_beacon_id, :2] = (
                 self.data.xpos[self._body_id, :2])
         mujoco.mj_step(self.model, self.data)
+        if self._has_arm:
+            self._update_composite_inertia()
         self._sync_quad_state()
         self._record_collisions()
         self._record_actual_trajectory()
@@ -507,9 +713,14 @@ class MujocoSimulation:
         return recorder.frame_count
 
     def _reset_runtime_state(self, motor_speeds: np.ndarray | None = None) -> None:
-        motor_speeds = np.zeros(4) if motor_speeds is None else motor_speeds
+        if motor_speeds is None:
+            motor_speeds = (np.full(4, np.sqrt(self.quad.m * self.quad.g / (4.0 * self.quad.kf)))
+                            if self._has_arm else np.zeros(4))
         self.quad.omega[:] = motor_speeds
         self.quad.omega_command[:] = motor_speeds
+        if self._has_arm:
+            self.data.ctrl[self._arm_actuator_ids] = 0.0
+            self.data.ctrl[self._gripper_actuator_id] = 0.0
         self.data.qfrc_applied.fill(0.0)
         self._external_force_world.fill(0.0)
         self._collision_detected = False
@@ -581,8 +792,10 @@ class MujocoSimulation:
             )
 
     def _sync_quad_state(self) -> None:
+        qpos, dof = self._base_qpos_address, self._base_dof_address
         self.quad.X = mujoco_to_ned_state(
-            self.data.qpos[:3], self.data.qpos[3:7], self.data.qvel[:6])
+            self.data.qpos[qpos:qpos+3], self.data.qpos[qpos+3:qpos+7],
+            self.data.qvel[dof:dof+6])
 
 
 def _create_quad(model: mujoco.MjModel, body_id: int, rotor_site_ids: np.ndarray) -> Quad:
@@ -632,3 +845,9 @@ def _vector(values: np.ndarray, size: int, name: str) -> np.ndarray:
     if vector.shape != (size,) or not np.all(np.isfinite(vector)):
         raise ValueError(f"MuJoCo {name} must contain {size} finite values")
     return vector
+
+
+def _skew(vector: np.ndarray) -> np.ndarray:
+    """Return the matrix S(v) such that S(v) @ w == v cross w."""
+    x, y, z = vector
+    return np.array([[0.0, -z, y], [z, 0.0, -x], [-y, x, 0.0]])

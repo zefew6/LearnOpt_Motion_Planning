@@ -8,7 +8,7 @@ from typing import Any
 
 import numpy as np
 
-from uav_ac.quadrotor.quad import Quad
+from uav_ac.robot.quadrotor import Quad
 
 from .trajectory_controller import ControlCommand, TrajectoryReference
 

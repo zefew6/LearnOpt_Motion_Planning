@@ -1,0 +1,50 @@
+<mujocoinclude>
+  <!-- Simulation-scale 4R arm: 60 + 160 + 120 + 90 mm links, 90 g arm mass. -->
+  <!-- Lightweight parallel gripper: 23 g including the palm and both fingers. -->
+  <body name="arm_base" pos="0 0 -0.055">
+    <joint name="arm_joint_0" type="hinge" axis="0 0 1" range="-2.8 2.8" damping="0.08" armature="0.002"/>
+    <inertial pos="0 0 -0.020" mass="0.015" diaginertia="0.000012 0.000012 0.000008"/>
+    <geom name="arm_yaw_housing" type="cylinder" pos="0 0 -0.010" size="0.034 0.020" rgba="0.12 0.17 0.22 1"/>
+    <geom name="arm_yaw_cap" type="cylinder" pos="0 0 -0.032" size="0.025 0.005" rgba="0.88 0.34 0.12 1" contype="0" conaffinity="0"/>
+    <geom name="arm_link_0" type="capsule" fromto="0 0 0 0 0 -0.06" size="0.018"/>
+    <body name="arm_link_1_body" pos="0 0 -0.06">
+      <joint name="arm_joint_1" type="hinge" axis="0 1 0" range="-2.2 2.2" damping="0.06" armature="0.0015"/>
+      <inertial pos="0 0 -0.08" mass="0.035" diaginertia="0.000080 0.000080 0.000018"/>
+      <geom name="shoulder_housing" type="cylinder" size="0.031 0.028" quat="0.707107 0.707107 0 0" rgba="0.12 0.17 0.22 1"/>
+      <geom name="shoulder_cap" type="cylinder" pos="0 0.029 0" size="0.020 0.005" quat="0.707107 0.707107 0 0" rgba="0.88 0.34 0.12 1" contype="0" conaffinity="0"/>
+      <geom name="arm_link_1" type="capsule" fromto="0 0 0 0 0 -0.16" size="0.020" rgba="0.72 0.76 0.78 1"/>
+      <body name="arm_link_2_body" pos="0 0 -0.16">
+        <joint name="arm_joint_2" type="hinge" axis="0 1 0" range="-2.4 2.4" damping="0.05" armature="0.001"/>
+        <inertial pos="0 0 -0.06" mass="0.025" diaginertia="0.000030 0.000030 0.000006"/>
+        <geom name="elbow_housing" type="cylinder" size="0.028 0.025" quat="0.707107 0.707107 0 0" rgba="0.12 0.17 0.22 1"/>
+        <geom name="elbow_cap" type="cylinder" pos="0 0.026 0" size="0.018 0.005" quat="0.707107 0.707107 0 0" rgba="0.88 0.34 0.12 1" contype="0" conaffinity="0"/>
+        <geom name="arm_link_2" type="capsule" fromto="0 0 0 0 0 -0.12" size="0.018" rgba="0.72 0.76 0.78 1"/>
+        <body name="arm_link_3_body" pos="0 0 -0.12">
+          <joint name="arm_joint_3" type="hinge" axis="0 1 0" range="-2.4 2.4" damping="0.04" armature="0.0008"/>
+          <inertial pos="0 0 -0.045" mass="0.015" diaginertia="0.000011 0.000011 0.000003"/>
+          <geom name="wrist_housing" type="cylinder" size="0.023 0.021" quat="0.707107 0.707107 0 0" rgba="0.12 0.17 0.22 1"/>
+          <geom name="wrist_cap" type="cylinder" pos="0 0.022 0" size="0.015 0.004" quat="0.707107 0.707107 0 0" rgba="0.88 0.34 0.12 1" contype="0" conaffinity="0"/>
+          <geom name="arm_link_3" type="capsule" fromto="0 0 0 0 0 -0.09" size="0.016" rgba="0.72 0.76 0.78 1"/>
+          <site name="tool_frame" pos="0 0 -0.09" size="0.010" rgba="0.95 0.3 0.1 1"/>
+          <body name="gripper_palm_body" pos="0 0 -0.105">
+            <site name="grasp_frame" pos="0 0 -0.065" size="0.008" rgba="0.2 0.9 0.35 1"/>
+            <inertial pos="0 0 0" mass="0.015" diaginertia="0.000008 0.000012 0.000016"/>
+            <geom name="gripper_palm" type="box" size="0.034 0.022 0.014" rgba="0.12 0.17 0.22 1"/>
+            <body name="gripper_left_body" pos="-0.018 0 -0.01">
+              <joint name="gripper_left_joint" type="slide" axis="-1 0 0" range="0 0.025" damping="0.25" armature="0.0002"/>
+              <inertial pos="0 0 -0.033" mass="0.004" diaginertia="0.0000015 0.0000015 0.0000002"/>
+              <geom name="gripper_finger_left" type="capsule" fromto="0 0 0 0 0 -0.065" size="0.007" rgba="0.88 0.34 0.12 1"/>
+              <geom name="gripper_pad_left" type="box" pos="0 0 -0.059" size="0.008 0.012 0.010" rgba="0.22 0.24 0.26 1"/>
+            </body>
+            <body name="gripper_right_body" pos="0.018 0 -0.01">
+              <joint name="gripper_right_joint" type="slide" axis="1 0 0" range="0 0.025" damping="0.25" armature="0.0002"/>
+              <inertial pos="0 0 -0.033" mass="0.004" diaginertia="0.0000015 0.0000015 0.0000002"/>
+              <geom name="gripper_finger_right" type="capsule" fromto="0 0 0 0 0 -0.065" size="0.007" rgba="0.88 0.34 0.12 1"/>
+              <geom name="gripper_pad_right" type="box" pos="0 0 -0.059" size="0.008 0.012 0.010" rgba="0.22 0.24 0.26 1"/>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+  </body>
+</mujocoinclude>

@@ -154,13 +154,55 @@ Set `scene`, `planner`, and `controller` in `configs/flight.yaml`, then run:
 .venv/bin/python -m uav_ac.main --config configs/flight.yaml
 ```
 
+The generic four-axis aerial manipulator uses a floating quadrotor base, a
+simulation-only hanging `yaw + 3 pitch` arm, and a symmetric actuated parallel
+gripper. The `gripper_opening` command sets the inner-finger gap from 0.020 m
+closed to 0.070 m open. Run its 20-second headless hover
+and slow joint-motion check with `configs/aerial_manipulator_hover.yaml`; set
+`visualize: true` there to open the MuJoCo viewer. The arm dimensions and
+inertias are initial simulation assumptions: four arm links total 0.43 m and
+0.09 kg, and the gripper weighs 0.023 kg. With the 0.50 kg quadrotor body,
+the modeled takeoff mass is 0.613 kg. Planning/control in this demo
+do not provide whole-body obstacle avoidance or grasping.
+
+The public entry point is `simulation.robot`. Its 12-value configuration is
+`[position_NED(3), quaternion_FRD_to_NED_wxyz(4), arm_q(4), gripper_gap(1)]`;
+its 11-value velocity is `[linear_velocity_NED(3), angular_velocity_FRD_body(3),
+arm_qdot(4), gripper_gap_rate(1)]`. `robot.jacobian(q, frame)` returns a
+6×11 analytic geometric Jacobian with both twist rows in world NED. Frames
+`"tool"` and `"grasp"` select the wrist tool frame and center of the gripper.
+Configuration queries use separate MuJoCo data and do not change the running
+simulation. A minimal control loop is:
+
+```python
+state = simulation.robot.state
+q = simulation.robot.configuration
+J = simulation.robot.jacobian(q, frame="grasp")
+model = simulation.robot.dynamics(q, state.velocity)
+collision = simulation.robot.check_collision(q, clearance=0.02)
+command = controller.step(reference)  # AerialManipulatorReference
+simulation.robot.apply(command)
+simulation.step()
+```
+
+`robot.dynamics` returns the reduced mass matrix, bias and passive forces, and
+an actuation matrix for four actual rotor forces, four arm torques, and the
+left gripper servo force. Its gripper model assumes ideally synchronized
+fingers; MuJoCo enforces synchronization with a soft equality constraint and
+drives one finger with a position servo. Rotor commands are allocated to
+targets when applied, and motor response advances exactly once per physics
+step. `robot.check_collision` checks the supplied full configuration against
+collidable environment geometry and non-adjacent robot parts, returning named
+pairs and their distances. Physics masses, dimensions and inertias remain
+simulation assumptions rather than measured hardware properties.
+
 ## Flight configuration
 
 `scene` names an XML file under `uav_ac/simulation/models/`, with or without the `.xml` suffix. Standard trajectory flights omit `task` (defaulting to `trajectory_tracking`). Reference-free gate-racing deployment uses `task: gate_racing`, `scene: gate_racing`, `planner: none`, and `controller: rl`; see [flight_gate_racing.yaml](configs/flight_gate_racing.yaml).
 
 | Field | Values | Notes |
 | --- | --- | --- |
-| `planner` | `none`, `mini_snap`, `gcopter`, `gcs`, `bmtp` | `none` is only valid for gate racing; GCS needs scene guide regions; BMTP needs `bmtp_route_*` sites |
+| `planner` | `none`, `mini_snap`, `gcopter`, `gcs`, `bmtp` | `none` is valid for gate racing and the aerial-manipulator demo; GCS needs scene guide regions; BMTP needs `bmtp_route_*` sites |
 | `controller` | `cascaded`, `mpc`, `rl` | MPC requires acados; RL requires `rl.checkpoint` |
 | `wind` | `none`, `fixed_gust` | Add `wind_options` only to override fixed-gust defaults |
 | `visualize` | `true`, `false` | Shows corridor geometry; BMTP always shows its dashed initialization and solid result |
@@ -284,7 +326,10 @@ uav_ac/
 │   └── mlp_baseline/         Existing training/evaluation entry points
 ├── simulation/
 │   └── models/               XML scenes and vehicle definitions
-├── quadrotor/                Vehicle state and actuator allocation
+├── robot/
+│   ├── quadrotor/             Quadrotor state and rotor allocation
+│   └── aerial_manipulator/    Four-joint arm model and robot state/commands
+├── quadrotor/                Compatibility import for the original package
 └── visualization/            Planning overlays and plots
 tests/                        Unit and integration tests
 docs/                         Figures and documentation media
