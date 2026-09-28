@@ -160,6 +160,7 @@ class MujocoSimulation:
         else:
             self.robot = self.quad
         self._collision_detected = False
+        self._allowed_contact_pairs: set[frozenset[int]] = set()
         self._has_taken_off = False
         self._external_force_world = np.zeros(3)
         self._actual_trajectory_positions = []
@@ -194,6 +195,21 @@ class MujocoSimulation:
     def collision_detected(self) -> bool:
         """Return whether any collision has occurred since initialization."""
         return self._collision_detected
+
+    def set_allowed_contact_pairs(self, pairs) -> None:
+        """Ignore named geom contacts explicitly allowed by the active scenario."""
+        allowed = set()
+        for pair in pairs:
+            if (not isinstance(pair, (tuple, list)) or len(pair) != 2
+                    or any(not isinstance(name, str) or not name for name in pair)
+                    or pair[0] == pair[1]):
+                raise ValueError("contact pairs must contain two distinct geom names")
+            geom_ids = tuple(mujoco.mj_name2id(
+                self.model, mujoco.mjtObj.mjOBJ_GEOM, name) for name in pair)
+            if min(geom_ids) < 0:
+                raise ValueError(f"contact pair references an unknown geom: {pair}")
+            allowed.add(frozenset(geom_ids))
+        self._allowed_contact_pairs = allowed
 
     @property
     def robot_state(self) -> AerialManipulatorState | np.ndarray:
@@ -459,6 +475,18 @@ class MujocoSimulation:
         self._sync_quad_state()
         self._record_collisions()
         return self.robot.state
+
+    def set_mocap_position_ned(self, body_name: str, position_ned: np.ndarray) -> None:
+        """Move a named kinematic marker from an NED world position."""
+        body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, body_name)
+        if body_id < 0:
+            raise ValueError(f"unknown MuJoCo body: {body_name}")
+        mocap_id = int(self.model.body_mocapid[body_id])
+        if mocap_id < 0:
+            raise ValueError(f"MuJoCo body '{body_name}' is not a mocap body")
+        position = _vector(position_ned, 3, "position_ned")
+        self.data.mocap_pos[mocap_id] = ENU_TO_NED @ position
+        mujoco.mj_forward(self.model, self.data)
 
     def get_planning_obstacle_points(
             self,
@@ -759,6 +787,8 @@ class MujocoSimulation:
         takeoff_contact = {self._ground_geom_id, self._body_geom_id}
         for contact in self.data.contact:
             contact_geometries = {contact.geom1, contact.geom2}
+            if frozenset(contact_geometries) in self._allowed_contact_pairs:
+                continue
             if not self._has_taken_off and contact_geometries == takeoff_contact:
                 continue
             self._collision_detected = True

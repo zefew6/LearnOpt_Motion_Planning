@@ -83,7 +83,7 @@ class AerialManipulatorModel:
                 result.add(body)
         return result
 
-    def _configuration(self, value=None):
+    def _configuration(self, value=None, *, check_limits=True):
         if value is None:
             return self.configuration()
         q = np.asarray(value, dtype=float)
@@ -94,9 +94,10 @@ class AerialManipulatorModel:
             raise ValueError("configuration quaternion cannot be zero")
         q = q.copy()
         q[3:7] /= norm
-        if np.any(q[7:11] < self.limits.joint_lower) or np.any(q[7:11] > self.limits.joint_upper):
+        if (check_limits and (np.any(q[7:11] < self.limits.joint_lower)
+                              or np.any(q[7:11] > self.limits.joint_upper))):
             raise ValueError("configuration exceeds an arm joint limit")
-        if not GAP_MIN <= q[11] <= GAP_MAX:
+        if check_limits and not GAP_MIN <= q[11] <= GAP_MAX:
             raise ValueError("configuration gripper gap must be within [0.020, 0.070] m")
         return q
 
@@ -131,12 +132,12 @@ class AerialManipulatorModel:
         return AerialManipulatorState(base, config[7:11].copy(), velocity[6:10].copy(),
                                       config[11], velocity[10], float(left-right))
 
-    def _prepare(self, configuration=None, velocity=None):
+    def _prepare(self, configuration=None, velocity=None, *, check_limits=True):
         live = self._live_data()
         d = self._scratch
         d.qpos[:] = live.qpos
         d.qvel[:] = 0.0
-        q = self._configuration(configuration)
+        q = self._configuration(configuration, check_limits=check_limits)
         v = np.zeros(NV_PUBLIC) if velocity is None else self._velocity(velocity)
         bq, bv = self.base_qpos, self.base_dof
         d.qpos[bq:bq+3] = S @ q[:3]
@@ -185,8 +186,8 @@ class AerialManipulatorModel:
                      S @ native[self.base_dof+3:self.base_dof+6], native[self.arm_dof],
                      native[self.grip_dof].sum()]
 
-    def forward_kinematics(self, configuration=None, frame="tool"):
-        d, _, _ = self._prepare(configuration)
+    def forward_kinematics(self, configuration=None, frame="tool", *, check_limits=True):
+        d, _, _ = self._prepare(configuration, check_limits=check_limits)
         site = self.tool_site if frame == "tool" else self.grasp_site if frame == "grasp" else None
         if site is None:
             raise ValueError("frame must be 'tool' or 'grasp'")
@@ -195,8 +196,8 @@ class AerialManipulatorModel:
         quat = np.empty(4); mujoco.mju_mat2Quat(quat, r.ravel())
         return p, quat
 
-    def jacobian(self, configuration=None, frame="tool"):
-        d, _, _ = self._prepare(configuration)
+    def jacobian(self, configuration=None, frame="tool", *, check_limits=True):
+        d, _, _ = self._prepare(configuration, check_limits=check_limits)
         site = self.tool_site if frame == "tool" else self.grasp_site if frame == "grasp" else None
         if site is None:
             raise ValueError("frame must be 'tool' or 'grasp'")
@@ -212,6 +213,90 @@ class AerialManipulatorModel:
             j[3:, 6+k] = S @ d.xaxis[joint]
         # Gap velocity moves the symmetric fingers; both requested frames are upstream.
         return j
+
+    def point_positions_and_jacobians(
+            self, configuration, body_names, local_points, *, check_limits=True):
+        """Query NED positions and 3x8 planner-state Jacobians for body-local points.
+
+        Planner state columns are base translation, world yaw, and four arm joints.
+        This kinematic-only query leaves live MuJoCo data unchanged and can opt out
+        of joint/gap range validation for smooth penalty evaluation.
+        """
+        names = tuple(body_names)
+        points = np.asarray(local_points, dtype=float)
+        if points.shape != (len(names), 3) or not np.all(np.isfinite(points)):
+            raise ValueError("local_points must be a finite (len(body_names), 3) array")
+        body_ids = np.asarray([
+            _id(self.model, mujoco.mjtObj.mjOBJ_BODY, name) for name in names
+        ], dtype=int)
+        d, q, _ = self._prepare(configuration, check_limits=check_limits)
+        positions = np.empty_like(points)
+        jacobians = np.zeros((len(points), 3, 8))
+        yaw_axis = np.array([0.0, 0.0, 1.0])
+        for index, (body_id, local_point) in enumerate(zip(body_ids, points, strict=True)):
+            body_rotation = d.xmat[body_id].reshape(3, 3)
+            point_ned = S @ (d.xpos[body_id] + body_rotation @ local_point)
+            positions[index] = point_ned
+            jacobians[index, :, :3] = np.eye(3)
+            jacobians[index, :, 3] = np.cross(yaw_axis, point_ned - q[:3])
+            native_point = S @ point_ned
+            for joint_index, joint_id in enumerate(self.arm_joints):
+                if not self._joint_is_ancestor(body_id, int(self.model.jnt_bodyid[joint_id])):
+                    continue
+                jacobians[index, :, 4 + joint_index] = S @ np.cross(
+                    d.xaxis[joint_id], native_point - d.xanchor[joint_id])
+        return positions, jacobians
+
+    def _joint_is_ancestor(self, body_id, joint_body_id):
+        while body_id > 0:
+            if body_id == joint_body_id:
+                return True
+            body_id = int(self.model.body_parentid[body_id])
+        return False
+
+    def collision_geometries(self):
+        """Describe active robot collision geoms using public names and local poses."""
+        result = []
+        for geom_id in self._robot_geoms:
+            name = _name(self.model, mujoco.mjtObj.mjOBJ_GEOM, geom_id)
+            body_id = int(self.model.geom_bodyid[geom_id])
+            body_name = _name(self.model, mujoco.mjtObj.mjOBJ_BODY, body_id)
+            ancestors = []
+            parent = int(self.model.body_parentid[body_id])
+            while parent > 0:
+                ancestors.append(_name(self.model, mujoco.mjtObj.mjOBJ_BODY, parent))
+                parent = int(self.model.body_parentid[parent])
+            rotation = np.empty(9)
+            mujoco.mju_quat2Mat(rotation, self.model.geom_quat[geom_id])
+            rotation = rotation.reshape(3, 3)
+            center = self.model.geom_pos[geom_id].copy()
+            geom_type = int(self.model.geom_type[geom_id])
+            if geom_type == mujoco.mjtGeom.mjGEOM_CAPSULE:
+                half_length = float(self.model.geom_size[geom_id, 1])
+                result.append({"name": name, "body": body_name, "ancestors": tuple(ancestors),
+                               "parent": ancestors[0] if ancestors else None,
+                               "contype": int(self.model.geom_contype[geom_id]),
+                               "conaffinity": int(self.model.geom_conaffinity[geom_id]),
+                               "local_start": center-rotation[:, 2]*half_length,
+                               "local_end": center+rotation[:, 2]*half_length,
+                               "radius": float(self.model.geom_size[geom_id, 0])})
+            else:
+                result.append({"name": name, "body": body_name, "ancestors": tuple(ancestors),
+                               "parent": ancestors[0] if ancestors else None,
+                               "contype": int(self.model.geom_contype[geom_id]),
+                               "conaffinity": int(self.model.geom_conaffinity[geom_id]),
+                               "local_start": center, "local_end": center,
+                               "radius": float(np.linalg.norm(self.model.geom_size[geom_id]))})
+        return tuple(result)
+
+    def frame_point(self, frame="grasp"):
+        """Return a named frame as a body name and body-local point."""
+        site = self.tool_site if frame == "tool" else self.grasp_site if frame == "grasp" else None
+        if site is None:
+            raise ValueError("frame must be 'tool' or 'grasp'")
+        body_id = int(self.model.site_bodyid[site])
+        return (_name(self.model, mujoco.mjtObj.mjOBJ_BODY, body_id),
+                self.model.site_pos[site].copy())
 
     def mass_properties(self, configuration=None):
         """Return total mass, NED center of mass, and COM inertia in NED axes."""

@@ -1,0 +1,32 @@
+<mujoco model="aerial_manipulator_robot_test_fixture">
+  <compiler angle="radian" autolimits="true"/>
+  <default>
+    <default class="quadrotor_parts">
+      <geom contype="1" conaffinity="1" condim="4" friction="0.8 0.8 0.005"
+            solref="0.005 1" solimp="0.95 0.99 0.001"/>
+    </default>
+  </default>
+  <option timestep="0.001" gravity="0 0 -9.81" integrator="Euler"/>
+  <size nuser_site="1"/>
+  <custom>
+    <numeric name="flight_limits" data="3 2 8 12 0.7"/>
+  </custom>
+  <worldbody>
+    <geom name="ground" type="plane" size="5 5 0.1"/>
+    <body name="quadrotor" pos="0 0 1.20" childclass="quadrotor_parts">
+      <include file="../../uav_ac/simulation/model/aerial_manipulator.xml"/>
+    </body>
+  </worldbody>
+  <actuator>
+    <motor name="arm_motor_0" joint="arm_joint_0" ctrlrange="-0.8 0.8" ctrllimited="true"/>
+    <motor name="arm_motor_1" joint="arm_joint_1" ctrlrange="-0.8 0.8" ctrllimited="true"/>
+    <motor name="arm_motor_2" joint="arm_joint_2" ctrlrange="-0.6 0.6" ctrllimited="true"/>
+    <motor name="arm_motor_3" joint="arm_joint_3" ctrlrange="-0.4 0.4" ctrllimited="true"/>
+    <position name="gripper_position" joint="gripper_left_joint" kp="120" kv="3"
+              ctrlrange="0 0.025" ctrllimited="true" forcerange="-2 2" forcelimited="true"/>
+  </actuator>
+  <equality>
+    <joint name="gripper_finger_sync" joint1="gripper_right_joint"
+           joint2="gripper_left_joint" polycoef="0 1 0 0 0"/>
+  </equality>
+</mujoco>

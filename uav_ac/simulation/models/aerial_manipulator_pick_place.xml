@@ -1,0 +1,54 @@
+<mujoco model="aerial_manipulator_pick_place">
+  <compiler angle="radian" autolimits="true"/>
+  <default>
+    <default class="quadrotor_parts"><geom contype="1" conaffinity="1"/></default>
+  </default>
+  <option timestep="0.001" gravity="0 0 -9.81" integrator="Euler"/>
+  <size nuser_site="1"/>
+  <statistic center="0 0 1" extent="3"/>
+  <custom>
+    <numeric name="planning_bounds" data="-5 -5 -2 5 5 0"/>
+    <numeric name="flight_limits" data="3 2 8 12 0.7"/>
+  </custom>
+  <visual>
+    <global azimuth="135" elevation="-25"/>
+    <map znear="0.01" zfar="30"/>
+  </visual>
+  <asset>
+    <texture name="ground_grid" type="2d" builtin="checker" width="512" height="512"
+             rgb1="0.55 0.55 0.55" rgb2="0.35 0.35 0.35"/>
+    <material name="ground" texture="ground_grid" texrepeat="8 8" texuniform="true"
+              reflectance="0.1"/>
+  </asset>
+  <worldbody>
+    <light name="sun" pos="0 0 8" dir="-0.3 0.2 -1" directional="true"/>
+    <geom name="ground" type="plane" size="5 5 0.1" material="ground"/>
+    <body name="quadrotor" pos="0 0 1" childclass="quadrotor_parts">
+      <include file="../model/aerial_manipulator.xml"/>
+    </body>
+    <body name="payload_marker" mocap="true">
+      <geom name="payload_marker_geom" type="sphere" size="0.035"
+            rgba="0.95 0.35 0.08 1" contype="0" conaffinity="0"/>
+    </body>
+    <body name="pick_target_marker" mocap="true">
+      <geom name="pick_target_geom" type="sphere" size="0.055"
+            rgba="0.2 0.9 0.35 0.35" contype="0" conaffinity="0"/>
+    </body>
+    <body name="place_target_marker" mocap="true">
+      <geom name="place_target_geom" type="sphere" size="0.055"
+            rgba="0.2 0.45 1.0 0.35" contype="0" conaffinity="0"/>
+    </body>
+  </worldbody>
+  <actuator>
+    <motor name="arm_motor_0" joint="arm_joint_0" ctrlrange="-0.8 0.8" ctrllimited="true"/>
+    <motor name="arm_motor_1" joint="arm_joint_1" ctrlrange="-0.8 0.8" ctrllimited="true"/>
+    <motor name="arm_motor_2" joint="arm_joint_2" ctrlrange="-0.6 0.6" ctrllimited="true"/>
+    <motor name="arm_motor_3" joint="arm_joint_3" ctrlrange="-0.4 0.4" ctrllimited="true"/>
+    <position name="gripper_position" joint="gripper_left_joint" kp="120" kv="3"
+              ctrlrange="0 0.025" ctrllimited="true" forcerange="-2 2" forcelimited="true"/>
+  </actuator>
+  <equality>
+    <joint name="gripper_finger_sync" joint1="gripper_right_joint"
+           joint2="gripper_left_joint" polycoef="0 1 0 0 0"/>
+  </equality>
+</mujoco>

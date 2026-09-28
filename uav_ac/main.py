@@ -32,9 +32,11 @@ from uav_ac.simulation.wind_disturb import GustingCrosswind
 ROOT = Path(__file__).resolve().parents[1]
 MODEL_DIRECTORY = Path(__file__).resolve().parent / "simulation" / "models"
 DEFAULT_CONFIG = ROOT / "configs" / "flight.yaml"
-PLANNERS = {"none", "mini_snap", "gcopter", "gcs", "bmtp"}
+PLANNERS = {"none", "mini_snap", "gcopter", "gcs", "bmtp",
+            "aerial_manipulator_gcopter"}
 CONTROLLERS = {"cascaded", "mpc", "rl"}
-TASKS = {"trajectory_tracking", "gate_racing", "aerial_manipulator_hover"}
+TASKS = {"trajectory_tracking", "gate_racing", "aerial_manipulator_hover",
+         "aerial_pick_place"}
 
 
 class _UniqueLoader(yaml.SafeLoader):
@@ -78,7 +80,7 @@ def load_config(path: str | Path = DEFAULT_CONFIG) -> dict:
     _only(config, {
         "task", "scene", "planner", "controller", "speed", "control_dt", "wind",
         "visualize", "follow_camera", "seed", "duration", "rl", "cascaded", "bmtp", "gcopter",
-        "gcs", "mpc", "wind_options",
+        "gcs", "mpc", "wind_options", "pick_place", "aerial_manipulator_gcopter",
     }, "flight")
     for required in ("scene", "planner", "controller"):
         if required not in config:
@@ -112,6 +114,15 @@ def load_config(path: str | Path = DEFAULT_CONFIG) -> dict:
             raise ValueError("aerial_manipulator_hover requires scene: aerial_manipulator_hover")
         if config.get("wind", "none") != "none":
             raise ValueError("aerial manipulator hover demo requires wind: none")
+    elif config["task"] == "aerial_pick_place":
+        if (config["planner"] != "aerial_manipulator_gcopter"
+                or config["controller"] != "cascaded"
+                or scene != "aerial_manipulator_pick_place"):
+            raise ValueError(
+                "aerial_pick_place requires its dedicated scene, aerial_manipulator_gcopter, "
+                "and cascaded controller")
+        if config.get("wind", "none") != "none":
+            raise ValueError("aerial pick/place requires wind: none")
     elif config["planner"] == "none":
         raise ValueError("planner: none is only valid for task: gate_racing")
     config.setdefault("speed", 3.0)
@@ -133,7 +144,8 @@ def load_config(path: str | Path = DEFAULT_CONFIG) -> dict:
         raise ValueError("wind must be none or fixed_gust")
 
     sections = {name: config.setdefault(name, {})
-                for name in ("rl", "cascaded", "bmtp", "gcopter", "gcs", "mpc", "wind_options")}
+                for name in ("rl", "cascaded", "bmtp", "gcopter", "gcs", "mpc",
+                             "wind_options", "aerial_manipulator_gcopter")}
     for name, values in sections.items():
         if not isinstance(values, dict):
             raise ValueError(f"{name} must be a mapping")
@@ -143,6 +155,9 @@ def load_config(path: str | Path = DEFAULT_CONFIG) -> dict:
     from uav_ac.control.mpc_controller import MPCConfig
     from uav_ac.planning.trajectory.bmtp import BMTPConfig
     from uav_ac.planning.trajectory.gcopter import GCOPTERConfig
+    from uav_ac.planning.trajectory.gcopter.aerial_manipulator import (
+        AerialManipulatorGCOPTERConfig,
+    )
     from uav_ac.planning.trajectory.gcs import GCSConfig
 
     bmtp_special = {"initial_route", "segments", "clearance",
@@ -156,6 +171,48 @@ def load_config(path: str | Path = DEFAULT_CONFIG) -> dict:
     _only(sections["mpc"], {f.name for f in fields(MPCConfig)} - {"dt"}, "mpc")
     _only(sections["wind_options"], {f.name for f in fields(GustingCrosswind)},
           "wind_options")
+    _only(sections["aerial_manipulator_gcopter"],
+          {f.name for f in fields(AerialManipulatorGCOPTERConfig)},
+          "aerial_manipulator_gcopter")
+    AerialManipulatorGCOPTERConfig(**sections["aerial_manipulator_gcopter"])
+    pick_place = config.setdefault("pick_place", {})
+    _only(pick_place, {
+        "pick_position_ned", "place_position_ned", "pick_yaw", "place_yaw",
+        "pick_nominal_joints", "place_nominal_joints", "gripper_open", "gripper_closed",
+        "position_tolerance", "velocity_tolerance", "settle_time", "event_timeout",
+        "angular_velocity_tolerance",
+    }, "pick_place")
+    if config["task"] == "aerial_pick_place":
+        required_pick_place = {
+            "pick_position_ned", "place_position_ned", "pick_yaw", "place_yaw",
+            "pick_nominal_joints", "place_nominal_joints", "gripper_open", "gripper_closed",
+        }
+        missing = required_pick_place-pick_place.keys()
+        if missing:
+            raise ValueError(f"pick_place.{sorted(missing)[0]} is required")
+        for name in ("pick_position_ned", "place_position_ned"):
+            value = np.asarray(pick_place[name], dtype=float)
+            if value.shape != (3,) or not np.all(np.isfinite(value)):
+                raise ValueError(f"pick_place.{name} must be a finite 3-vector")
+            pick_place[name] = value.tolist()
+        for name in ("pick_nominal_joints", "place_nominal_joints"):
+            value = np.asarray(pick_place[name], dtype=float)
+            if value.shape != (4,) or not np.all(np.isfinite(value)):
+                raise ValueError(f"pick_place.{name} must be a finite 4-vector")
+            pick_place[name] = value.tolist()
+        for name in ("pick_yaw", "place_yaw", "gripper_open", "gripper_closed"):
+            value = pick_place[name]
+            if (isinstance(value, bool) or not isinstance(value, (int, float))
+                    or not math.isfinite(value)):
+                raise ValueError(f"pick_place.{name} must be a finite number")
+            pick_place[name] = float(value)
+        if not (.02 <= pick_place["gripper_closed"] < pick_place["gripper_open"] <= .07):
+            raise ValueError("gripper_closed and gripper_open must satisfy 0.02 <= closed < open <= 0.07")
+        for name, default in (("position_tolerance", .02), ("velocity_tolerance", .05),
+                              ("angular_velocity_tolerance", .2),
+                              ("settle_time", .30), ("event_timeout", 10.0)):
+            pick_place.setdefault(name, default)
+            _positive(pick_place[name], f"pick_place.{name}")
     _only(sections["rl"], {"checkpoint", "device"}, "rl")
     _only(sections["cascaded"], {f.name for f in fields(CascadedConfig)}, "cascaded")
 
@@ -286,6 +343,9 @@ def run(config: dict) -> np.ndarray | dict:
     """Plan and fly once; ordinary viewer runs intentionally write no files."""
     if config.get("task", "trajectory_tracking") == "gate_racing":
         return _run_gate_racing(config)
+    if config.get("task") == "aerial_pick_place":
+        from uav_ac.tasks.aerial_pick_place import run_aerial_pick_place
+        return run_aerial_pick_place(config)
     if config.get("task") == "aerial_manipulator_hover":
         return _run_aerial_manipulator_hover(config)
     planning_capacity = 2 if config["planner"] == "bmtp" else 0

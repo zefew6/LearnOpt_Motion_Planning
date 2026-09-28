@@ -59,9 +59,21 @@ class MINCOQuintic:
         self.head_pva = np.asarray(head_pva, dtype=float)
         self.tail_pva = np.asarray(tail_pva, dtype=float)
         self.pieces = pieces
+        if (self.head_pva.ndim != 2 or self.head_pva.shape[0] != 3
+                or self.tail_pva.shape != self.head_pva.shape):
+            raise ValueError("head_pva and tail_pva must both have shape (3, dimensions)")
+        if pieces < 1:
+            raise ValueError("pieces must be positive")
+        self.dimensions = self.head_pva.shape[1]
 
     def solve(self, points: np.ndarray, times: np.ndarray) -> tuple[np.ndarray, BandedPLU]:
-        rhs = np.zeros((6 * self.pieces, 3), dtype=float)
+        points = np.asarray(points, dtype=float)
+        times = np.asarray(times, dtype=float)
+        if points.shape != (self.pieces - 1, self.dimensions):
+            raise ValueError("points must have shape (pieces - 1, dimensions)")
+        if times.shape != (self.pieces,) or np.any(times <= 0.0):
+            raise ValueError("times must contain one positive duration per piece")
+        rhs = np.zeros((6 * self.pieces, self.dimensions), dtype=float)
         rhs[0:3] = self.head_pva
         # MINCO_S3NU puts the waypoint equation on row 5 of each interior
         # block to preserve bandwidth; rows are deliberately not derivative-sorted.
@@ -132,24 +144,34 @@ class MINCOQuintic:
         return storage
 
     @staticmethod
-    def jerk_energy(coefficients: np.ndarray, times: np.ndarray) -> tuple[float, np.ndarray, np.ndarray]:
-        blocks = coefficients.reshape(len(times), 6, 3)
+    def jerk_energy(
+            coefficients: np.ndarray,
+            times: np.ndarray,
+            dimension_weights: np.ndarray | None = None,
+    ) -> tuple[float, np.ndarray, np.ndarray]:
+        dimensions = np.asarray(coefficients).shape[-1] if np.asarray(coefficients).ndim == 3 else (
+            np.asarray(coefficients).size // (6 * len(times)))
+        blocks = np.asarray(coefficients).reshape(len(times), 6, dimensions)
+        weights = (np.ones(dimensions) if dimension_weights is None
+                   else np.asarray(dimension_weights, dtype=float))
+        if weights.shape != (dimensions,) or np.any(weights < 0.0):
+            raise ValueError("dimension_weights must be non-negative with one value per dimension")
         c3, c4, c5 = blocks[:, 3], blocks[:, 4], blocks[:, 5]
         t1 = times
         t2, t3 = t1 * t1, t1**3
         t4, t5 = t2 * t2, t2 * t3
-        dot33 = np.sum(c3 * c3, axis=1)
-        dot43 = np.sum(c4 * c3, axis=1)
-        dot44 = np.sum(c4 * c4, axis=1)
-        dot53 = np.sum(c5 * c3, axis=1)
-        dot54 = np.sum(c5 * c4, axis=1)
-        dot55 = np.sum(c5 * c5, axis=1)
+        dot33 = np.sum(c3 * c3 * weights, axis=1)
+        dot43 = np.sum(c4 * c3 * weights, axis=1)
+        dot44 = np.sum(c4 * c4 * weights, axis=1)
+        dot53 = np.sum(c5 * c3 * weights, axis=1)
+        dot54 = np.sum(c5 * c4 * weights, axis=1)
+        dot55 = np.sum(c5 * c5 * weights, axis=1)
         energy = np.sum(36 * dot33 * t1 + 144 * dot43 * t2 + 192 * dot44 * t3
                         + 240 * dot53 * t3 + 720 * dot54 * t4 + 720 * dot55 * t5)
         gradient = np.zeros_like(blocks)
-        gradient[:, 3] = 72*c3*t1[:, None] + 144*c4*t2[:, None] + 240*c5*t3[:, None]
-        gradient[:, 4] = 144*c3*t2[:, None] + 384*c4*t3[:, None] + 720*c5*t4[:, None]
-        gradient[:, 5] = 240*c3*t3[:, None] + 720*c4*t4[:, None] + 1440*c5*t5[:, None]
+        gradient[:, 3] = weights * (72*c3*t1[:, None] + 144*c4*t2[:, None] + 240*c5*t3[:, None])
+        gradient[:, 4] = weights * (144*c3*t2[:, None] + 384*c4*t3[:, None] + 720*c5*t4[:, None])
+        gradient[:, 5] = weights * (240*c3*t3[:, None] + 720*c4*t4[:, None] + 1440*c5*t5[:, None])
         grad_times = (36*dot33 + 288*dot43*t1 + 576*dot44*t2 + 720*dot53*t2
                       + 2880*dot54*t3 + 3600*dot55*t4)
         return float(energy), gradient.reshape(-1, 3), grad_times
@@ -161,7 +183,7 @@ class MINCOQuintic:
         grad_points = np.stack([adjoint[6*i + 5] for i in range(self.pieces - 1)], axis=0) \
             if self.pieces > 1 else np.zeros((0, 3))
         grad_times = direct_grad_times.copy()
-        blocks = coefficients.reshape(self.pieces, 6, 3)
+        blocks = coefficients.reshape(self.pieces, 6, self.dimensions)
         duration = times[:, None]
         t2, t3, t4 = duration**2, duration**3, duration**4
         velocity = blocks[:, 1] + 2*duration*blocks[:, 2] + 3*t2*blocks[:, 3] \

@@ -43,6 +43,30 @@ cover = firi.cover_free_space(collision_checked_free_samples)
 Each returned `FIRIRegion` owns its half-spaces and visualization geometry:
 `region.contains(points)`, `region.vertices()`, and `region.edges()`.
 
+## Aerial-manipulator pick and place
+
+The first whole-body manipulation task plans each leg in
+`[x, y, z, yaw, q1, q2, q3, q4]` using callback-based RRT-Connect, an 8-D
+quintic MINCO spline, and analytic-gradient L-BFGS refinement. One positive
+total-time variable is shared equally across the pieces. Static scene boxes and
+the NED ground are rasterized into an ESDF; the optimizer uses robot collision
+spheres and a payload sphere, then validates the trajectory densely against
+MuJoCo collision queries.
+
+Run the deterministic headless demo with:
+
+```bash
+.venv/bin/python -m uav_ac.main --config configs/aerial_manipulator_pick_place.yaml
+```
+
+Set `visualize: true` to open the existing MuJoCo viewer. The V1 payload is a
+kinematic marker: it follows the grasp frame after closure and freezes at the
+release pose. Its mass and contact forces do not enter the robot dynamics.
+Planning and execution results separately report optimizer convergence,
+dense trajectory validation, mission state, collision status, and failure
+reason. The final collision check is dense sampling; it does not certify every
+continuous-time point between samples.
+
 ## Package structure
 
 The implementation is split by responsibility:

@@ -69,11 +69,23 @@ class AerialManipulator:
     def gripper_sync_error(self) -> float:
         return self.state.gripper_sync_error
 
-    def forward_kinematics(self, configuration=None, frame="tool"):
-        return self._model.forward_kinematics(configuration, frame)
+    def forward_kinematics(self, configuration=None, frame="tool", *, check_limits=True):
+        return self._model.forward_kinematics(
+            configuration, frame, check_limits=check_limits)
 
-    def jacobian(self, configuration=None, frame="tool") -> np.ndarray:
-        return self._model.jacobian(configuration, frame)
+    def jacobian(self, configuration=None, frame="tool", *, check_limits=True) -> np.ndarray:
+        return self._model.jacobian(configuration, frame, check_limits=check_limits)
+
+    def point_positions_and_jacobians(
+            self, configuration, body_names, local_points, *, check_limits=True):
+        return self._model.point_positions_and_jacobians(
+            configuration, body_names, local_points, check_limits=check_limits)
+
+    def collision_geometries(self):
+        return self._model.collision_geometries()
+
+    def frame_point(self, frame="grasp"):
+        return self._model.frame_point(frame)
 
     def mass_properties(self, configuration=None) -> dict:
         return self._model.mass_properties(configuration)

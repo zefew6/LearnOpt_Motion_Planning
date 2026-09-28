@@ -183,3 +183,37 @@ def test_public_jacobian_uses_world_ned_rows_and_public_tangent_columns():
     lift[sim._gripper_dof_addresses, 10] = .5
     reference = np.vstack((ENU_TO_NED@jp, ENU_TO_NED@jr))@lift
     np.testing.assert_allclose(jac, reference, atol=1e-12)
+
+
+def test_public_planning_point_jacobian_supports_soft_limit_queries_without_live_mutation():
+    sim = MujocoSimulation(MODEL, record_actual_trajectory=False)
+    robot = sim.robot
+    q = robot.configuration.copy()
+    q[:3] = [.4, -.2, -1.1]
+    yaw = .35
+    q[3:7] = [np.cos(yaw/2), 0., 0., np.sin(yaw/2)]
+    q[7:11] = [.2, -.3, .1, -.15]
+    body, local = "arm_link_2_body", np.array([[.02, 0., -.04]])
+    before = sim.data.qpos.copy(), sim.data.qvel.copy(), sim.time
+    positions, jacobians = robot.point_positions_and_jacobians(q, [body], local)
+    assert positions.shape == (1, 3) and jacobians.shape == (1, 3, 8)
+    epsilon = 1e-6
+    for column in range(8):
+        shifted = q.copy()
+        if column < 3:
+            shifted[column] += epsilon
+        elif column == 3:
+            angle = yaw + epsilon
+            shifted[3:7] = [np.cos(angle/2), 0., 0., np.sin(angle/2)]
+        else:
+            shifted[7+column-4] += epsilon
+        moved = robot.point_positions_and_jacobians(shifted, [body], local)[0]
+        np.testing.assert_allclose((moved-positions)[0]/epsilon, jacobians[0, :, column],
+                                   atol=3e-5)
+    outside = q.copy(); outside[8] = robot.limits.joint_upper[1]+.1
+    robot.point_positions_and_jacobians(outside, [body], local, check_limits=False)
+    with pytest.raises(ValueError, match="joint limit"):
+        robot.point_positions_and_jacobians(outside, [body], local)
+    np.testing.assert_array_equal(sim.data.qpos, before[0])
+    np.testing.assert_array_equal(sim.data.qvel, before[1])
+    assert sim.time == before[2]

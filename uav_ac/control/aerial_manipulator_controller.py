@@ -21,10 +21,12 @@ class AerialManipulatorController:
         self.arm_kp = float(arm_kp)
         self.arm_kd = float(arm_kd)
         self._reference_index = 0
+        self.saturation_count = 0
 
     def reset(self):
         self.flight_controller.reset()
         self._reference_index = 0
+        self.saturation_count = 0
 
     def step(self, reference: AerialManipulatorReference) -> AerialManipulatorCommand:
         if not isinstance(reference, AerialManipulatorReference):
@@ -52,8 +54,20 @@ class AerialManipulatorController:
         com_body = self.quad.R().T @ (self.robot.center_of_mass-self.quad.position)
         gravity_body = self.quad.R().T @ np.array([0., 0., self.robot.mass*self.quad.g])
         com_moment = -np.cross(com_body, gravity_body)
-        return AerialManipulatorCommand(
-            flight.thrust, flight.moment+com_moment, torque, qref[11])
+        moment = flight.moment+com_moment
+        rotor_forces = self.quad._allocate_rotor_forces(flight.thrust, moment)
+        torque_lower = self.robot.limits.joint_torque_lower
+        torque_upper = self.robot.limits.joint_torque_upper
+        rotor_saturated = (
+            not np.isclose(flight.thrust,
+                           np.clip(flight.thrust, 4*self.quad.min_thrust,
+                                   4*self.quad.max_thrust), atol=1e-10)
+            or np.any(rotor_forces <= self.quad.min_thrust+1e-10)
+            or np.any(rotor_forces >= self.quad.max_thrust-1e-10))
+        arm_saturated = np.any(torque < torque_lower) or np.any(torque > torque_upper)
+        if rotor_saturated or arm_saturated:
+            self.saturation_count += 1
+        return AerialManipulatorCommand(flight.thrust, moment, torque, qref[11])
 
 
 def _yaw(quaternion):

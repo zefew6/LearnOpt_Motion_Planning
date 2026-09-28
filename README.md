@@ -193,6 +193,17 @@ To open a trained reference-free gate-racing policy in the native viewer:
 
 This path uses `planner: none`; the policy observes the next gates directly and drives normalized thrust/body moments. It does not construct a trajectory or invoke GCOPTER.
 
+The aerial-manipulator pick/place demo uses its own scene, task settings, and
+8-D whole-body planner while retaining the existing flight entry point:
+
+```bash
+.venv/bin/python -m uav_ac.main --config configs/aerial_manipulator_pick_place.yaml
+```
+
+The V1 payload follows the grasp frame kinematically and does not add mass or
+contact dynamics. See the [planning guide](uav_ac/planning/README.md) for the
+planner and validation details.
+
 For GCOPTER, keep `speed` as the shared velocity bound. `gcopter:` exposes trajectory scale (`length_per_piece`, `time_weight`), dynamic limits (`max_acceleration`, `max_body_rate`), soft-constraint weights, and optimizer convergence settings. `gcs:` exposes the Bézier graph optimization and solver settings; `mpc:` exposes NMPC horizon, tracking weights, and solver settings; `cascaded:` exposes response time constants, damping, and altitude integration. Mass, thrust, tilt, and flight-speed limits remain in the selected XML vehicle.
 
 ## Optional MPC and RL workflows

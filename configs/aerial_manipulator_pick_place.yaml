@@ -1,0 +1,33 @@
+task: aerial_pick_place
+scene: aerial_manipulator_pick_place
+planner: aerial_manipulator_gcopter
+controller: cascaded
+control_dt: 0.01
+seed: 7
+visualize: true
+wind: none
+
+pick_place:
+  pick_position_ned: [0.25, 0.0, -0.435]
+  place_position_ned: [0.65, 0.0, -0.435]
+  pick_yaw: 0.0
+  place_yaw: 0.0
+  pick_nominal_joints: [0.0, 0.0, 0.0, 0.0]
+  place_nominal_joints: [0.0, 0.0, 0.0, 0.0]
+  gripper_open: 0.060
+  gripper_closed: 0.025
+  position_tolerance: 0.02
+  velocity_tolerance: 0.05
+  angular_velocity_tolerance: 0.2
+  settle_time: 0.30
+  event_timeout: 10.0
+
+aerial_manipulator_gcopter:
+  pieces: 6
+  time_weight: 2.0
+  max_speed: 2.0
+  max_acceleration: 3.0
+  obstacle_clearance: 0.05
+  obstacle_weight: 20000.0
+  integral_resolution: 6
+  max_iterations: 60
