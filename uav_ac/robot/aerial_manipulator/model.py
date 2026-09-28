@@ -72,6 +72,32 @@ class AerialManipulatorModel:
         self._environment_geoms = [g for g in range(model.ngeom)
                                    if model.geom_bodyid[g] not in self._descendant_bodies
                                    and (model.geom_contype[g] or model.geom_conaffinity[g])]
+        self._body_ids = {
+            _name(model, mujoco.mjtObj.mjOBJ_BODY, body): body
+            for body in range(model.nbody)
+        }
+        self._body_joint_ancestors = np.zeros((model.nbody, len(self.arm_joints)), dtype=bool)
+        for body in range(model.nbody):
+            for joint_index, joint in enumerate(self.arm_joints):
+                self._body_joint_ancestors[body, joint_index] = self._joint_is_ancestor(
+                    body, int(model.jnt_bodyid[joint]))
+        self._self_collision_pairs = tuple(
+            (a, b) for index, a in enumerate(self._robot_geoms)
+            for b in self._robot_geoms[index+1:]
+            if not self._adjacent_geoms(a, b) and self._collision_masks_allow(a, b))
+        self._environment_collision_pairs = tuple(
+            (a, b) for a in self._robot_geoms for b in self._environment_geoms
+            if self._collision_masks_allow(a, b))
+        payload_body = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "payload_marker")
+        self._payload_mocap = (int(model.body_mocapid[payload_body])
+                               if payload_body >= 0 else -1)
+        self._payload_geom = mujoco.mj_name2id(
+            model, mujoco.mjtObj.mjOBJ_GEOM, "payload_marker_geom")
+        self._gripper_body_ids = {
+            self._body_ids[name] for name in
+            ("gripper_palm_body", "gripper_left_body", "gripper_right_body")
+            if name in self._body_ids
+        }
 
     def _find_descendants(self):
         result = set()
@@ -137,6 +163,8 @@ class AerialManipulatorModel:
         d = self._scratch
         d.qpos[:] = live.qpos
         d.qvel[:] = 0.0
+        d.mocap_pos[:] = live.mocap_pos
+        d.mocap_quat[:] = live.mocap_quat
         q = self._configuration(configuration, check_limits=check_limits)
         v = np.zeros(NV_PUBLIC) if velocity is None else self._velocity(velocity)
         bq, bv = self.base_qpos, self.base_dof
@@ -226,26 +254,39 @@ class AerialManipulatorModel:
         points = np.asarray(local_points, dtype=float)
         if points.shape != (len(names), 3) or not np.all(np.isfinite(points)):
             raise ValueError("local_points must be a finite (len(body_names), 3) array")
-        body_ids = np.asarray([
-            _id(self.model, mujoco.mjtObj.mjOBJ_BODY, name) for name in names
-        ], dtype=int)
+        try:
+            body_ids = np.asarray([self._body_ids[name] for name in names], dtype=int)
+        except KeyError as error:
+            raise ValueError(f"unknown body name: {error.args[0]}") from error
         d, q, _ = self._prepare(configuration, check_limits=check_limits)
-        positions = np.empty_like(points)
+        rotations = d.xmat[body_ids].reshape(-1, 3, 3)
+        native_points = d.xpos[body_ids] + np.einsum("nij,nj->ni", rotations, points)
+        positions = native_points @ S
         jacobians = np.zeros((len(points), 3, 8))
-        yaw_axis = np.array([0.0, 0.0, 1.0])
-        for index, (body_id, local_point) in enumerate(zip(body_ids, points, strict=True)):
-            body_rotation = d.xmat[body_id].reshape(3, 3)
-            point_ned = S @ (d.xpos[body_id] + body_rotation @ local_point)
-            positions[index] = point_ned
-            jacobians[index, :, :3] = np.eye(3)
-            jacobians[index, :, 3] = np.cross(yaw_axis, point_ned - q[:3])
-            native_point = S @ point_ned
-            for joint_index, joint_id in enumerate(self.arm_joints):
-                if not self._joint_is_ancestor(body_id, int(self.model.jnt_bodyid[joint_id])):
-                    continue
-                jacobians[index, :, 4 + joint_index] = S @ np.cross(
-                    d.xaxis[joint_id], native_point - d.xanchor[joint_id])
+        jacobians[:, :, :3] = np.eye(3)
+        jacobians[:, :, 3] = np.cross(
+            np.array([0.0, 0.0, 1.0]), positions-q[:3])
+        axes = d.xaxis[self.arm_joints]
+        anchors = d.xanchor[self.arm_joints]
+        columns = np.cross(axes[None, :, :],
+                           native_points[:, None, :]-anchors[None, :, :]) @ S
+        columns *= self._body_joint_ancestors[body_ids, :, None]
+        jacobians[:, :, 4:] = columns.transpose(0, 2, 1)
         return positions, jacobians
+
+    def point_positions(self, configuration, body_names, local_points, *, check_limits=True):
+        """Return NED positions for batches of body-local points without Jacobians."""
+        names = tuple(body_names)
+        points = np.asarray(local_points, dtype=float)
+        if points.shape != (len(names), 3) or not np.all(np.isfinite(points)):
+            raise ValueError("local_points must be a finite (len(body_names), 3) array")
+        try:
+            body_ids = np.asarray([self._body_ids[name] for name in names], dtype=int)
+        except KeyError as error:
+            raise ValueError(f"unknown body name: {error.args[0]}") from error
+        d, _, _ = self._prepare(configuration, check_limits=check_limits)
+        rotations = d.xmat[body_ids].reshape(-1, 3, 3)
+        return (d.xpos[body_ids] + np.einsum("nij,nj->ni", rotations, points)) @ S
 
     def _joint_is_ancestor(self, body_id, joint_body_id):
         while body_id > 0:
@@ -353,7 +394,9 @@ class AerialManipulatorModel:
                                      "arm_joint_3_Nm", "left_gripper_servo_N"),
                 "gripper_reduction": "ideal symmetric fingers; servo input is left actuator force"}
 
-    def check_collision(self, configuration=None, clearance=0.0):
+    def check_collision(self, configuration=None, clearance=0.0, *,
+                        self_clearance=None, payload_position_ned=None,
+                        payload_radius=None, payload_attached=False):
         """Return signed distances and named pairs for one static configuration.
 
         This is a point-configuration check; it does not certify the swept volume
@@ -362,28 +405,85 @@ class AerialManipulatorModel:
         clearance = float(clearance)
         if not np.isfinite(clearance) or clearance < 0:
             raise ValueError("clearance must be finite and non-negative")
+        self_clearance = clearance if self_clearance is None else float(self_clearance)
+        if not np.isfinite(self_clearance) or self_clearance < 0:
+            raise ValueError("self_clearance must be finite and non-negative")
         d, _, _ = self._prepare(configuration)
         pairs, minimum = [], np.inf
-        candidates = [(a, b) for i, a in enumerate(self._robot_geoms)
-                      for b in self._robot_geoms[i+1:]
-                      if not self._adjacent_geoms(a, b) and self._collision_masks_allow(a, b)]
-        candidates += [(a, b) for a in self._robot_geoms for b in self._environment_geoms
-                       if self._collision_masks_allow(a, b)]
-        for a, b in candidates:
+        minimum_self = minimum_world = np.inf
+        for a, b in self._self_collision_pairs:
             line = np.zeros(6)
             distance = float(mujoco.mj_geomDistance(self.model, d, a, b, 1e6, line))
             minimum = min(minimum, distance)
+            minimum_self = min(minimum_self, distance)
+            if distance <= self_clearance:
+                pairs.append({"geoms": (_name(self.model, mujoco.mjtObj.mjOBJ_GEOM, a),
+                                         _name(self.model, mujoco.mjtObj.mjOBJ_GEOM, b)),
+                              "distance": distance, "points_ned": (S@line[:3], S@line[3:])})
+        for a, b in self._environment_collision_pairs:
+            line = np.zeros(6)
+            distance = float(mujoco.mj_geomDistance(self.model, d, a, b, 1e6, line))
+            minimum = min(minimum, distance)
+            minimum_world = min(minimum_world, distance)
             if distance <= clearance:
                 pairs.append({"geoms": (_name(self.model, mujoco.mjtObj.mjOBJ_GEOM, a),
                                          _name(self.model, mujoco.mjtObj.mjOBJ_GEOM, b)),
                               "distance": distance, "points_ned": (S@line[:3], S@line[3:])})
+        if payload_attached:
+            if payload_position_ned is not None:
+                raise ValueError("provide either payload_position_ned or payload_attached")
+            if self.grasp_site < 0:
+                raise ValueError("robot model does not provide grasp_frame")
+            payload_position_ned = S@d.site_xpos[self.grasp_site]
+        if payload_position_ned is not None:
+            if self._payload_mocap < 0 or self._payload_geom < 0:
+                raise ValueError("scene does not provide payload_marker and payload_marker_geom")
+            payload = np.asarray(payload_position_ned, dtype=float)
+            radius = (float(self.model.geom_size[self._payload_geom, 0])
+                      if payload_radius is None else float(payload_radius))
+            if (payload.shape != (3,) or not np.all(np.isfinite(payload))
+                    or not np.isfinite(radius) or radius <= 0):
+                raise ValueError("payload position and radius must be finite and valid")
+            if not np.isclose(radius, self.model.geom_size[self._payload_geom, 0]):
+                raise ValueError("payload radius must match the scene payload marker sphere")
+            d.mocap_pos[self._payload_mocap] = S@payload
+            mujoco.mj_forward(self.model, d)
+            payload_pairs = [(self._payload_geom, geom) for geom in
+                             self._robot_geoms+self._environment_geoms
+                             if int(self.model.geom_bodyid[geom]) not in self._gripper_body_ids]
+            for a, b in payload_pairs:
+                line = np.zeros(6)
+                distance = float(mujoco.mj_geomDistance(self.model, d, a, b, 1e6, line))
+                minimum = min(minimum, distance)
+                is_robot = int(self.model.geom_bodyid[b]) in self._descendant_bodies
+                threshold = self_clearance if is_robot else clearance
+                if is_robot:
+                    minimum_self = min(minimum_self, distance)
+                else:
+                    minimum_world = min(minimum_world, distance)
+                if distance <= threshold:
+                    pairs.append({"geoms": (_name(self.model, mujoco.mjtObj.mjOBJ_GEOM, a),
+                                             _name(self.model, mujoco.mjtObj.mjOBJ_GEOM, b)),
+                                  "distance": distance,
+                                  "points_ned": (S@line[:3], S@line[3:])})
         pairs.sort(key=lambda x: x["distance"])
         return {"collision": any(p["distance"] <= 0 for p in pairs),
-                "minimum_distance": minimum, "pairs": pairs}
+                "minimum_distance": minimum, "minimum_world_distance": minimum_world,
+                "minimum_self_distance": minimum_self, "pairs": pairs}
 
     def _adjacent_geoms(self, ga, gb):
         ba, bb = int(self.model.geom_bodyid[ga]), int(self.model.geom_bodyid[gb])
-        return ba == bb or self.model.body_parentid[ba] == bb or self.model.body_parentid[bb] == ba
+        if ba == bb:
+            return True
+        for ancestor, descendant in ((ba, bb), (bb, ba)):
+            body = descendant
+            for _ in range(2):
+                body = int(self.model.body_parentid[body])
+                if body == ancestor:
+                    return True
+                if body == 0:
+                    break
+        return False
 
     def _collision_masks_allow(self, ga, gb):
         return bool((self.model.geom_contype[ga] & self.model.geom_conaffinity[gb])

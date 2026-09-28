@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from uav_ac.planning.search.rrt_connect import RRTConnect
-from uav_ac.planning.trajectory.gcopter.aerial_manipulator.planner import (
+from uav_ac.planning.trajectory.aerial_manipulator_minco.planner import (
     _resample_preserving_corners, _unwrap_path_yaw,
 )
 

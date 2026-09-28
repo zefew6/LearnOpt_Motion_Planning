@@ -202,7 +202,22 @@ The aerial-manipulator pick/place demo uses its own scene, task settings, and
 
 The V1 payload follows the grasp frame kinematically and does not add mass or
 contact dynamics. See the [planning guide](uav_ac/planning/README.md) for the
-planner and validation details.
+planner and validation details, and the [aerial-manipulator implementation
+notes](uav_ac/planning/trajectory/aerial_manipulator_minco/AERIAL_MANIPULATOR_PICK_PLACE_CODEX_README.md) for the crowded-scene
+geometry and acceptance procedure.
+
+The pick/place scene contains six fixed axis-aligned obstacles and plans both
+legs before execution. To measure cold planning (ESDF build, search, optimization,
+and dense validation) without opening the viewer, run:
+
+```bash
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 .venv/bin/python tests/benchmark_aerial_manipulator_minco.py
+```
+
+The benchmark runs five fresh seed-7 plans and seeds 0–9, then reports stage
+timings and validation results. Each run uses the configured 5-second planning
+budget; the benchmark exits unsuccessfully if any run exceeds it or fails
+validation.
 
 For GCOPTER, keep `speed` as the shared velocity bound. `gcopter:` exposes trajectory scale (`length_per_piece`, `time_weight`), dynamic limits (`max_acceleration`, `max_body_rate`), soft-constraint weights, and optimizer convergence settings. `gcs:` exposes the Bézier graph optimization and solver settings; `mpc:` exposes NMPC horizon, tracking weights, and solver settings; `cascaded:` exposes response time constants, damping, and altitude integration. Mass, thrust, tilt, and flight-speed limits remain in the selected XML vehicle.
 

@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import numpy as np
 from scipy.spatial.transform import Rotation
 
-from ..mappings import polynomial_basis_matrix
+from ..gcopter.mappings import polynomial_basis_matrix
 
 
 @dataclass(frozen=True)

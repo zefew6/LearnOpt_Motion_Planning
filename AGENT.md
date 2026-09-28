@@ -56,7 +56,8 @@ RL training and evaluation dispatch through the explicit registry in `uav_ac/rl/
 
 `configs/flight.yaml` has three required selectors: `scene`, `planner`, and `controller`. Scene names resolve only within `uav_ac/simulation/models/`; adding a scene requires adding an XML file, not another YAML descriptor.
 
-- Planner values: `mini_snap`, `gcopter`, `gcs`, `bmtp`.
+- Planner values: `mini_snap`, `gcopter`, `gcs`, `bmtp`, and the task-owned
+  `aerial_manipulator_minco` planner for `aerial_pick_place`.
 - Controller values: `cascaded`, `mpc`, `rl`.
 - Common optional values: `speed`, `control_dt`, `wind`, `visualize`, and `seed`.
 - `bmtp`, `gcopter`, `gcs`, `cascaded`, `mpc`, `rl`, and `wind_options` may coexist as presets. Runtime reads only the selected planner, controller, and wind block; BMTP always renders its selected initialization and optimized trajectory.
@@ -82,9 +83,8 @@ mission scenes remain under `uav_ac/simulation/models/`. The aerial manipulator 
 gripper opening state. The base controller uses total vehicle mass and a
 configuration-dependent diagonal inertia approximation; MuJoCo integrates the
 full coupled multibody dynamics. Generic link and gripper masses/dimensions are
-simulation assumptions. Run
-`configs/aerial_manipulator_hover.yaml` for the headless hover and slow-arm
-demonstration, or set `visualize: true` to use the MuJoCo viewer.
+simulation assumptions. Whole-body pick/place planning uses the dedicated
+`aerial_manipulator_pick_place` scene and `aerial_manipulator_minco` planner.
 
 Whole-body planning code should use `simulation.robot` rather than MuJoCo data
 arrays. Its 12-value configuration is NED position, scalar-first

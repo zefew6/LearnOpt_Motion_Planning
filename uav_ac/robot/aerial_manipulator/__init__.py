@@ -81,6 +81,10 @@ class AerialManipulator:
         return self._model.point_positions_and_jacobians(
             configuration, body_names, local_points, check_limits=check_limits)
 
+    def point_positions(self, configuration, body_names, local_points, *, check_limits=True):
+        return self._model.point_positions(
+            configuration, body_names, local_points, check_limits=check_limits)
+
     def collision_geometries(self):
         return self._model.collision_geometries()
 
@@ -93,8 +97,13 @@ class AerialManipulator:
     def dynamics(self, configuration=None, velocity=None) -> dict:
         return self._model.dynamics(configuration, velocity)
 
-    def check_collision(self, configuration=None, clearance=0.0) -> dict:
-        return self._model.check_collision(configuration, clearance)
+    def check_collision(self, configuration=None, clearance=0.0, *,
+                        self_clearance=None, payload_position_ned=None,
+                        payload_radius=None, payload_attached=False) -> dict:
+        return self._model.check_collision(
+            configuration, clearance, self_clearance=self_clearance,
+            payload_position_ned=payload_position_ned, payload_radius=payload_radius,
+            payload_attached=payload_attached)
 
     def integrate(self, configuration, tangent_delta) -> np.ndarray:
         return self._model.integrate(configuration, tangent_delta)

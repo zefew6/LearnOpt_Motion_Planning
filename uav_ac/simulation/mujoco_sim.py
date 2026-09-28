@@ -488,6 +488,16 @@ class MujocoSimulation:
         self.data.mocap_pos[mocap_id] = ENU_TO_NED @ position
         mujoco.mj_forward(self.model, self.data)
 
+    def get_mocap_position_ned(self, body_name: str) -> np.ndarray:
+        """Return a named kinematic marker's world position in NED coordinates."""
+        body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, body_name)
+        if body_id < 0:
+            raise ValueError(f"unknown MuJoCo body: {body_name}")
+        mocap_id = int(self.model.body_mocapid[body_id])
+        if mocap_id < 0:
+            raise ValueError(f"MuJoCo body '{body_name}' is not a mocap body")
+        return ENU_TO_NED @ self.data.mocap_pos[mocap_id]
+
     def get_planning_obstacle_points(
             self,
             spacing: float = 0.5,

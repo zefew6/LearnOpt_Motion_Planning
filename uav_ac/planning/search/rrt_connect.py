@@ -28,7 +28,8 @@ class RRTConnect:
     def __init__(
             self, lower_bounds, upper_bounds, distance_fn, interpolate_fn,
             state_valid_fn, edge_valid_fn, step_size, *, max_iterations=4000,
-            goal_bias=0.05, rng=None):
+            goal_bias=0.05, rng=None, distance_batch_fn=None,
+            simplify_edge_valid_fn=None, sample_fn=None):
         self.lower = np.asarray(lower_bounds, dtype=float)
         self.upper = np.asarray(upper_bounds, dtype=float)
         if (self.lower.ndim != 1 or self.upper.shape != self.lower.shape
@@ -37,30 +38,48 @@ class RRTConnect:
         if step_size <= 0 or max_iterations <= 0 or not 0 <= goal_bias <= 1:
             raise ValueError("invalid RRT-Connect settings")
         self.distance_fn = distance_fn
+        self.distance_batch_fn = distance_batch_fn
         self.interpolate_fn = interpolate_fn
         self.state_valid_fn = state_valid_fn
         self.edge_valid_fn = edge_valid_fn
+        self.simplify_edge_valid_fn = (edge_valid_fn if simplify_edge_valid_fn is None
+                                       else simplify_edge_valid_fn)
+        self.sample_fn = sample_fn
         self.step_size = float(step_size)
         self.max_iterations = int(max_iterations)
         self.goal_bias = float(goal_bias)
         self.rng = np.random.default_rng() if rng is None else rng
+        self.last_iterations = 0
+        self.last_node_count = 0
 
     def plan(self, start, goal) -> np.ndarray:
         start, goal = self._state(start), self._state(goal)
         if not self.state_valid_fn(start) or not self.state_valid_fn(goal):
+            self.last_iterations = 0
+            self.last_node_count = 2
             raise ValueError("RRT start and goal must be valid states")
         if self.edge_valid_fn(start, goal):
             return np.vstack((start, goal))
         first = _Tree([start.copy()], [-1], True)
         second = _Tree([goal.copy()], [-1], False)
-        for _ in range(self.max_iterations):
-            target = goal if self.rng.random() < self.goal_bias else self.rng.uniform(self.lower, self.upper)
+        self.last_iterations = 0
+        self.last_node_count = 2
+        for iteration in range(self.max_iterations):
+            self.last_iterations = iteration+1
+            if self.rng.random() < self.goal_bias:
+                target = goal
+            elif self.sample_fn is None:
+                target = self.rng.uniform(self.lower, self.upper)
+            else:
+                target = self._state(self.sample_fn())
             status, new_index = self._extend(first, target)
             if status is not ExtendStatus.TRAPPED:
                 connected, other_index = self._connect(second, first.states[new_index])
                 if connected:
+                    self.last_node_count = len(first.states)+len(second.states)
                     return self._join(first, new_index, second, other_index)
             first, second = second, first
+            self.last_node_count = len(first.states)+len(second.states)
         raise RuntimeError(f"RRT-Connect failed after {self.max_iterations} iterations")
 
     def simplify(self, path: np.ndarray) -> np.ndarray:
@@ -71,9 +90,10 @@ class RRTConnect:
         index = 0
         while index < len(path)-1:
             candidate = len(path)-1
-            while candidate > index+1 and not self.edge_valid_fn(path[index], path[candidate]):
+            while (candidate > index+1
+                   and not self.simplify_edge_valid_fn(path[index], path[candidate])):
                 candidate -= 1
-            if not self.edge_valid_fn(path[index], path[candidate]):
+            if not self.simplify_edge_valid_fn(path[index], path[candidate]):
                 raise ValueError("input path contains an invalid edge")
             kept.append(path[candidate])
             index = candidate
@@ -86,8 +106,11 @@ class RRTConnect:
         return state.copy()
 
     def _extend(self, tree: _Tree, target: np.ndarray):
-        nearest = min(range(len(tree.states)),
-                      key=lambda i: self.distance_fn(tree.states[i], target))
+        if self.distance_batch_fn is None:
+            nearest = min(range(len(tree.states)),
+                          key=lambda i: self.distance_fn(tree.states[i], target))
+        else:
+            nearest = int(np.argmin(self.distance_batch_fn(np.asarray(tree.states), target)))
         source = tree.states[nearest]
         distance = float(self.distance_fn(source, target))
         if distance <= 1.0e-12:

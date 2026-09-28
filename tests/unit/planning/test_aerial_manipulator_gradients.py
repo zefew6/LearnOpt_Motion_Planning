@@ -1,16 +1,17 @@
 import numpy as np
 
 from uav_ac.planning.geometry.esdf import ESDF
-from uav_ac.planning.trajectory.gcopter.aerial_manipulator.config import (
-    AerialManipulatorGCOPTERConfig,
+from uav_ac.planning.trajectory.aerial_manipulator_minco.config import (
+    AerialManipulatorMINCOConfig,
 )
-from uav_ac.planning.trajectory.gcopter.aerial_manipulator.evaluator import (
+from uav_ac.planning.trajectory.aerial_manipulator_minco.evaluator import (
     AerialManipulatorTrajectoryEvaluator,
 )
-from uav_ac.planning.trajectory.gcopter.aerial_manipulator.planner import (
-    AerialManipulatorGCOPTER,
+from uav_ac.planning.trajectory.aerial_manipulator_minco.planner import (
+    AerialManipulatorMINCO,
+    _time_stretch,
 )
-from uav_ac.planning.trajectory.gcopter.aerial_manipulator.types import (
+from uav_ac.planning.trajectory.aerial_manipulator_minco.types import (
     AerialManipulatorTrajectory,
 )
 from uav_ac.planning.trajectory.gcopter.mappings import inverse_time
@@ -23,7 +24,7 @@ def test_analytic_whole_body_sample_gradient_matches_finite_difference():
         "uav_ac/simulation/models/aerial_manipulator_pick_place.xml",
         record_actual_trajectory=False)
     robot = simulation.robot
-    config = AerialManipulatorGCOPTERConfig(
+    config = AerialManipulatorMINCOConfig(
         max_speed=.2, max_acceleration=.5, max_body_rate=.3,
         max_yaw_rate=.8, max_yaw_acceleration=.5,
         joint_velocity_limits=(.1,)*4, joint_acceleration_limits=(.2,)*4,
@@ -34,8 +35,8 @@ def test_analytic_whole_body_sample_gradient_matches_finite_difference():
     evaluator = AerialManipulatorTrajectoryEvaluator(
         robot, esdf, simulation.quad, config, simulation.space_limits,
         .06, carry_payload=True)
-    assert evaluator.self_pairs
-    assert evaluator.payload_pairs
+    assert len(evaluator.self_pairs)
+    assert len(evaluator.payload_pairs)
     assert all(evaluator.geometry[sphere][0] not in {
         "gripper_palm_body", "gripper_left_body", "gripper_right_body"
     } for sphere, _ in evaluator.payload_pairs)
@@ -71,7 +72,7 @@ def test_complete_shared_total_time_and_minco_adjoint_gradient():
         "uav_ac/simulation/models/aerial_manipulator_pick_place.xml",
         record_actual_trajectory=False)
     robot = simulation.robot
-    config = AerialManipulatorGCOPTERConfig(
+    config = AerialManipulatorMINCOConfig(
         pieces=2, integral_resolution=2, max_iterations=2,
         obstacle_clearance=.02, constraint_weight=10.)
     esdf = ESDF.from_axis_aligned_boxes(
@@ -81,7 +82,7 @@ def test_complete_shared_total_time_and_minco_adjoint_gradient():
         robot, esdf, simulation.quad, config, simulation.space_limits,
         .06, carry_payload=False)
     start_q = robot.configuration
-    from uav_ac.planning.trajectory.gcopter.aerial_manipulator.task_targets import quaternion_yaw
+    from uav_ac.planning.trajectory.aerial_manipulator_minco.task_targets import quaternion_yaw
     start = np.r_[start_q[:3], quaternion_yaw(start_q[3:7]), start_q[7:11]]
     goal = start.copy(); goal[0] += .12; goal[3] += .03
     boundary = np.zeros((3, 8)); boundary[0] = start
@@ -89,7 +90,7 @@ def test_complete_shared_total_time_and_minco_adjoint_gradient():
     minco = MINCOQuintic(boundary, tail, 2)
     midpoint = .5*(start+goal)
     variables = np.r_[midpoint, inverse_time(np.array([1.0]))]
-    planner = AerialManipulatorGCOPTER(config)
+    planner = AerialManipulatorMINCO(config)
     cost, gradient = planner._objective(variables, minco, 2, evaluator)
     epsilon = 2e-6
     for index in (0, 2, 3, 4, 8):
@@ -120,3 +121,76 @@ def test_flatness_references_keep_quaternion_sign_continuous_across_pi():
     second = trajectory.reference(.9, robot, gripper_opening=.06).configuration[3:7]
     assert np.dot(first, second) > 0.
     assert np.dot(second, robot.configuration[3:7]) > 0.
+
+
+def test_uniform_time_stretch_preserves_path_and_scales_derivatives():
+    coefficients = np.zeros((1, 6, 8))
+    coefficients[0, 0] = np.array([0., 0., -1., .2, 0., 0., 0., 0.])
+    coefficients[0, 1] = np.array([.3, -.1, .2, .4, .1, 0., 0., -.1])
+    coefficients[0, 2] = np.array([.1, .05, 0., -.1, .02, 0., .03, 0.])
+    path = np.array([[0., 0., -1., .2, 0., 0., 0., 0.],
+                     [.4, -.05, -.8, .5, .12, 0., .03, -.1]])
+    trajectory = AerialManipulatorTrajectory(
+        np.array([1.2]), coefficients, path, 0., 0, True, "test")
+    scale = 1.3
+    stretched = _time_stretch(trajectory, scale)
+    for time in (.0, .2, .7, 1.2):
+        np.testing.assert_allclose(stretched.evaluate(scale*time),
+                                   trajectory.evaluate(time), atol=1e-12)
+        np.testing.assert_allclose(stretched.evaluate(scale*time, 1),
+                                   trajectory.evaluate(time, 1)/scale, atol=1e-12)
+        np.testing.assert_allclose(stretched.evaluate(scale*time, 2),
+                                   trajectory.evaluate(time, 2)/scale**2, atol=1e-12)
+
+
+def test_esdf_out_of_bounds_penalty_gradient_points_back_into_the_map():
+    simulation = MujocoSimulation(
+        "uav_ac/simulation/models/aerial_manipulator_pick_place.xml",
+        record_actual_trajectory=False)
+    robot = simulation.robot
+    config = AerialManipulatorMINCOConfig(obstacle_clearance=.05)
+    esdf = ESDF.from_axis_aligned_boxes(
+        np.empty((0, 6)), [-2., -2., -3.], [2., 2., 1.], .2, ground_height=0.)
+    evaluator = AerialManipulatorTrajectoryEvaluator(
+        robot, esdf, simulation.quad, config, simulation.space_limits, .06, False)
+    sigma = np.r_[2.05, 0., -1., 0., np.zeros(4)]
+    value, gradient = evaluator.collision_cost_gradient(sigma)[:2]
+    epsilon = 1e-6
+    plus, minus = sigma.copy(), sigma.copy()
+    plus[0] += epsilon
+    minus[0] -= epsilon
+    numerical = (evaluator.collision_cost_gradient(plus)[0]
+                 -evaluator.collision_cost_gradient(minus)[0])/(2*epsilon)
+    assert value > 0.
+    np.testing.assert_allclose(gradient[0], numerical, rtol=2e-4, atol=2e-3)
+
+
+def test_dense_validation_checks_collision_with_flatness_recovered_attitude():
+    simulation = MujocoSimulation(
+        "uav_ac/simulation/models/aerial_manipulator_pick_place.xml",
+        record_actual_trajectory=False)
+    robot = simulation.robot
+    config = AerialManipulatorMINCOConfig(pieces=1, validation_dt=.05)
+    esdf = ESDF.from_axis_aligned_boxes(
+        np.empty((0, 6)), [-2., -2., -3.], [2., 2., 1.], .2, ground_height=0.)
+    evaluator = AerialManipulatorTrajectoryEvaluator(
+        robot, esdf, simulation.quad, config, simulation.space_limits, .06, False)
+    coefficients = np.zeros((1, 6, 8))
+    coefficients[0, 0, :3] = [0., 0., -1.]
+    coefficients[0, 2, 0] = .1
+    trajectory = AerialManipulatorTrajectory(
+        np.array([1.]), coefficients,
+        np.array([[0., 0., -1., 0., 0., 0., 0., 0.],
+                  [.1, 0., -1., 0., 0., 0., 0., 0.]]),
+        0., 0, True, "test")
+    seen = []
+    original = robot.check_collision
+
+    def record(configuration=None, *args, **kwargs):
+        seen.append(np.asarray(configuration)[3:7].copy())
+        return original(configuration, *args, **kwargs)
+
+    robot.check_collision = record
+    evaluator.dense_validate(trajectory)
+    robot.check_collision = original
+    assert any(np.linalg.norm(quaternion[1:3]) > 1e-3 for quaternion in seen)

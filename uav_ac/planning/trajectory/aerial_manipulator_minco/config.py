@@ -6,7 +6,7 @@ import numpy as np
 
 
 @dataclass(frozen=True)
-class AerialManipulatorGCOPTERConfig:
+class AerialManipulatorMINCOConfig:
     pieces: int = 6
     jerk_weights: tuple[float, ...] = (1., 1., 1., .2, .08, .08, .08, .08)
     time_weight: float = 2.0
@@ -18,6 +18,7 @@ class AerialManipulatorGCOPTERConfig:
     joint_velocity_limits: tuple[float, ...] = (1.5, 1.5, 1.5, 1.5)
     joint_acceleration_limits: tuple[float, ...] = (4., 4., 4., 4.)
     obstacle_clearance: float = .05
+    esdf_interpolation_margin: float = .015
     self_clearance: float = .015
     payload_radius: float = .035
     obstacle_weight: float = 2.0e4
@@ -30,6 +31,8 @@ class AerialManipulatorGCOPTERConfig:
     gradient_tolerance: float = 1.0e-4
     rrt_step_size: float = .25
     rrt_max_iterations: int = 2500
+    rrt_goal_bias: float = .1
+    rrt_edge_position_resolution: float = .08
     position_scale: float = .5
     yaw_scale: float = .7
     joint_scales: tuple[float, ...] = (.8, .8, .8, .8)
@@ -38,6 +41,8 @@ class AerialManipulatorGCOPTERConfig:
     edge_joint_resolution: float = .08
     validation_dt: float = .025
     minimum_total_time: float = .15
+    planning_budget_s: float = 5.0
+    initial_duration_scale: float = 1.5
 
     def __post_init__(self):
         for name in ("pieces", "integral_resolution", "max_iterations",
@@ -56,16 +61,21 @@ class AerialManipulatorGCOPTERConfig:
             if values.shape != (expected,) or np.any(values < 0) or not np.all(np.isfinite(values)):
                 raise ValueError(f"{name} must contain {expected} finite non-negative values")
         positive = ("time_weight", "max_speed", "max_acceleration", "max_body_rate", "max_yaw_rate",
-                    "max_yaw_acceleration", "obstacle_clearance", "self_clearance",
+                    "max_yaw_acceleration", "obstacle_clearance",
+                    "esdf_interpolation_margin", "self_clearance",
                     "payload_radius", "obstacle_weight", "self_collision_weight",
                     "constraint_weight", "smoothing_epsilon", "gradient_tolerance",
                     "rrt_step_size", "position_scale", "yaw_scale",
                     "edge_position_resolution", "edge_yaw_resolution",
-                    "edge_joint_resolution", "validation_dt", "minimum_total_time")
+                    "edge_joint_resolution", "rrt_edge_position_resolution",
+                    "validation_dt", "minimum_total_time")
+        positive = positive + ("planning_budget_s", "initial_duration_scale")
         if any(isinstance(getattr(self, name), bool)
                or not np.isfinite(getattr(self, name))
                or getattr(self, name) <= 0 for name in positive):
             raise ValueError("continuous planner settings must be positive and finite")
+        if not np.isfinite(self.rrt_goal_bias) or not 0.0 <= self.rrt_goal_bias <= 1.0:
+            raise ValueError("rrt_goal_bias must lie in [0, 1]")
 
 
-__all__ = ["AerialManipulatorGCOPTERConfig"]
+__all__ = ["AerialManipulatorMINCOConfig"]

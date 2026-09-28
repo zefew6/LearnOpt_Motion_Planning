@@ -1,19 +1,21 @@
 task: aerial_pick_place
 scene: aerial_manipulator_pick_place
-planner: aerial_manipulator_gcopter
+planner: aerial_manipulator_minco
 controller: cascaded
 control_dt: 0.01
-seed: 7
+seed: 8
 visualize: true
 wind: none
 
 pick_place:
-  pick_position_ned: [0.25, 0.0, -0.435]
-  place_position_ned: [0.65, 0.0, -0.435]
+  # The pick target sits inside the open front of the bookshelf cubby. Joint 2
+  # bends the distal arm forward while the proximal link remains vertical.
+  pick_position_ned: [2.40, 0.0, -0.82]
+  place_position_ned: [4.0, 0.0, -0.435]
   pick_yaw: 0.0
   place_yaw: 0.0
-  pick_nominal_joints: [0.0, 0.0, 0.0, 0.0]
-  place_nominal_joints: [0.0, 0.0, 0.0, 0.0]
+  pick_nominal_joints: [0.0, 0.0, -1.5707963267948966, 0.0]
+  place_nominal_joints: [0.0, 0.0, -1.5707963267948966, 0.0]
   gripper_open: 0.060
   gripper_closed: 0.025
   position_tolerance: 0.02
@@ -22,12 +24,16 @@ pick_place:
   settle_time: 0.30
   event_timeout: 10.0
 
-aerial_manipulator_gcopter:
-  pieces: 6
-  time_weight: 2.0
+aerial_manipulator_minco:
+  pieces: 4
+  time_weight: 1.0
   max_speed: 2.0
   max_acceleration: 3.0
   obstacle_clearance: 0.05
   obstacle_weight: 20000.0
-  integral_resolution: 6
-  max_iterations: 60
+  integral_resolution: 4
+  max_iterations: 12
+  rrt_goal_bias: 0.3
+  rrt_step_size: 0.45
+  planning_budget_s: 5.0
+  initial_duration_scale: 2.5

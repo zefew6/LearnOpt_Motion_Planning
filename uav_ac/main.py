@@ -33,10 +33,9 @@ ROOT = Path(__file__).resolve().parents[1]
 MODEL_DIRECTORY = Path(__file__).resolve().parent / "simulation" / "models"
 DEFAULT_CONFIG = ROOT / "configs" / "flight.yaml"
 PLANNERS = {"none", "mini_snap", "gcopter", "gcs", "bmtp",
-            "aerial_manipulator_gcopter"}
+            "aerial_manipulator_minco"}
 CONTROLLERS = {"cascaded", "mpc", "rl"}
-TASKS = {"trajectory_tracking", "gate_racing", "aerial_manipulator_hover",
-         "aerial_pick_place"}
+TASKS = {"trajectory_tracking", "gate_racing", "aerial_pick_place"}
 
 
 class _UniqueLoader(yaml.SafeLoader):
@@ -80,7 +79,7 @@ def load_config(path: str | Path = DEFAULT_CONFIG) -> dict:
     _only(config, {
         "task", "scene", "planner", "controller", "speed", "control_dt", "wind",
         "visualize", "follow_camera", "seed", "duration", "rl", "cascaded", "bmtp", "gcopter",
-        "gcs", "mpc", "wind_options", "pick_place", "aerial_manipulator_gcopter",
+        "gcs", "mpc", "wind_options", "pick_place", "aerial_manipulator_minco",
     }, "flight")
     for required in ("scene", "planner", "controller"):
         if required not in config:
@@ -107,19 +106,12 @@ def load_config(path: str | Path = DEFAULT_CONFIG) -> dict:
             raise ValueError("gate_racing requires scene: gate_racing, planner: none, and controller: rl")
         if config.get("wind", "none") != "none":
             raise ValueError("gate_racing deployment does not support flight wind options")
-    elif config["task"] == "aerial_manipulator_hover":
-        if config["planner"] != "none" or config["controller"] != "cascaded":
-            raise ValueError("aerial_manipulator_hover requires planner: none and controller: cascaded")
-        if scene != "aerial_manipulator_hover":
-            raise ValueError("aerial_manipulator_hover requires scene: aerial_manipulator_hover")
-        if config.get("wind", "none") != "none":
-            raise ValueError("aerial manipulator hover demo requires wind: none")
     elif config["task"] == "aerial_pick_place":
-        if (config["planner"] != "aerial_manipulator_gcopter"
+        if (config["planner"] != "aerial_manipulator_minco"
                 or config["controller"] != "cascaded"
                 or scene != "aerial_manipulator_pick_place"):
             raise ValueError(
-                "aerial_pick_place requires its dedicated scene, aerial_manipulator_gcopter, "
+                "aerial_pick_place requires its dedicated scene, aerial_manipulator_minco, "
                 "and cascaded controller")
         if config.get("wind", "none") != "none":
             raise ValueError("aerial pick/place requires wind: none")
@@ -145,7 +137,7 @@ def load_config(path: str | Path = DEFAULT_CONFIG) -> dict:
 
     sections = {name: config.setdefault(name, {})
                 for name in ("rl", "cascaded", "bmtp", "gcopter", "gcs", "mpc",
-                             "wind_options", "aerial_manipulator_gcopter")}
+                             "wind_options", "aerial_manipulator_minco")}
     for name, values in sections.items():
         if not isinstance(values, dict):
             raise ValueError(f"{name} must be a mapping")
@@ -155,8 +147,8 @@ def load_config(path: str | Path = DEFAULT_CONFIG) -> dict:
     from uav_ac.control.mpc_controller import MPCConfig
     from uav_ac.planning.trajectory.bmtp import BMTPConfig
     from uav_ac.planning.trajectory.gcopter import GCOPTERConfig
-    from uav_ac.planning.trajectory.gcopter.aerial_manipulator import (
-        AerialManipulatorGCOPTERConfig,
+    from uav_ac.planning.trajectory.aerial_manipulator_minco import (
+        AerialManipulatorMINCOConfig,
     )
     from uav_ac.planning.trajectory.gcs import GCSConfig
 
@@ -171,10 +163,10 @@ def load_config(path: str | Path = DEFAULT_CONFIG) -> dict:
     _only(sections["mpc"], {f.name for f in fields(MPCConfig)} - {"dt"}, "mpc")
     _only(sections["wind_options"], {f.name for f in fields(GustingCrosswind)},
           "wind_options")
-    _only(sections["aerial_manipulator_gcopter"],
-          {f.name for f in fields(AerialManipulatorGCOPTERConfig)},
-          "aerial_manipulator_gcopter")
-    AerialManipulatorGCOPTERConfig(**sections["aerial_manipulator_gcopter"])
+    _only(sections["aerial_manipulator_minco"],
+          {f.name for f in fields(AerialManipulatorMINCOConfig)},
+          "aerial_manipulator_minco")
+    AerialManipulatorMINCOConfig(**sections["aerial_manipulator_minco"])
     pick_place = config.setdefault("pick_place", {})
     _only(pick_place, {
         "pick_position_ned", "place_position_ned", "pick_yaw", "place_yaw",
@@ -346,8 +338,6 @@ def run(config: dict) -> np.ndarray | dict:
     if config.get("task") == "aerial_pick_place":
         from uav_ac.tasks.aerial_pick_place import run_aerial_pick_place
         return run_aerial_pick_place(config)
-    if config.get("task") == "aerial_manipulator_hover":
-        return _run_aerial_manipulator_hover(config)
     planning_capacity = 2 if config["planner"] == "bmtp" else 0
     simulation = MujocoSimulation(
         config["scene"], planning_path_capacity=planning_capacity)
@@ -381,79 +371,6 @@ def run(config: dict) -> np.ndarray | dict:
     print(f"Finished: goal_error={distance:.2f}m | "
           f"collision={'yes' if simulation.collision_detected else 'no'}")
     return trajectory
-
-
-def _run_aerial_manipulator_hover(config: dict) -> dict:
-    """Hover while moving the four arm joints slowly; headless by default."""
-    from uav_ac.control.aerial_manipulator_controller import AerialManipulatorController
-    from uav_ac.robot.aerial_manipulator import AerialManipulatorReference
-
-    simulation = MujocoSimulation(config["scene"], record_actual_trajectory=False)
-    if not hasattr(simulation.robot, "forward_kinematics"):
-        raise ValueError("aerial_manipulator_hover scene is missing the arm model")
-    dt = simulation.quad.dt
-    flight_controller = CascadedController(simulation.quad.g, dt)
-    controller = AerialManipulatorController(flight_controller, simulation.robot, simulation.quad)
-    targets = np.array([0.0, 0.0, 0.0, 0.0])
-    initial_position = simulation.robot.state.base_state[:3].copy()
-    stable_position_error = 0.0
-    stable_tilt = 0.0
-    peak_joint_error = 0.0
-
-    def step():
-        nonlocal stable_position_error, stable_tilt, peak_joint_error
-        now = simulation.time
-        desired = targets.copy()
-        if now >= 5.0:
-            phase = now - 5.0
-            desired[1:] = [0.18*np.sin(0.45*phase),
-                           -0.16*np.sin(0.45*phase),
-                           0.12*np.sin(0.45*phase)]
-            gripper_opening = 0.045 + 0.022*np.sin(0.8*phase)
-        else:
-            gripper_opening = 0.045
-        state = simulation.robot.state
-        q = state.joint_positions
-        if now < 5.0:
-            stable_position_error = max(
-                stable_position_error,
-                float(np.linalg.norm(simulation.quad.position-initial_position)))
-            stable_tilt = max(stable_tilt, float(np.max(np.abs(simulation.quad.euler_angles[:2]))))
-        else:
-            peak_joint_error = max(peak_joint_error, float(np.max(np.abs(desired-q))))
-        configuration = simulation.robot.configuration
-        configuration[7:11] = desired
-        configuration[11] = gripper_opening
-        reference = AerialManipulatorReference(
-            configuration, np.zeros(11), np.zeros(11))
-        simulation.robot.apply(controller.step(reference))
-
-    def reset():
-        controller.reset()
-        simulation.robot.reset()
-
-    if config.get("visualize", False):
-        simulation.run_interactive(step, reset, chase_camera=config["follow_camera"])
-    else:
-        count = int(round(config["duration"] / dt))
-        for _ in range(count):
-            step()
-            simulation.step()
-            if simulation.collision_detected:
-                break
-        position_error = float(np.linalg.norm(simulation.robot.state.base_state[:3]-initial_position))
-        print(f"Aerial manipulator: time={simulation.time:.2f}s | "
-              f"position_error={position_error:.3f}m | "
-              f"stable_peak={stable_position_error:.3f}m/{np.rad2deg(stable_tilt):.2f}deg | "
-              f"joint_peak_error={peak_joint_error:.3f}rad | "
-              f"joints={np.array2string(simulation.robot.state.joint_positions, precision=3)} | "
-              f"collision={'yes' if simulation.collision_detected else 'no'}")
-    return {"position": simulation.robot.state.base_state[:3].copy(),
-            "joint_positions": simulation.robot.state.joint_positions.copy(),
-            "stable_peak_position_error": stable_position_error,
-            "stable_peak_tilt": stable_tilt,
-            "peak_joint_tracking_error": peak_joint_error,
-            "collision": simulation.collision_detected}
 
 
 def _run_gate_racing(config: dict):

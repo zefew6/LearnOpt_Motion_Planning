@@ -3,6 +3,7 @@
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from pathlib import Path
+import time
 from typing import ClassVar
 
 import numpy as np
@@ -10,10 +11,10 @@ import numpy as np
 from uav_ac.control import CascadedConfig, CascadedController
 from uav_ac.control.aerial_manipulator_controller import AerialManipulatorController
 from uav_ac.planning.geometry.esdf import ESDF
-from uav_ac.planning.trajectory.gcopter.aerial_manipulator import (
-    AerialManipulatorGCOPTER, AerialManipulatorGCOPTERConfig, make_terminal_state,
+from uav_ac.planning.trajectory.aerial_manipulator_minco import (
+    AerialManipulatorMINCO, AerialManipulatorMINCOConfig, make_terminal_state,
 )
-from uav_ac.planning.trajectory.gcopter.aerial_manipulator.task_targets import quaternion_yaw
+from uav_ac.planning.trajectory.aerial_manipulator_minco.task_targets import quaternion_yaw
 from uav_ac.simulation.mujoco_sim import MujocoSimulation
 
 
@@ -64,44 +65,24 @@ def run_aerial_pick_place(config):
     simulation = MujocoSimulation(config["scene"], record_actual_trajectory=False)
     robot = simulation.robot
     settings = config["pick_place"]
-    planner_config = AerialManipulatorGCOPTERConfig(**config["aerial_manipulator_gcopter"])
-    pick = np.asarray(settings["pick_position_ned"], dtype=float)
-    place = np.asarray(settings["place_position_ned"], dtype=float)
-    pick_yaw, place_yaw = float(settings["pick_yaw"]), float(settings["place_yaw"])
-    gap_open, gap_closed = float(settings["gripper_open"]), float(settings["gripper_closed"])
-    nominal_pick = np.asarray(settings["pick_nominal_joints"], dtype=float)
-    nominal_place = np.asarray(settings["place_nominal_joints"], dtype=float)
-    bounds = simulation.space_limits
-    esdf = _scene_esdf(simulation, planner_config)
-    start_q = robot.configuration.copy()
-    start = np.r_[start_q[:3], quaternion_yaw(start_q[3:7]), start_q[7:11]]
-    pick_state = make_terminal_state(
-        robot, pick, pick_yaw, nominal_pick, gripper_opening=gap_open,
-        workspace_bounds=bounds)
-    place_state = make_terminal_state(
-        robot, place, place_yaw, nominal_place, gripper_opening=gap_closed,
-        workspace_bounds=bounds)
-    planner = AerialManipulatorGCOPTER(planner_config)
-    rng = np.random.default_rng(int(config["seed"]))
+    planner_config = AerialManipulatorMINCOConfig(**config["aerial_manipulator_minco"])
     machine = PickPlaceStateMachine()
-    plans = {}
+    diagnostics = {}
+    planning_started = time.perf_counter()
     try:
-        plans["pick"] = planner.plan(
-            start, pick_state, robot=robot, esdf=esdf, quad=simulation.quad,
-            workspace_bounds=bounds, gripper_opening=gap_open, rng=rng)
-        if not plans["pick"].validation_passed:
-            raise RuntimeError("pick trajectory failed dense validation")
-        plans["place"] = planner.plan(
-            pick_state, place_state, robot=robot, esdf=esdf, quad=simulation.quad,
-            workspace_bounds=bounds, gripper_opening=gap_closed,
-            carry_payload=True, rng=rng)
-        if not plans["place"].validation_passed:
-            raise RuntimeError("carry trajectory failed dense validation")
+        bundle = plan_pick_place(
+            simulation, config, deadline=planning_started+planner_config.planning_budget_s,
+            diagnostics=diagnostics)
+        plans, pick, place = bundle["plans"], bundle["pick"], bundle["place"]
+        gap_open, gap_closed = bundle["gap_open"], bundle["gap_closed"]
+        start_q = bundle["start_q"]
         machine.transition(PickPlaceState.MOVE_TO_PICK)
-    except (ValueError, RuntimeError, np.linalg.LinAlgError) as error:
+    except (ValueError, RuntimeError, np.linalg.LinAlgError, TimeoutError) as error:
+        diagnostics.setdefault("planning_seconds", time.perf_counter()-planning_started)
         if machine.state is not PickPlaceState.FAILED:
             machine.transition(PickPlaceState.FAILED, str(error))
-        result = _result(machine, plans, simulation, controller=None)
+        result = _result(machine, diagnostics.get("plans", {}), simulation,
+                         controller=None, planning_metrics=_public_metrics(diagnostics))
         _print_result(result)
         return result
 
@@ -135,9 +116,93 @@ def run_aerial_pick_place(config):
                 break
     if not execution.done:
         machine.transition(PickPlaceState.FAILED, "execution_timeout")
-    result = _result(machine, plans, simulation, controller, execution)
+    result = _result(machine, plans, simulation, controller, execution,
+                     planning_metrics=_public_metrics(diagnostics))
     _print_result(result)
     return result
+
+
+def _public_metrics(diagnostics):
+    return {key: value for key, value in diagnostics.items() if key != "plans"}
+
+
+def plan_pick_place(simulation, config, *, deadline=None, seed=None, diagnostics=None):
+    """Plan and validate both pick/place legs using the production code path.
+
+    This entry point supports headless planning benchmarks without caching maps,
+    routes, or optimized trajectories between calls.
+    """
+    diagnostics = {} if diagnostics is None else diagnostics
+    started = time.perf_counter()
+    planner_config = AerialManipulatorMINCOConfig(**config["aerial_manipulator_minco"])
+    deadline = (started+planner_config.planning_budget_s if deadline is None else deadline)
+    settings = config["pick_place"]
+    robot = simulation.robot
+    pick = np.asarray(settings["pick_position_ned"], dtype=float)
+    place = np.asarray(settings["place_position_ned"], dtype=float)
+    gap_open, gap_closed = float(settings["gripper_open"]), float(settings["gripper_closed"])
+    bounds = simulation.space_limits
+    phase = time.perf_counter()
+    esdf = _scene_esdf(simulation, planner_config)
+    diagnostics["esdf_seconds"] = time.perf_counter()-phase
+    if time.perf_counter() >= deadline:
+        raise TimeoutError("aerial_manipulator_minco planning budget exceeded during ESDF build")
+    start_q = robot.configuration.copy()
+    start = np.r_[start_q[:3], quaternion_yaw(start_q[3:7]), start_q[7:11]]
+    pick_state = make_terminal_state(
+        robot, pick, float(settings["pick_yaw"]),
+        np.asarray(settings["pick_nominal_joints"], dtype=float),
+        gripper_opening=gap_open, workspace_bounds=bounds)
+    place_state = make_terminal_state(
+        robot, place, float(settings["place_yaw"]),
+        np.asarray(settings["place_nominal_joints"], dtype=float),
+        gripper_opening=gap_closed, workspace_bounds=bounds)
+    planner = AerialManipulatorMINCO(planner_config)
+    rng = np.random.default_rng(int(config["seed"] if seed is None else seed))
+    plans = {}
+    leg_metrics = {}
+    for name, leg_start, leg_goal, opening, carry in (
+            ("pick", start, pick_state, gap_open, False),
+            ("place", pick_state, place_state, gap_closed, True)):
+        if time.perf_counter() >= deadline:
+            raise TimeoutError("aerial_manipulator_minco planning budget exceeded")
+        plans[name] = planner.plan(
+            leg_start, leg_goal, robot=robot, esdf=esdf, quad=simulation.quad,
+            workspace_bounds=bounds, gripper_opening=opening,
+            carry_payload=carry, rng=rng, deadline=deadline)
+        leg_metrics[name] = dict(planner.last_metrics)
+        leg_metrics[name].update({
+            "validation_passed": bool(plans[name].validation_passed),
+            "optimizer_converged": bool(plans[name].optimizer_converged),
+            "optimizer_iterations": int(plans[name].iterations),
+            "maximum_violation": float(plans[name].maximum_violation),
+            "minimum_clearance": float(plans[name].minimum_clearance),
+            "validation_sample_dt": float(plans[name].validation_sample_dt),
+        })
+        joint_samples = plans[name].evaluate(
+            np.linspace(0., plans[name].total_time, 101))[:, 4:8]
+        midpoint_joints = plans[name].evaluate(
+            .5*plans[name].total_time)[4:8]
+        leg_metrics[name].update({
+            "start_arm_joints": leg_start[4:8].tolist(),
+            "target_arm_joints": leg_goal[4:8].tolist(),
+            "midpoint_arm_joints": midpoint_joints.tolist(),
+            "maximum_arm_deviation_rad": float(np.max(np.linalg.norm(
+                joint_samples-leg_start[None, 4:8], axis=1))),
+            "rrt_intermediate_arm_deviation_rad": float(np.max(np.linalg.norm(
+                plans[name].rrt_path[1:-1, 4:8]-leg_start[None, 4:8], axis=1),
+                initial=0.)),
+        })
+        diagnostics["plans"] = dict(plans)
+        diagnostics["legs"] = dict(leg_metrics)
+        if not plans[name].validation_passed:
+            raise RuntimeError(f"{name} trajectory failed final validation")
+    diagnostics["plans"] = plans
+    diagnostics["legs"] = leg_metrics
+    diagnostics["planning_seconds"] = time.perf_counter()-started
+    return {"plans": plans, "pick": pick, "place": place,
+            "gap_open": gap_open, "gap_closed": gap_closed,
+            "start_q": start_q, "esdf": esdf}
 
 
 class _Execution:
@@ -151,6 +216,7 @@ class _Execution:
         self.physics_index = 0
         self.stage_start = simulation.time
         self.stable_time = 0.0
+        self.stable_since = None
         self.failure_time = simulation.time
         self.command_reference = plans["pick"].reference(
             0., self.robot, gripper_opening=gap_open)
@@ -173,6 +239,7 @@ class _Execution:
         self.physics_index = 0
         self.stage_start = self.simulation.time
         self.stable_time = 0.0
+        self.stable_since = None
         self.command_reference = self.plans["pick"].reference(
             0., self.robot, gripper_opening=self.gap_open)
 
@@ -187,8 +254,14 @@ class _Execution:
             self.max_joint_error = max(self.max_joint_error, float(error))
         self.robot.apply(self.controller.step(self.command_reference))
         if self.machine.holding_payload:
-            self.simulation.set_mocap_position_ned(
-                "payload_marker", self.robot.forward_kinematics(frame="grasp")[0])
+            payload_position = self.robot.forward_kinematics(frame="grasp")[0]
+            self.simulation.set_mocap_position_ned("payload_marker", payload_position)
+            payload_collision = self.robot.check_collision(
+                self.robot.configuration, clearance=0.,
+                payload_position_ned=payload_position,
+                payload_radius=.035)
+            if payload_collision["collision"]:
+                self.machine.transition(PickPlaceState.FAILED, "payload_collision")
         if self.simulation.collision_detected:
             self.machine.transition(PickPlaceState.FAILED, "simulation_collision")
         self.physics_index += 1
@@ -206,6 +279,7 @@ class _Execution:
             if elapsed >= trajectory.total_time and self._settled(self.pick, now):
                 self.machine.transition(PickPlaceState.GRASP)
                 self.stage_start = now
+                self.stable_since = None
             elif elapsed > trajectory.total_time+float(self.settings["event_timeout"]):
                 self.machine.transition(PickPlaceState.FAILED, "pick_event_timeout")
             return reference
@@ -234,6 +308,7 @@ class _Execution:
             if elapsed >= trajectory.total_time and self._settled(self.place, now):
                 self.machine.transition(PickPlaceState.RELEASE)
                 self.stage_start = now
+                self.stable_since = None
             elif elapsed > trajectory.total_time+float(self.settings["event_timeout"]):
                 self.machine.transition(PickPlaceState.FAILED, "place_event_timeout")
             return reference
@@ -275,7 +350,12 @@ class _Execution:
             "body_rate": float(np.linalg.norm(self.robot.velocity[3:6])),
             "stable_time": float(self.stable_time),
         }
-        self.stable_time = self.stable_time+self.simulation.quad.dt if stable else 0.0
+        if stable:
+            self.stable_since = now if self.stable_since is None else self.stable_since
+            self.stable_time = max(0.0, now-self.stable_since)
+        else:
+            self.stable_since = None
+            self.stable_time = 0.0
         return self.stable_time >= float(self.settings["settle_time"])
 
     def _state_matches(self, expected, tolerance):
@@ -309,16 +389,19 @@ def _scene_esdf(simulation, config):
     obstacle = simulation.obstacles
     boxes = np.column_stack((obstacle[:, 0], obstacle[:, 2], obstacle[:, 4],
                              obstacle[:, 1], obstacle[:, 3], obstacle[:, 5]))
-    padding = max(.6, config.obstacle_clearance+.45)
+    padding = max(.8, config.obstacle_clearance+.65)
     lower, upper = bounds[0]-padding, bounds[1]+padding
     # The NED ground lies at z=0; positive signed distance is above the floor.
     return ESDF.from_axis_aligned_boxes(
         boxes, lower, upper, .08, ground_height=0.)
 
 
-def _result(machine, plans, simulation, controller, execution=None):
+def _result(machine, plans, simulation, controller, execution=None, planning_metrics=None):
     grasp_jacobian = simulation.robot.jacobian(frame="grasp")
     end_effector_velocity = grasp_jacobian[:3]@simulation.robot.velocity
+    payload_position = simulation.get_mocap_position_ned("payload_marker")
+    payload_error = (float(np.linalg.norm(payload_position-execution.place))
+                     if execution is not None else float("nan"))
     return {
         "success": machine.state is PickPlaceState.DONE,
         "state": machine.state.name,
@@ -327,6 +410,8 @@ def _result(machine, plans, simulation, controller, execution=None):
         "holding_payload": machine.holding_payload,
         "payload_position": (simulation.robot.forward_kinematics(frame="grasp")[0].copy()
                              if machine.holding_payload else None),
+        "released_payload_position_ned": payload_position.copy(),
+        "released_payload_error": payload_error,
         "final_grasp_position": simulation.robot.forward_kinematics(frame="grasp")[0].copy(),
         "final_base_position": simulation.robot.configuration[:3].copy(),
         "final_joint_positions": simulation.robot.configuration[7:11].copy(),
@@ -355,6 +440,7 @@ def _result(machine, plans, simulation, controller, execution=None):
         "maximum_joint_tracking_error": (
             0.0 if execution is None else float(execution.max_joint_error)),
         "settle_metrics": {} if execution is None else execution.last_settle_metrics.copy(),
+        "planning_metrics": {} if planning_metrics is None else dict(planning_metrics),
     }
 
 
@@ -368,10 +454,19 @@ def _print_result(result):
         print(f"Failure: {result['failure_reason']}")
     print(f"Clearance={result['pick_minimum_clearance']:.3f}/"
           f"{result['place_minimum_clearance']:.3f}m | "
+          f"released_payload_error={result['released_payload_error']:.3f}m | "
           f"validation_dt={result['pick_validation_sample_dt']:.3f}/"
           f"{result['place_validation_sample_dt']:.3f}s | "
           f"joint_error={result['maximum_joint_tracking_error']:.4f}rad | "
           f"saturations={result['saturation_count']}")
+    metrics = result.get("planning_metrics", {})
+    if metrics:
+        print(f"Planning={metrics.get('planning_seconds', float('nan')):.3f}s | "
+              f"ESDF={metrics.get('esdf_seconds', float('nan')):.3f}s | "
+              f"AB/BC optimizer calls="
+              f"{metrics.get('legs', {}).get('pick', {}).get('objective_calls', 0)}/"
+              f"{metrics.get('legs', {}).get('place', {}).get('objective_calls', 0)}")
 
 
-__all__ = ["PickPlaceState", "PickPlaceStateMachine", "run_aerial_pick_place"]
+__all__ = ["PickPlaceState", "PickPlaceStateMachine", "plan_pick_place",
+           "run_aerial_pick_place"]

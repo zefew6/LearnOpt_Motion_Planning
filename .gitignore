@@ -8,6 +8,9 @@ venv/
 .venv/
 uav/
 __pycache__/
+
+# Local aerial-manipulator implementation notes
+/uav_ac/planning/trajectory/aerial_manipulator_minco/AERIAL_MANIPULATOR_PICK_PLACE_CODEX_README.md
 *.pyc
 .pytest_cache/
 .mypy_cache/

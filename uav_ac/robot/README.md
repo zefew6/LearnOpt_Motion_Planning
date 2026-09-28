@@ -62,13 +62,10 @@ simulation.step()
 ```
 
 `AerialManipulatorReference` carries configuration, velocity, and acceleration
-vectors with sizes 12, 11, and 11. The aerial-manipulator hover example is
-configured in [`configs/aerial_manipulator_hover.yaml`](../../configs/aerial_manipulator_hover.yaml).
+vectors with sizes 12, 11, and 11.
 
 The arm dimensions, masses, and inertias are simulation assumptions, not
-measured hardware specifications. The hover example demonstrates basic flight
-and joint motion; it does not implement whole-body obstacle avoidance or
-grasping.
+measured hardware specifications.
 
 ## Quadrotor
 

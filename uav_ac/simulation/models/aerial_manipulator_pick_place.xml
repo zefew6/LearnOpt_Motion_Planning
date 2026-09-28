@@ -7,7 +7,7 @@
   <size nuser_site="1"/>
   <statistic center="0 0 1" extent="3"/>
   <custom>
-    <numeric name="planning_bounds" data="-5 -5 -2 5 5 0"/>
+    <numeric name="planning_bounds" data="-0.8 -2 -2 4.8 2 -0.7"/>
     <numeric name="flight_limits" data="3 2 8 12 0.7"/>
   </custom>
   <visual>
@@ -23,6 +23,23 @@
   <worldbody>
     <light name="sun" pos="0 0 8" dir="-0.3 0.2 -1" directional="true"/>
     <geom name="ground" type="plane" size="5 5 0.1" material="ground"/>
+    <!-- Coordinates are ENU in MJCF; these six boxes correspond to the NED
+         obstacle layout documented by the pick/place task. -->
+    <geom name="obstacle_ab_main" type="box" pos="1  -0.2 1.5" size="0.18 0.45 1.5"/>
+    <geom name="obstacle_bc_main" type="box" pos="3   0.2 1.5" size="0.18 0.45 1.5"/>
+    <geom name="obstacle_side_0" type="box" pos="0.2 -1.65 0.6" size="0.25 0.2 0.6"/>
+    <geom name="obstacle_side_1" type="box" pos="2    1.65 0.6" size="0.25 0.2 0.6"/>
+    <geom name="obstacle_side_2" type="box" pos="2   -1.65 0.6" size="0.25 0.2 0.6"/>
+    <geom name="obstacle_side_3" type="box" pos="4   -1.65 0.6" size="0.25 0.2 0.6"/>
+    <!-- Open-front bookshelf cubby at B (NED x=2.18..2.82, z=-1.28..-0.44).
+         Its recessed upper board blocks a straight-down arm at the pick target,
+         while the L-shaped arm enters through the open front. The top
+         board is recessed to preserve rotor and attitude-clearance margins. -->
+    <geom name="obstacle_shelf_bottom" type="box" pos="2.5 0 0.40" size="0.32 0.46 0.04" rgba="0.48 0.30 0.16 1"/>
+    <geom name="obstacle_shelf_top" type="box" pos="2.605 0 1.32" size="0.215 0.46 0.04" rgba="0.48 0.30 0.16 1"/>
+    <geom name="obstacle_shelf_left" type="box" pos="2.5 -0.42 0.80" size="0.32 0.04 0.18" rgba="0.48 0.30 0.16 1"/>
+    <geom name="obstacle_shelf_right" type="box" pos="2.5 0.42 0.80" size="0.32 0.04 0.18" rgba="0.48 0.30 0.16 1"/>
+    <geom name="obstacle_shelf_back" type="box" pos="2.82 0 0.80" size="0.04 0.46 0.22" rgba="0.38 0.24 0.13 1"/>
     <body name="quadrotor" pos="0 0 1" childclass="quadrotor_parts">
       <include file="../model/aerial_manipulator.xml"/>
     </body>
