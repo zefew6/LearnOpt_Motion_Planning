@@ -396,49 +396,35 @@ class AerialManipulatorModel:
 
     def exact_collision_distances(
             self, configuration=None, pairs=None, *, payload_attached=False,
-            payload_position_ned=None, payload_radius=None,
             with_jacobians=False, with_pose_jacobians=False,
             jacobian_distance_thresholds=None, check_limits=True):
         """Batch MuJoCo signed distances for configured robot geometry pairs.
 
         ``pairs`` contains public geom-name pairs.  By default all configured
         non-adjacent self pairs and robot/environment pairs are queried.  A
-        payload pair is enabled when ``payload_attached`` or
-        ``payload_position_ned`` is supplied.  Jacobians are gradients of the
-        signed distance with respect to ``[position(3), yaw, arm_joints(4)]``
+        Payload pairs are enabled when ``payload_attached`` is true. Jacobians
+        are gradients of the signed distance with respect to
+        ``[position(3), yaw, arm_joints(4)]``
         by default. ``with_pose_jacobians`` selects the full-pose tangent
         ``[position(3), world-angle tangent(3), arm-joints(4)]``. Both use
         MuJoCo's closest-point witnesses and public point Jacobians. All work uses the
         scratch data object and leaves the live simulation untouched.
         """
-        if payload_attached and payload_position_ned is not None:
-            raise ValueError("provide either payload_attached or payload_position_ned")
         # ``mj_geomDistance`` needs current geometry transforms, not dynamics
         # products such as the mass matrix or constraint Jacobians.
         d, q = self._prepare_kinematic(configuration, check_limits=check_limits)
         payload_id = int(self._payload_geom)
-        payload_enabled = payload_attached or payload_position_ned is not None
+        payload_enabled = payload_attached
         if payload_enabled:
             if payload_id < 0 or self._payload_mocap < 0:
                 raise ValueError("scene does not provide payload_marker and payload_marker_geom")
-            if payload_attached:
-                if self.grasp_site < 0:
-                    raise ValueError("robot model does not provide grasp_frame")
-                payload_ned = S @ d.site_xpos[self.grasp_site]
-            else:
-                payload_ned = np.asarray(payload_position_ned, dtype=float)
-                if payload_ned.shape != (3,) or not np.all(np.isfinite(payload_ned)):
-                    raise ValueError("payload_position_ned must be a finite 3-vector")
-            # The attached payload follows the grasp frame; the explicit pose
-            # follows the caller-provided world position.  Both paths must
-            # update the isolated mocap state before querying distances.
+            if self.grasp_site < 0:
+                raise ValueError("robot model does not provide grasp_frame")
+            payload_ned = S @ d.site_xpos[self.grasp_site]
+            # The attached payload follows the grasp frame in the isolated
+            # mocap state used by this distance query.
             d.mocap_pos[self._payload_mocap] = S @ payload_ned
             mujoco.mj_kinematics(self.model, d)
-            radius = (float(self.model.geom_size[payload_id, 0])
-                      if payload_radius is None else float(payload_radius))
-            if not np.isfinite(radius) or radius <= 0 or not np.isclose(
-                    radius, self.model.geom_size[payload_id, 0]):
-                raise ValueError("payload radius must match the scene payload marker sphere")
 
         allowed = (self._allowed_collision_pairs_with_payload if payload_enabled
                    else self._allowed_collision_pairs)
@@ -727,8 +713,7 @@ class AerialManipulatorModel:
                 "gripper_reduction": "ideal symmetric fingers; servo input is left actuator force"}
 
     def check_collision(self, configuration=None, clearance=0.0, *,
-                        self_clearance=None, payload_position_ned=None,
-                        payload_radius=None, payload_attached=False):
+                        self_clearance=None, payload_attached=False):
         """Return signed distances and named pairs for one static configuration.
 
         This is a point-configuration check; it does not certify the swept volume
@@ -741,8 +726,7 @@ class AerialManipulatorModel:
         if not np.isfinite(self_clearance) or self_clearance < 0:
             raise ValueError("self_clearance must be finite and non-negative")
         result = self.exact_collision_distances(
-            configuration, payload_attached=payload_attached,
-            payload_position_ned=payload_position_ned, payload_radius=payload_radius)
+            configuration, payload_attached=payload_attached)
         distances = result["distances"]
         pairs = result["pairs"]
         world_pair_names = self.collision_pairs("world")

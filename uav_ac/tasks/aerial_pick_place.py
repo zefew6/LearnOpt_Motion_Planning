@@ -357,12 +357,6 @@ class _Execution:
         if self.machine.holding_payload:
             payload_position = self.robot.forward_kinematics(frame="grasp")[0]
             self.simulation.set_mocap_position_ned("payload_marker", payload_position)
-            payload_collision = self.robot.check_collision(
-                self.robot.configuration, clearance=0.,
-                payload_position_ned=payload_position,
-                payload_radius=self.robot.payload_radius)
-            if payload_collision["collision"]:
-                self.machine.transition(PickPlaceState.FAILED, "payload_collision")
         if self.simulation.collision_detected:
             self.machine.transition(PickPlaceState.FAILED, "simulation_collision")
         self.physics_index += 1

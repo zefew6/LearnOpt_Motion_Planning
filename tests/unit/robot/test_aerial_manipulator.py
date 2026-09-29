@@ -187,18 +187,12 @@ def test_full_configuration_collision_reports_environment_and_nonadjacent_self_p
         assert sim.model.body_parentid[body_b] != body_a
 
 
-def test_logical_payload_sphere_is_checked_against_obstacles_and_robot():
+def test_attached_payload_collision_check_excludes_gripper_pairs():
     sim = MujocoSimulation(
         "tests/fixtures/aerial_manipulator_gradient.xml",
         record_actual_trajectory=False)
     robot = sim.robot
     configuration = robot.configuration
-    hit = robot.check_collision(
-        configuration, clearance=0., payload_position_ned=[1., .4, -1.5],
-        payload_radius=.035)
-    assert hit["collision"]
-    assert any("obstacle_wall_1_right" in pair["geoms"] for pair in hit["pairs"])
-
     attached = robot.check_collision(configuration, clearance=0., payload_attached=True)
     assert not any("gripper_" in name for pair in attached["pairs"] for name in pair["geoms"]
                    if "payload_marker_geom" in pair["geoms"])

@@ -101,12 +101,10 @@ class AerialManipulator:
 
     def exact_collision_distances(
             self, configuration=None, pairs=None, *, payload_attached=False,
-            payload_position_ned=None, payload_radius=None,
             with_jacobians=False, with_pose_jacobians=False,
             jacobian_distance_thresholds=None, check_limits=True):
         return self._model.exact_collision_distances(
             configuration, pairs, payload_attached=payload_attached,
-            payload_position_ned=payload_position_ned, payload_radius=payload_radius,
             with_jacobians=with_jacobians, with_pose_jacobians=with_pose_jacobians,
             jacobian_distance_thresholds=jacobian_distance_thresholds,
             check_limits=check_limits)
@@ -133,11 +131,9 @@ class AerialManipulator:
         return self._model.dynamics(configuration, velocity)
 
     def check_collision(self, configuration=None, clearance=0.0, *,
-                        self_clearance=None, payload_position_ned=None,
-                        payload_radius=None, payload_attached=False) -> dict:
+                        self_clearance=None, payload_attached=False) -> dict:
         return self._model.check_collision(
             configuration, clearance, self_clearance=self_clearance,
-            payload_position_ned=payload_position_ned, payload_radius=payload_radius,
             payload_attached=payload_attached)
 
     def integrate(self, configuration, tangent_delta) -> np.ndarray:
