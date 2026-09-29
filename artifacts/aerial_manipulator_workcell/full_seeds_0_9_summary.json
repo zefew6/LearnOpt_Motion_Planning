@@ -1,0 +1,64 @@
+[
+  {
+    "seed": 0,
+    "success": false,
+    "planning_seconds": 60.00019596191123,
+    "rrt_seconds_pick_place": 0.8317117188125849,
+    "failure": "TimeoutError: aerial_manipulator_minco planning budget exceeded",
+    "legs": {
+      "pick": {
+        "rrt_seconds": 0.4562691960018128,
+        "rrt_nodes": 100,
+        "rrt_path_states": 5,
+        "minco_pieces": 21,
+        "objective_calls": 5,
+        "optimizer_seconds": 1.8395445689093322,
+        "validation_seconds": 1.770535057876259,
+        "validation_passed": true,
+        "failure_reason": null
+      },
+      "place": {
+        "rrt_seconds": 0.37544252281077206,
+        "rrt_nodes": 81,
+        "rrt_path_states": 18,
+        "minco_pieces": 49,
+        "objective_calls": 42,
+        "optimizer_seconds": 54.22641671891324,
+        "validation_seconds": null,
+        "validation_passed": null,
+        "failure_reason": "aerial_manipulator_minco planning budget exceeded"
+      }
+    }
+  },
+  {
+    "seed": 9,
+    "success": false,
+    "planning_seconds": 60.00157955405302,
+    "rrt_seconds_pick_place": 0.7838705140165985,
+    "failure": "TimeoutError: aerial_manipulator_minco planning budget exceeded",
+    "legs": {
+      "pick": {
+        "rrt_seconds": 0.49262795806862414,
+        "rrt_nodes": 105,
+        "rrt_path_states": 11,
+        "minco_pieces": 31,
+        "objective_calls": 25,
+        "optimizer_seconds": 14.257369949948043,
+        "validation_seconds": 2.1331681760493666,
+        "validation_passed": true,
+        "failure_reason": null
+      },
+      "place": {
+        "rrt_seconds": 0.2912425559479743,
+        "rrt_nodes": 50,
+        "rrt_path_states": 19,
+        "minco_pieces": 44,
+        "objective_calls": 30,
+        "optimizer_seconds": 41.49236620310694,
+        "validation_seconds": null,
+        "validation_passed": null,
+        "failure_reason": "aerial_manipulator_minco planning budget exceeded"
+      }
+    }
+  }
+]

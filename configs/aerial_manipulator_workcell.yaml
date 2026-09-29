@@ -1,5 +1,5 @@
 task: aerial_pick_place
-scene: aerial_manipulator_pick_place
+scene: aerial_manipulator_workcell
 planner: aerial_manipulator_minco
 controller: cascaded
 control_dt: 0.01
@@ -8,13 +8,12 @@ visualize: true
 wind: none
 
 pick_place:
-  # B is inside the -y-facing narrow shelf.  The nominal L configuration
-  # reaches through the opening; route configurations remain planner-owned.
-  pick_position_ned: [2.0, 0.85, -1.05]
-  place_position_ned: [4.2, 0.0, -0.435]
-  pick_yaw: 1.5707963267948966
+  # Tool targets sit 15 cm above the pick and pack work surfaces.
+  pick_position_ned: [1.45, 1.35, -0.95]
+  place_position_ned: [5.05, -1.30, -0.85]
+  pick_yaw: 0.0
   place_yaw: 0.0
-  pick_nominal_joints: [0.0, 0.0, -1.5707963267948966, 0.0]
+  pick_nominal_joints: [0.0, 0.0, 0.0, 0.0]
   place_nominal_joints: [0.0, 0.0, 0.0, 0.0]
   gripper_open: 0.060
   gripper_closed: 0.025
@@ -34,10 +33,14 @@ aerial_manipulator_minco:
   esdf_resolution: 0.02
   esdf_discretization_margin: 0.035
   minco_sample_spacing_m: 0.25
-  integral_resolution: 6
+  # Coarse optimization quadrature is followed by dense full-geometry validation.
+  integral_resolution: 4
+  integral_resolution_floor_unloaded: 4
+  integral_resolution_floor_loaded: 6
   max_iterations: 60
-  rrt_step_size: 0.5
-  rrt_joint_sampling_padding_rad: 0.2
+  rrt_step_size: 1.0
+  # Same endpoint arm angles still need to admit a broad transit-fold range.
+  rrt_joint_sampling_padding_rad: 1.3
   astar_guidance_enabled: true
   astar_grid_resolution: 0.08
   astar_fallback_grid_resolution: 0.04
@@ -47,8 +50,8 @@ aerial_manipulator_minco:
   astar_heuristic_weight: 2.0
   astar_guide_sample_spacing_m: 0.10
   astar_tube_std_m: 0.10
-  rrt_simplify_attempts: 32
-  rrt_simplify_budget_s: 0.02
+  rrt_simplify_attempts: 64
+  rrt_simplify_budget_s: 0.05
   planning_budget_s: 60.0
-  initial_duration_scale: 1.5
+  initial_duration_scale: 3.0
   joint_waypoint_parameterization: tanh

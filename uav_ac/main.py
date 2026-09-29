@@ -107,12 +107,17 @@ def load_config(path: str | Path = DEFAULT_CONFIG) -> dict:
         if config.get("wind", "none") != "none":
             raise ValueError("gate_racing deployment does not support flight wind options")
     elif config["task"] == "aerial_pick_place":
+        scene_name = Path(scene).stem
+        pick_place_scenes = {
+            "aerial_manipulator_pick_place",
+            "aerial_manipulator_workcell",
+        }
         if (config["planner"] != "aerial_manipulator_minco"
                 or config["controller"] != "cascaded"
-                or scene != "aerial_manipulator_pick_place"):
+                or scene_name not in pick_place_scenes):
             raise ValueError(
-                "aerial_pick_place requires its dedicated scene, aerial_manipulator_minco, "
-                "and cascaded controller")
+                "aerial_pick_place requires an aerial manipulator pick/place scene, "
+                "aerial_manipulator_minco, and cascaded controller")
         if config.get("wind", "none") != "none":
             raise ValueError("aerial pick/place requires wind: none")
     elif config["planner"] == "none":
@@ -166,7 +171,7 @@ def load_config(path: str | Path = DEFAULT_CONFIG) -> dict:
     _only(sections["aerial_manipulator_minco"],
           {f.name for f in fields(AerialManipulatorMINCOConfig)},
           "aerial_manipulator_minco")
-    AerialManipulatorMINCOConfig(**sections["aerial_manipulator_minco"])
+    AerialManipulatorMINCOConfig.from_mapping(sections["aerial_manipulator_minco"])
     pick_place = config.setdefault("pick_place", {})
     _only(pick_place, {
         "pick_position_ned", "place_position_ned", "pick_yaw", "place_yaw",

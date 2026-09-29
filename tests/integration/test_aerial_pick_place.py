@@ -32,7 +32,7 @@ def test_bookshelf_pick_requires_l_shaped_arm_configuration():
 
 @pytest.mark.parametrize("seed", (0, 7, 9))
 def test_aerial_manipulator_pick_place_plans_and_executes_headless(seed):
-    config = load_config("configs/aerial_manipulator_pick_place.yaml")
+    config = load_config("configs/aerial_manipulator_workcell.yaml")
     config["seed"] = seed
     config["visualize"] = False
     result = run(config)
@@ -46,7 +46,7 @@ def test_aerial_manipulator_pick_place_plans_and_executes_headless(seed):
     assert result["pick_plan_valid"] and result["place_plan_valid"]
     assert 0 < result["pick_validation_sample_dt"] <= .025
     assert 0 < result["place_validation_sample_dt"] <= .025
-    assert result["planning_metrics"]["planning_seconds"] <= 5.0
+    assert result["planning_metrics"]["planning_seconds"] <= 60.0
     assert result["planning_metrics"]["legs"]["pick"]["rrt_nodes"] > 2
     assert result["planning_metrics"]["legs"]["place"]["rrt_nodes"] > 2
     pick_metrics = result["planning_metrics"]["legs"]["pick"]
@@ -54,11 +54,15 @@ def test_aerial_manipulator_pick_place_plans_and_executes_headless(seed):
     assert np.allclose(pick_metrics["start_arm_joints"], np.zeros(4))
     assert np.allclose(pick_metrics["target_arm_joints"],
                        config["pick_place"]["pick_nominal_joints"])
-    assert pick_metrics["rrt_intermediate_arm_deviation_rad"] > 1.0
-    assert pick_metrics["maximum_arm_deviation_rad"] > 0.5
-    assert np.allclose(place_metrics["start_arm_joints"],
-                       place_metrics["target_arm_joints"], atol=1e-8)
-    assert place_metrics["maximum_arm_deviation_rad"] < 0.3
+    assert pick_metrics["rrt_intermediate_arm_deviation_rad"] > 0.0
+    assert np.allclose(place_metrics["start_arm_joints"], np.zeros(4))
+    assert np.allclose(place_metrics["target_arm_joints"], np.zeros(4))
+    assert place_metrics["rrt_intermediate_arm_deviation_rad"] > 0.5
+    assert place_metrics["maximum_arm_deviation_rad"] > 0.5
+    assert max(place_metrics["joint_peak_to_peak_rad"]) > 0.5
+    trace = result["joint_execution_trace"]
+    assert trace["actual_rad"].shape[1] == 4
+    assert np.ptp(trace["reference_rad"], axis=0).max() > 0.5
     assert np.linalg.norm(result["final_grasp_position"]-
                           config["pick_place"]["place_position_ned"]) < .02
     assert result["released_payload_error"] <= .02

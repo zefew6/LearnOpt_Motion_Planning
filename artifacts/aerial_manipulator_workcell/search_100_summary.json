@@ -1,0 +1,71 @@
+{
+  "machine": "12th Gen Intel(R) Core(TM) i5-12400F",
+  "mode": "100 independent cold processes; each process rebuilt occupancy and ESDF; search-only",
+  "search_successes": 100,
+  "search_failures": 0,
+  "rrt_pair_seconds": {
+    "maximum_s": 1.3249800859484822,
+    "measured": 100,
+    "median_s": 0.7539520050631836,
+    "p95_s": 1.1130007877829484,
+    "successful_search_pairs": 100,
+    "under_1s": 87,
+    "under_1s_fraction": 0.87
+  },
+  "over_1s_seeds": [
+    {
+      "seed": 2,
+      "seconds": 1.2854863100219518
+    },
+    {
+      "seed": 23,
+      "seconds": 1.1307299530599266
+    },
+    {
+      "seed": 34,
+      "seconds": 1.2527489380445331
+    },
+    {
+      "seed": 52,
+      "seconds": 1.3249800859484822
+    },
+    {
+      "seed": 55,
+      "seconds": 1.0078040820080787
+    },
+    {
+      "seed": 58,
+      "seconds": 1.1028761009220034
+    },
+    {
+      "seed": 60,
+      "seconds": 1.1644434209447354
+    },
+    {
+      "seed": 61,
+      "seconds": 1.0507243208121508
+    },
+    {
+      "seed": 65,
+      "seconds": 1.0588539491873235
+    },
+    {
+      "seed": 72,
+      "seconds": 1.0407450760249048
+    },
+    {
+      "seed": 76,
+      "seconds": 1.1120676738210022
+    },
+    {
+      "seed": 85,
+      "seconds": 1.0024748020805418
+    },
+    {
+      "seed": 95,
+      "seconds": 1.0645812719594687
+    }
+  ],
+  "mean_esdf_build_seconds": 0.7829815029166639,
+  "mean_occupancy_build_seconds": 0.5303680161922238
+}

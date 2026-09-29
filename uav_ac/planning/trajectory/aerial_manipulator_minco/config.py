@@ -1,13 +1,12 @@
 """Small, validated configuration for the 8-D aerial-manipulator planner."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 
 import numpy as np
 
 
 @dataclass(frozen=True)
 class AerialManipulatorMINCOConfig:
-    pieces: int = 6
     jerk_weights: tuple[float, ...] = (1., 1., 1., .2, .08, .08, .08, .08)
     time_weight: float = 2.0
     max_speed: float = 2.0
@@ -18,7 +17,10 @@ class AerialManipulatorMINCOConfig:
     joint_velocity_limits: tuple[float, ...] = (1.5, 1.5, 1.5, 1.5)
     joint_acceleration_limits: tuple[float, ...] = (4., 4., 4., 4.)
     obstacle_clearance: float = .05
-    esdf_interpolation_margin: float = .015
+    # RRT uses the shared occupancy grid and full collision envelopes.
+    rrt_obstacle_margin: float = .01
+    esdf_discretization_margin: float = .035
+    esdf_resolution: float = .02
     self_clearance: float = .015
     payload_radius: float = .035
     obstacle_weight: float = 2.0e4
@@ -26,34 +28,53 @@ class AerialManipulatorMINCOConfig:
     constraint_weight: float = 1.0e3
     smoothing_epsilon: float = .01
     integral_resolution: int = 6
+    integral_resolution_floor_unloaded: int = 8
+    integral_resolution_floor_loaded: int = 12
     max_iterations: int = 60
     lbfgs_memory: int = 12
     gradient_tolerance: float = 1.0e-4
-    rrt_step_size: float = .25
-    rrt_max_iterations: int = 2500
-    rrt_goal_bias: float = .1
-    rrt_edge_position_resolution: float = .08
+    rrt_step_size: float = .5
+    rrt_joint_sampling_padding_rad: float = .2
+    astar_guidance_enabled: bool = True
+    astar_grid_resolution: float = .08
+    astar_fallback_grid_resolution: float = .04
+    astar_budget_s: float = .10
+    astar_clearance_weight_m: float = .10
+    astar_clearance_offset_m: float = .05
+    astar_heuristic_weight: float = 2.0
+    astar_guide_sample_spacing_m: float = .10
+    astar_tube_std_m: float = .10
+    rrt_simplify_attempts: int = 32
+    rrt_simplify_budget_s: float = .02
+    minco_sample_spacing_m: float = .25
     position_scale: float = .5
     yaw_scale: float = .7
     joint_scales: tuple[float, ...] = (.8, .8, .8, .8)
+    joint_waypoint_parameterization: str = "tanh"
     edge_position_resolution: float = .04
     edge_yaw_resolution: float = .08
     edge_joint_resolution: float = .08
     validation_dt: float = .025
     minimum_total_time: float = .15
-    planning_budget_s: float = 5.0
+    planning_budget_s: float = 60.0
     initial_duration_scale: float = 1.5
 
     def __post_init__(self):
-        for name in ("pieces", "integral_resolution", "max_iterations",
-                     "lbfgs_memory", "rrt_max_iterations"):
+        for name in ("integral_resolution", "integral_resolution_floor_unloaded",
+                     "integral_resolution_floor_loaded", "max_iterations", "lbfgs_memory",
+                     "rrt_simplify_attempts"):
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, (int, np.integer)):
                 raise ValueError(f"{name} must be an integer")
-        if self.pieces < 1 or self.integral_resolution < 2:
-            raise ValueError("pieces must be positive and integral_resolution at least two")
-        if self.max_iterations < 1 or self.lbfgs_memory < 1 or self.rrt_max_iterations < 1:
+        if self.integral_resolution < 2:
+            raise ValueError("integral_resolution must be at least two")
+        if (self.integral_resolution_floor_unloaded < 2
+                or self.integral_resolution_floor_loaded < 2):
+            raise ValueError("integral resolution floors must be at least two")
+        if self.max_iterations < 1 or self.lbfgs_memory < 1:
             raise ValueError("iteration counts must be positive")
+        if self.rrt_simplify_attempts < 0:
+            raise ValueError("rrt_simplify_attempts cannot be negative")
         for name in ("jerk_weights", "joint_velocity_limits", "joint_acceleration_limits",
                      "joint_scales"):
             values = np.asarray(getattr(self, name), dtype=float)
@@ -62,20 +83,60 @@ class AerialManipulatorMINCOConfig:
                 raise ValueError(f"{name} must contain {expected} finite non-negative values")
         positive = ("time_weight", "max_speed", "max_acceleration", "max_body_rate", "max_yaw_rate",
                     "max_yaw_acceleration", "obstacle_clearance",
-                    "esdf_interpolation_margin", "self_clearance",
+                    "esdf_discretization_margin", "esdf_resolution", "self_clearance",
                     "payload_radius", "obstacle_weight", "self_collision_weight",
                     "constraint_weight", "smoothing_epsilon", "gradient_tolerance",
-                    "rrt_step_size", "position_scale", "yaw_scale",
+                    "rrt_step_size", "minco_sample_spacing_m", "position_scale", "yaw_scale",
+                    "rrt_joint_sampling_padding_rad",
+                    "astar_grid_resolution", "astar_fallback_grid_resolution",
+                    "astar_budget_s", "astar_clearance_weight_m",
+                    "astar_clearance_offset_m", "astar_heuristic_weight",
+                    "astar_guide_sample_spacing_m",
+                    "astar_tube_std_m", "rrt_simplify_budget_s",
                     "edge_position_resolution", "edge_yaw_resolution",
-                    "edge_joint_resolution", "rrt_edge_position_resolution",
+                    "edge_joint_resolution",
                     "validation_dt", "minimum_total_time")
         positive = positive + ("planning_budget_s", "initial_duration_scale")
         if any(isinstance(getattr(self, name), bool)
                or not np.isfinite(getattr(self, name))
                or getattr(self, name) <= 0 for name in positive):
             raise ValueError("continuous planner settings must be positive and finite")
-        if not np.isfinite(self.rrt_goal_bias) or not 0.0 <= self.rrt_goal_bias <= 1.0:
-            raise ValueError("rrt_goal_bias must lie in [0, 1]")
+        if self.esdf_discretization_margin < np.sqrt(3.0)*self.esdf_resolution:
+            raise ValueError(
+                "esdf_discretization_margin must cover one voxel diagonal")
+        if self.astar_heuristic_weight < 1.0:
+            raise ValueError("astar_heuristic_weight must be at least one")
+        if (isinstance(self.rrt_obstacle_margin, bool)
+                or not np.isfinite(self.rrt_obstacle_margin)
+                or self.rrt_obstacle_margin < 0.0):
+            raise ValueError("rrt_obstacle_margin must be finite and non-negative")
+        if self.joint_waypoint_parameterization not in {"direct", "tanh"}:
+            raise ValueError("joint_waypoint_parameterization must be 'direct' or 'tanh'")
+        if not isinstance(self.astar_guidance_enabled, (bool, np.bool_)):
+            raise ValueError("astar_guidance_enabled must be boolean")
+
+    @classmethod
+    def from_mapping(cls, settings):
+        """Load current settings and explain removed parameters explicitly."""
+        values = dict(settings)
+        migrations = {
+            "pieces": "remove it; MINCO segment count is derived from minco_sample_spacing_m",
+            "rrt_collision_radius_scale": "remove it; RRT now checks complete collision envelopes",
+            "rrt_max_iterations": "remove it; OMPL search is controlled by the shared planning deadline",
+            "rrt_endpoint_seed_attempts": "remove it; OMPL uses the configured state sampler",
+            "rrt_goal_bias": "remove it; OMPL receives the 20/40/40 sampler",
+            "rrt_edge_position_resolution": "remove it; edge checks use edge_position_resolution",
+            "esdf_interpolation_margin": "rename it to esdf_discretization_margin and set at least sqrt(3)*esdf_resolution",
+        }
+        found = {key: message for key, message in migrations.items() if key in values}
+        if found:
+            details = "; ".join(f"{key}: {message}" for key, message in found.items())
+            raise ValueError(f"obsolete aerial_manipulator_minco settings ({details})")
+        accepted = {field.name for field in fields(cls)}
+        unknown = sorted(set(values)-accepted)
+        if unknown:
+            raise ValueError(f"unknown aerial_manipulator_minco settings: {', '.join(unknown)}")
+        return cls(**values)
 
 
 __all__ = ["AerialManipulatorMINCOConfig"]

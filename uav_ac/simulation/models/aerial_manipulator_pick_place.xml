@@ -5,7 +5,7 @@
   </default>
   <option timestep="0.001" gravity="0 0 -9.81" integrator="Euler"/>
   <size nuser_site="1"/>
-  <statistic center="0 0 1" extent="3"/>
+  <statistic center="2 0 1.5" extent="4"/>
   <custom>
     <numeric name="planning_bounds" data="-0.8 -2 -2 4.8 2 -0.7"/>
     <numeric name="flight_limits" data="3 2 8 12 0.7"/>
@@ -23,23 +23,30 @@
   <worldbody>
     <light name="sun" pos="0 0 8" dir="-0.3 0.2 -1" directional="true"/>
     <geom name="ground" type="plane" size="5 5 0.1" material="ground"/>
-    <!-- Coordinates are ENU in MJCF; these six boxes correspond to the NED
-         obstacle layout documented by the pick/place task. -->
-    <geom name="obstacle_ab_main" type="box" pos="1  -0.2 1.5" size="0.18 0.45 1.5"/>
-    <geom name="obstacle_bc_main" type="box" pos="3   0.2 1.5" size="0.18 0.45 1.5"/>
-    <geom name="obstacle_side_0" type="box" pos="0.2 -1.65 0.6" size="0.25 0.2 0.6"/>
-    <geom name="obstacle_side_1" type="box" pos="2    1.65 0.6" size="0.25 0.2 0.6"/>
-    <geom name="obstacle_side_2" type="box" pos="2   -1.65 0.6" size="0.25 0.2 0.6"/>
-    <geom name="obstacle_side_3" type="box" pos="4   -1.65 0.6" size="0.25 0.2 0.6"/>
-    <!-- Open-front bookshelf cubby at B (NED x=2.18..2.82, z=-1.28..-0.44).
-         Its recessed upper board blocks a straight-down arm at the pick target,
-         while the L-shaped arm enters through the open front. The top
-         board is recessed to preserve rotor and attitude-clearance margins. -->
-    <geom name="obstacle_shelf_bottom" type="box" pos="2.5 0 0.40" size="0.32 0.46 0.04" rgba="0.48 0.30 0.16 1"/>
-    <geom name="obstacle_shelf_top" type="box" pos="2.605 0 1.32" size="0.215 0.46 0.04" rgba="0.48 0.30 0.16 1"/>
-    <geom name="obstacle_shelf_left" type="box" pos="2.5 -0.42 0.80" size="0.32 0.04 0.18" rgba="0.48 0.30 0.16 1"/>
-    <geom name="obstacle_shelf_right" type="box" pos="2.5 0.42 0.80" size="0.32 0.04 0.18" rgba="0.48 0.30 0.16 1"/>
-    <geom name="obstacle_shelf_back" type="box" pos="2.82 0 0.80" size="0.04 0.46 0.22" rgba="0.38 0.24 0.13 1"/>
+    <!-- All dimensions below are authored from the NED task geometry and
+         converted to MJCF's ENU frame: (x, y, z)_ENU = (x, -y, -z)_NED.
+         Each wall spans NED y=[-3, 3], z=[-3, 0], so it cannot be bypassed
+         inside the planning volume.  Its 0.72 m x 0.42 m aperture forces a
+         compact arm configuration rather than a base-only detour. -->
+    <!-- Wall 1: x=1.00, aperture NED y=[-0.36, 0.36], z=[-1.41, -0.99]. -->
+    <geom name="obstacle_wall_1_left" type="box" pos="1 1.68 1.5" size="0.12 1.32 1.5"/>
+    <geom name="obstacle_wall_1_right" type="box" pos="1 -1.68 1.5" size="0.12 1.32 1.5"/>
+    <geom name="obstacle_wall_1_top" type="box" pos="1 0 2.205" size="0.12 0.36 0.795"/>
+    <geom name="obstacle_wall_1_bottom" type="box" pos="1 0 0.495" size="0.12 0.36 0.495"/>
+    <!-- Wall 2: x=3.20, aperture NED y=[-0.36, 0.36], z=[-1.61, -1.19]. -->
+    <geom name="obstacle_wall_2_left" type="box" pos="3.2 1.68 1.5" size="0.12 1.32 1.5"/>
+    <geom name="obstacle_wall_2_right" type="box" pos="3.2 -1.68 1.5" size="0.12 1.32 1.5"/>
+    <geom name="obstacle_wall_2_top" type="box" pos="3.2 0 2.305" size="0.12 0.36 0.695"/>
+    <geom name="obstacle_wall_2_bottom" type="box" pos="3.2 0 0.595" size="0.12 0.36 0.595"/>
+    <!-- -y-facing bookshelf at B.  Its NED free volume is x=[1.84, 2.16],
+         y=[0.75, 1.25], z=[-1.19, -0.91] (0.32 m wide by 0.28 m high).
+         The top board starts at y=0.84 to leave the vehicle clearance at the
+         mouth while still requiring the L-shaped gripper insertion. -->
+    <geom name="obstacle_shelf_bottom" type="box" pos="2 -1 0.87" size="0.24 0.25 0.04" rgba="0.48 0.30 0.16 1"/>
+    <geom name="obstacle_shelf_top" type="box" pos="2 -1.045 1.23" size="0.24 0.205 0.04" rgba="0.48 0.30 0.16 1"/>
+    <geom name="obstacle_shelf_left" type="box" pos="1.8 -1 1.05" size="0.04 0.25 0.14" rgba="0.48 0.30 0.16 1"/>
+    <geom name="obstacle_shelf_right" type="box" pos="2.2 -1 1.05" size="0.04 0.25 0.14" rgba="0.48 0.30 0.16 1"/>
+    <geom name="obstacle_shelf_back" type="box" pos="2 -1.29 1.05" size="0.24 0.04 0.22" rgba="0.38 0.24 0.13 1"/>
     <body name="quadrotor" pos="0 0 1" childclass="quadrotor_parts">
       <include file="../model/aerial_manipulator.xml"/>
     </body>

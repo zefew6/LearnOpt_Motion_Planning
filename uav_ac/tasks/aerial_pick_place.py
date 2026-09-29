@@ -10,7 +10,7 @@ import numpy as np
 
 from uav_ac.control import CascadedConfig, CascadedController
 from uav_ac.control.aerial_manipulator_controller import AerialManipulatorController
-from uav_ac.planning.geometry.esdf import ESDF
+from uav_ac.planning.geometry.esdf import ESDF, InflatedOccupancyGrid
 from uav_ac.planning.trajectory.aerial_manipulator_minco import (
     AerialManipulatorMINCO, AerialManipulatorMINCOConfig, make_terminal_state,
 )
@@ -65,7 +65,8 @@ def run_aerial_pick_place(config):
     simulation = MujocoSimulation(config["scene"], record_actual_trajectory=False)
     robot = simulation.robot
     settings = config["pick_place"]
-    planner_config = AerialManipulatorMINCOConfig(**config["aerial_manipulator_minco"])
+    planner_config = AerialManipulatorMINCOConfig.from_mapping(
+        config["aerial_manipulator_minco"])
     machine = PickPlaceStateMachine()
     diagnostics = {}
     planning_started = time.perf_counter()
@@ -126,7 +127,8 @@ def _public_metrics(diagnostics):
     return {key: value for key, value in diagnostics.items() if key != "plans"}
 
 
-def plan_pick_place(simulation, config, *, deadline=None, seed=None, diagnostics=None):
+def plan_pick_place(simulation, config, *, deadline=None, seed=None, diagnostics=None,
+                    search_only=False):
     """Plan and validate both pick/place legs using the production code path.
 
     This entry point supports headless planning benchmarks without caching maps,
@@ -134,7 +136,8 @@ def plan_pick_place(simulation, config, *, deadline=None, seed=None, diagnostics
     """
     diagnostics = {} if diagnostics is None else diagnostics
     started = time.perf_counter()
-    planner_config = AerialManipulatorMINCOConfig(**config["aerial_manipulator_minco"])
+    planner_config = AerialManipulatorMINCOConfig.from_mapping(
+        config["aerial_manipulator_minco"])
     deadline = (started+planner_config.planning_budget_s if deadline is None else deadline)
     settings = config["pick_place"]
     robot = simulation.robot
@@ -143,7 +146,15 @@ def plan_pick_place(simulation, config, *, deadline=None, seed=None, diagnostics
     gap_open, gap_closed = float(settings["gripper_open"]), float(settings["gripper_closed"])
     bounds = simulation.space_limits
     phase = time.perf_counter()
-    esdf = _scene_esdf(simulation, planner_config)
+    occupancy = _scene_occupancy(simulation, planner_config)
+    diagnostics["occupancy_seconds"] = time.perf_counter()-phase
+    diagnostics["esdf_grid_shape"] = list(occupancy.occupied.shape)
+    diagnostics["esdf_grid_voxels"] = int(occupancy.occupied.size)
+    diagnostics["esdf_grid_bounds"] = [
+        occupancy.origin.tolist(), occupancy.upper.tolist()]
+    diagnostics["esdf_resolution"] = float(occupancy.resolution)
+    phase = time.perf_counter()
+    esdf = ESDF.from_occupancy(occupancy)
     diagnostics["esdf_seconds"] = time.perf_counter()-phase
     if time.perf_counter() >= deadline:
         raise TimeoutError("aerial_manipulator_minco planning budget exceeded during ESDF build")
@@ -160,16 +171,44 @@ def plan_pick_place(simulation, config, *, deadline=None, seed=None, diagnostics
     planner = AerialManipulatorMINCO(planner_config)
     rng = np.random.default_rng(int(config["seed"] if seed is None else seed))
     plans = {}
+    searches = {}
     leg_metrics = {}
     for name, leg_start, leg_goal, opening, carry in (
             ("pick", start, pick_state, gap_open, False),
             ("place", pick_state, place_state, gap_closed, True)):
-        if time.perf_counter() >= deadline:
+        if not search_only and time.perf_counter() >= deadline:
             raise TimeoutError("aerial_manipulator_minco planning budget exceeded")
-        plans[name] = planner.plan(
-            leg_start, leg_goal, robot=robot, esdf=esdf, quad=simulation.quad,
-            workspace_bounds=bounds, gripper_opening=opening,
-            carry_payload=carry, rng=rng, deadline=deadline)
+        leg_deadline = (time.perf_counter()+planner_config.planning_budget_s
+                        if search_only else deadline)
+        try:
+            if search_only:
+                searches[name] = planner.search_initial_path(
+                    leg_start, leg_goal, robot=robot, esdf=esdf, quad=simulation.quad,
+                    workspace_bounds=bounds, gripper_opening=opening,
+                    carry_payload=carry, rng=rng, deadline=leg_deadline,
+                    occupancy=occupancy)
+                leg_metrics[name] = dict(searches[name].metrics)
+                leg_metrics[name]["exact_solution"] = searches[name].exact_solution
+                leg_metrics[name]["path_states"] = int(len(searches[name].path))
+                diagnostics["legs"] = dict(leg_metrics)
+            else:
+                plans[name] = planner.plan(
+                    leg_start, leg_goal, robot=robot, esdf=esdf, quad=simulation.quad,
+                    workspace_bounds=bounds, gripper_opening=opening,
+                    carry_payload=carry, rng=rng, deadline=leg_deadline,
+                    occupancy=occupancy)
+        except (ValueError, RuntimeError, TimeoutError, np.linalg.LinAlgError) as error:
+            leg_metrics[name] = dict(planner.last_metrics)
+            leg_metrics[name]["failure_reason"] = str(error)
+            diagnostics["legs"] = leg_metrics
+            diagnostics["plans"] = plans
+            diagnostics["searches"] = searches
+            if search_only:
+                continue
+            diagnostics["planning_seconds"] = time.perf_counter()-started
+            raise
+        if search_only:
+            continue
         leg_metrics[name] = dict(planner.last_metrics)
         leg_metrics[name].update({
             "validation_passed": bool(plans[name].validation_passed),
@@ -189,6 +228,8 @@ def plan_pick_place(simulation, config, *, deadline=None, seed=None, diagnostics
             "midpoint_arm_joints": midpoint_joints.tolist(),
             "maximum_arm_deviation_rad": float(np.max(np.linalg.norm(
                 joint_samples-leg_start[None, 4:8], axis=1))),
+            "joint_peak_to_peak_rad": np.ptp(joint_samples, axis=0).tolist(),
+            "joint_trajectory_rad": joint_samples.tolist(),
             "rrt_intermediate_arm_deviation_rad": float(np.max(np.linalg.norm(
                 plans[name].rrt_path[1:-1, 4:8]-leg_start[None, 4:8], axis=1),
                 initial=0.)),
@@ -197,6 +238,13 @@ def plan_pick_place(simulation, config, *, deadline=None, seed=None, diagnostics
         diagnostics["legs"] = dict(leg_metrics)
         if not plans[name].validation_passed:
             raise RuntimeError(f"{name} trajectory failed final validation")
+    if search_only:
+        diagnostics["searches"] = searches
+        diagnostics["legs"] = leg_metrics
+        diagnostics["planning_seconds"] = time.perf_counter()-started
+        return {"searches": searches, "pick": pick, "place": place,
+                "gap_open": gap_open, "gap_closed": gap_closed,
+                "start_q": start_q, "esdf": esdf}
     diagnostics["plans"] = plans
     diagnostics["legs"] = leg_metrics
     diagnostics["planning_seconds"] = time.perf_counter()-started
@@ -222,6 +270,11 @@ class _Execution:
             0., self.robot, gripper_opening=gap_open)
         self.max_joint_error = 0.0
         self.last_settle_metrics = {}
+        self.joint_trace_time = []
+        self.reference_joint_trace = []
+        self.actual_joint_trace = []
+        self.reference_gripper_trace = []
+        self.actual_gripper_trace = []
 
     @property
     def done(self):
@@ -242,6 +295,11 @@ class _Execution:
         self.stable_since = None
         self.command_reference = self.plans["pick"].reference(
             0., self.robot, gripper_opening=self.gap_open)
+        self.joint_trace_time.clear()
+        self.reference_joint_trace.clear()
+        self.actual_joint_trace.clear()
+        self.reference_gripper_trace.clear()
+        self.actual_gripper_trace.clear()
 
     def step(self):
         if self.done:
@@ -252,6 +310,12 @@ class _Execution:
             error = np.linalg.norm(
                 self.command_reference.configuration[7:11]-self.robot.configuration[7:11])
             self.max_joint_error = max(self.max_joint_error, float(error))
+            self.joint_trace_time.append(float(now))
+            self.reference_joint_trace.append(
+                self.command_reference.configuration[7:11].copy())
+            self.actual_joint_trace.append(self.robot.configuration[7:11].copy())
+            self.reference_gripper_trace.append(float(self.command_reference.configuration[11]))
+            self.actual_gripper_trace.append(float(self.robot.gripper_opening))
         self.robot.apply(self.controller.step(self.command_reference))
         if self.machine.holding_payload:
             payload_position = self.robot.forward_kinematics(frame="grasp")[0]
@@ -274,8 +338,6 @@ class _Execution:
             reference = trajectory.reference(
                 min(elapsed, trajectory.total_time), self.robot,
                 gripper_opening=self.gap_open)
-            if elapsed >= trajectory.total_time:
-                reference = self._align_grasp_reference(reference, self.pick)
             if elapsed >= trajectory.total_time and self._settled(self.pick, now):
                 self.machine.transition(PickPlaceState.GRASP)
                 self.stage_start = now
@@ -303,8 +365,6 @@ class _Execution:
             reference = trajectory.reference(
                 min(elapsed, trajectory.total_time), self.robot,
                 gripper_opening=self.gap_closed)
-            if elapsed >= trajectory.total_time:
-                reference = self._align_grasp_reference(reference, self.place)
             if elapsed >= trajectory.total_time and self._settled(self.place, now):
                 self.machine.transition(PickPlaceState.RELEASE)
                 self.stage_start = now
@@ -367,9 +427,6 @@ class _Execution:
                 and np.linalg.norm(self.robot.velocity[:3]) <= tolerance
                 and np.linalg.norm(self.robot.velocity[6:10]) <= tolerance)
 
-    def _align_grasp_reference(self, reference, target):
-        return reference
-
     def _terminal_with_gap(self, gap):
         trajectory_name = "pick" if self.machine.state is PickPlaceState.GRASP else "place"
         trajectory = self.plans[trajectory_name]
@@ -381,8 +438,25 @@ class _Execution:
         return AerialManipulatorReference(configuration, reference.velocity,
                                           reference.acceleration)
 
+    def joint_trace(self):
+        """Return controller-rate planned/actual arm traces for result inspection."""
+        return {
+            "time_s": np.asarray(self.joint_trace_time, dtype=float),
+            "reference_rad": np.asarray(self.reference_joint_trace, dtype=float).reshape(-1, 4),
+            "actual_rad": np.asarray(self.actual_joint_trace, dtype=float).reshape(-1, 4),
+            "reference_gripper_opening_m": np.asarray(self.reference_gripper_trace, dtype=float),
+            "actual_gripper_opening_m": np.asarray(self.actual_gripper_trace, dtype=float),
+        }
 
-def _scene_esdf(simulation, config):
+
+def _scene_occupancy(simulation, config):
+    """Build the shared RRT occupancy and ESDF source map once per mission."""
+    boxes, lower, upper = _scene_geometry(simulation, config)
+    return InflatedOccupancyGrid.from_axis_aligned_boxes(
+        boxes, lower, upper, config.esdf_resolution, ground_height=0.)
+
+
+def _scene_geometry(simulation, config):
     bounds = simulation.space_limits
     if bounds is None:
         raise ValueError("aerial pick/place scene requires planning_bounds")
@@ -390,10 +464,7 @@ def _scene_esdf(simulation, config):
     boxes = np.column_stack((obstacle[:, 0], obstacle[:, 2], obstacle[:, 4],
                              obstacle[:, 1], obstacle[:, 3], obstacle[:, 5]))
     padding = max(.8, config.obstacle_clearance+.65)
-    lower, upper = bounds[0]-padding, bounds[1]+padding
-    # The NED ground lies at z=0; positive signed distance is above the floor.
-    return ESDF.from_axis_aligned_boxes(
-        boxes, lower, upper, .08, ground_height=0.)
+    return boxes, bounds[0]-padding, bounds[1]+padding
 
 
 def _result(machine, plans, simulation, controller, execution=None, planning_metrics=None):
@@ -439,6 +510,7 @@ def _result(machine, plans, simulation, controller, execution=None, planning_met
         "saturation_count": int(getattr(controller, "saturation_count", 0)) if controller else 0,
         "maximum_joint_tracking_error": (
             0.0 if execution is None else float(execution.max_joint_error)),
+        "joint_execution_trace": ({} if execution is None else execution.joint_trace()),
         "settle_metrics": {} if execution is None else execution.last_settle_metrics.copy(),
         "planning_metrics": {} if planning_metrics is None else dict(planning_metrics),
     }

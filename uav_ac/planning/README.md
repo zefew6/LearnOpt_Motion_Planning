@@ -45,18 +45,36 @@ Each returned `FIRIRegion` owns its half-spaces and visualization geometry:
 
 ## Aerial-manipulator pick and place
 
-The first whole-body manipulation task plans each leg in
-`[x, y, z, yaw, q1, q2, q3, q4]` using callback-based RRT-Connect, an 8-D
-quintic MINCO spline, and analytic-gradient L-BFGS refinement. One positive
-total-time variable is shared equally across the pieces. Static scene boxes and
-the NED ground are rasterized into an ESDF; the optimizer uses robot collision
-spheres and a payload sphere, then validates the trajectory densely against
-MuJoCo collision queries.
+The whole-body manipulation task plans each leg in
+`[x, y, z, yaw, q1, q2, q3, q4]` using OMPL `RRTConnect` on `R3 × SO2 × R4`, an
+8-D quintic MINCO spline, and analytic-gradient L-BFGS refinement. The initial
+MINCO knots are sampled by equivalent 8-D arc length (0.25 m by default), with
+all RRT corners retained; the segment count follows the sampled path. One
+positive total-time variable is shared equally across the segments.
+
+Scene boxes and ground are voxelized once. The shared occupancy grid feeds RRT
+collision checks and the `edt` package generates the signed Euclidean distance
+field; SciPy's first-order `NdBSpline` provides distance queries and analytic
+gradients. The RRT searches nominal horizontal body geometry, while MINCO and
+dense validation use the full roll/pitch/yaw recovered from flatness. Their
+collision costs differentiate through acceleration and yaw, and exact MuJoCo
+distances confirm close geometry contacts.
+
+A three-dimensional, base-center grid A* route is computed from that same
+occupancy grid and used only to shape the early OMPL position region. Yaw stays
+free; arm-joint bounds start around the endpoint configurations, widen for the
+A*-guided stage, and then expand to the full limits on one continuing
+`RRTConnect` tree. The OMPL 2.0.1 Python bindings do not expose the C++
+state-sampler allocator, and OMPL has no classical occupancy-grid A* planner,
+so this staged-bound strategy avoids a Python callback sampler while leaving a
+global exploration stage. The weighted A* route is a hint, not an optimality
+certificate. The `--search-only` benchmark measures pick and place
+independently of MINCO; each seed runs in a fresh process by default.
 
 Run the deterministic headless demo with:
 
 ```bash
-.venv/bin/python -m uav_ac.main --config configs/aerial_manipulator_pick_place.yaml
+.venv/bin/python -m uav_ac.main --config configs/aerial_manipulator_workcell.yaml
 ```
 
 Set `visualize: true` to open the existing MuJoCo viewer. The V1 payload is a
@@ -66,6 +84,12 @@ Planning and execution results separately report optimizer convergence,
 dense trajectory validation, mission state, collision status, and failure
 reason. The final collision check is dense sampling; it does not certify every
 continuous-time point between samples.
+
+The workcell configuration uses equal straight-arm pick and place terminal
+states. A 1.80 m wide, 0.58 m high opening in the transfer machine requires a
+transit fold, while the loaded central rack leaves routes on both sides. The
+older `aerial_manipulator_pick_place` scene remains as a narrow-passage stress
+case; its dedicated configuration is unchanged.
 
 ## Package structure
 

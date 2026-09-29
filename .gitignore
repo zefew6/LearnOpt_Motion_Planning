@@ -5,6 +5,7 @@
 
 # Python environments, caches and test reports
 venv/
+tools/
 .venv/
 uav/
 __pycache__/

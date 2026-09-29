@@ -1,0 +1,108 @@
+<mujoco model="aerial_manipulator_workcell">
+  <compiler angle="radian" autolimits="true"/>
+  <default>
+    <default class="quadrotor_parts"><geom contype="1" conaffinity="1"/></default>
+  </default>
+  <option timestep="0.001" gravity="0 0 -9.81" integrator="Euler"/>
+  <size nuser_site="1"/>
+  <statistic center="2.6 0 1.3" extent="4.5"/>
+  <custom>
+    <numeric name="planning_bounds" data="-0.6 -2.4 -2.05 5.8 2.4 -0.85"/>
+    <numeric name="flight_limits" data="3 2 8 12 0.7"/>
+  </custom>
+  <visual>
+    <global azimuth="135" elevation="-25"/>
+    <map znear="0.01" zfar="30"/>
+    <quality offsamples="4"/>
+  </visual>
+  <asset>
+    <texture name="ground_grid" type="2d" builtin="checker" width="512" height="512"
+             rgb1="0.55 0.55 0.55" rgb2="0.35 0.35 0.35"/>
+    <material name="ground" texture="ground_grid" texrepeat="8 8" texuniform="true"
+              reflectance="0.1"/>
+  </asset>
+  <worldbody>
+    <light name="sun" pos="2.5 0 8" dir="-0.3 0.2 -1" directional="true"/>
+    <geom name="ground" type="plane" size="8 5 0.1" material="ground"/>
+
+    <!-- NED coordinates are converted as (x,y,z)_ENU=(x,-y,-z)_NED. -->
+    <!-- Loaded pallet stacks and the pick-side storage rack. -->
+    <geom name="obstacle_entry_cartons" type="box" pos="0.775 0.15 0.975"
+          size="0.225 0.5 0.975" rgba="0.68 0.48 0.28 1"/>
+    <geom name="obstacle_rear_storage" type="box" pos="1.30 -2.20 1.20"
+          size="0.85 0.25 1.20" rgba="0.40 0.48 0.54 1"/>
+
+    <!-- Open pick bench: an 8 cm work surface on four 6 cm square legs. -->
+    <geom name="obstacle_pick_bench_top" type="box" pos="1.45 -1.35 0.76"
+          size="0.45 0.35 0.04" rgba="0.36 0.42 0.46 1"/>
+    <geom name="obstacle_pick_bench_leg_fl" type="box" pos="1.06 -1.06 0.36"
+          size="0.03 0.03 0.36" rgba="0.24 0.29 0.32 1"/>
+    <geom name="obstacle_pick_bench_leg_fr" type="box" pos="1.84 -1.06 0.36"
+          size="0.03 0.03 0.36" rgba="0.24 0.29 0.32 1"/>
+    <geom name="obstacle_pick_bench_leg_bl" type="box" pos="1.06 -1.64 0.36"
+          size="0.03 0.03 0.36" rgba="0.24 0.29 0.32 1"/>
+    <geom name="obstacle_pick_bench_leg_br" type="box" pos="1.84 -1.64 0.36"
+          size="0.03 0.03 0.36" rgba="0.24 0.29 0.32 1"/>
+
+    <!-- A loaded central rack island leaves broad north and south routes. -->
+    <geom name="obstacle_rack_island_lower" type="box" pos="2.675 0 0.62"
+          size="0.375 0.55 0.62" rgba="0.53 0.39 0.27 1"/>
+    <geom name="obstacle_rack_island_upper" type="box" pos="2.675 0 1.78"
+          size="0.375 0.55 0.62" rgba="0.67 0.50 0.33 1"/>
+    <geom name="obstacle_low_tote" type="box" pos="2.35 1.825 0.425"
+          size="0.30 0.425 0.425" rgba="0.31 0.42 0.50 1"/>
+
+    <!-- Transfer machine: conveyor, overhead housing, and side cabinets.
+         The 1.80 m wide by 0.58 m high opening admits folded configurations. -->
+    <geom name="obstacle_transfer_conveyor" type="box" pos="3.90 0 0.475"
+          size="0.15 0.90 0.475" rgba="0.28 0.34 0.38 1"/>
+    <geom name="obstacle_transfer_hood" type="box" pos="3.90 0 2.065"
+          size="0.15 0.90 0.535" rgba="0.36 0.45 0.51 1"/>
+    <geom name="obstacle_transfer_cabinet_south" type="box" pos="3.90 1.75 1.30"
+          size="0.15 0.85 1.30" rgba="0.43 0.51 0.57 1"/>
+    <geom name="obstacle_transfer_cabinet_north" type="box" pos="3.90 -1.75 1.30"
+          size="0.15 0.85 1.30" rgba="0.43 0.51 0.57 1"/>
+
+    <!-- Place bench and downstream storage cabinet. -->
+    <geom name="obstacle_pack_bench_top" type="box" pos="5.05 1.30 0.66"
+          size="0.45 0.35 0.04" rgba="0.32 0.40 0.43 1"/>
+    <geom name="obstacle_pack_bench_leg_fl" type="box" pos="4.66 1.01 0.31"
+          size="0.03 0.03 0.31" rgba="0.22 0.27 0.30 1"/>
+    <geom name="obstacle_pack_bench_leg_fr" type="box" pos="5.44 1.01 0.31"
+          size="0.03 0.03 0.31" rgba="0.22 0.27 0.30 1"/>
+    <geom name="obstacle_pack_bench_leg_bl" type="box" pos="4.66 1.59 0.31"
+          size="0.03 0.03 0.31" rgba="0.22 0.27 0.30 1"/>
+    <geom name="obstacle_pack_bench_leg_br" type="box" pos="5.44 1.59 0.31"
+          size="0.03 0.03 0.31" rgba="0.22 0.27 0.30 1"/>
+    <geom name="obstacle_outbound_storage" type="box" pos="5.125 -1.35 0.90"
+          size="0.375 0.45 0.90" rgba="0.40 0.48 0.54 1"/>
+
+    <body name="quadrotor" pos="0 1.4 1.45" childclass="quadrotor_parts">
+      <include file="../model/aerial_manipulator.xml"/>
+    </body>
+    <body name="payload_marker" mocap="true">
+      <geom name="payload_marker_geom" type="sphere" size="0.035"
+            rgba="0.95 0.35 0.08 1" contype="0" conaffinity="0"/>
+    </body>
+    <body name="pick_target_marker" mocap="true">
+      <geom name="pick_target_geom" type="sphere" size="0.055"
+            rgba="0.2 0.9 0.35 0.35" contype="0" conaffinity="0"/>
+    </body>
+    <body name="place_target_marker" mocap="true">
+      <geom name="place_target_geom" type="sphere" size="0.055"
+            rgba="0.2 0.45 1.0 0.35" contype="0" conaffinity="0"/>
+    </body>
+  </worldbody>
+  <actuator>
+    <motor name="arm_motor_0" joint="arm_joint_0" ctrlrange="-0.8 0.8" ctrllimited="true"/>
+    <motor name="arm_motor_1" joint="arm_joint_1" ctrlrange="-0.8 0.8" ctrllimited="true"/>
+    <motor name="arm_motor_2" joint="arm_joint_2" ctrlrange="-0.6 0.6" ctrllimited="true"/>
+    <motor name="arm_motor_3" joint="arm_joint_3" ctrlrange="-0.4 0.4" ctrllimited="true"/>
+    <position name="gripper_position" joint="gripper_left_joint" kp="120" kv="3"
+              ctrlrange="0 0.025" ctrllimited="true" forcerange="-2 2" forcelimited="true"/>
+  </actuator>
+  <equality>
+    <joint name="gripper_finger_sync" joint1="gripper_right_joint"
+           joint2="gripper_left_joint" polycoef="0 1 0 0 0"/>
+  </equality>
+</mujoco>

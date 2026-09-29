@@ -9,6 +9,24 @@ from ..gcopter.mappings import polynomial_basis_matrix
 
 
 @dataclass(frozen=True)
+class AerialManipulatorSearchResult:
+    """Exact, continuously edge-validated 8-D RRT initial path."""
+
+    path: np.ndarray
+    metrics: dict
+    exact_solution: bool = True
+
+    def __post_init__(self):
+        path = np.asarray(self.path, dtype=float).copy()
+        if (path.ndim != 2 or path.shape[1] != 8 or len(path) < 2
+                or not np.all(np.isfinite(path)) or not self.exact_solution):
+            raise ValueError("search result must contain a finite exact 8-D path")
+        path.setflags(write=False)
+        object.__setattr__(self, "path", path)
+        object.__setattr__(self, "metrics", dict(self.metrics))
+
+
+@dataclass(frozen=True)
 class AerialManipulatorTrajectory:
     durations: np.ndarray
     coefficients: np.ndarray
@@ -97,6 +115,50 @@ def _flatness_attitude(acceleration, jerk, yaw, yaw_rate, gravity=9.81):
     skew = rotation.T@derivative
     omega_body = np.array([skew[2, 1], skew[0, 2], skew[1, 0]])
     return rotation, omega_body
+
+
+def _flatness_attitude_tangent_jacobian(acceleration, yaw, gravity=9.81):
+    """Map acceleration/yaw perturbations to a world-angle tangent.
+
+    The result is ``d theta_world / d [ax, ay, az, yaw]`` for a left
+    perturbation ``dR = [d theta_world]x R``. It differentiates the same
+    normalized thrust and heading construction used by ``_flatness_attitude``.
+    """
+    acceleration = np.asarray(acceleration, dtype=float)
+    if acceleration.shape != (3,) or not np.all(np.isfinite(acceleration)):
+        raise ValueError("acceleration must be a finite 3-vector")
+    force = np.array([-acceleration[0], -acceleration[1], gravity-acceleration[2]])
+    force_norm = max(float(np.linalg.norm(force)), 1e-8)
+    body_z = force/force_norm
+    force_jacobian = np.zeros((3, 4))
+    force_jacobian[:, :3] = np.diag([-1., -1., -1.])
+    body_z_jacobian = ((np.eye(3)-np.outer(body_z, body_z))/force_norm) @ force_jacobian
+    heading = np.array([np.cos(yaw), np.sin(yaw), 0.])
+    heading_jacobian = np.zeros((3, 4))
+    heading_jacobian[:, 3] = [-np.sin(yaw), np.cos(yaw), 0.]
+    cross = np.cross(body_z, heading)
+    cross_norm = max(float(np.linalg.norm(cross)), 1e-8)
+    body_y = cross/cross_norm
+    cross_jacobian = (-_skew(heading)@body_z_jacobian
+                      +_skew(body_z)@heading_jacobian)
+    body_y_jacobian = ((np.eye(3)-np.outer(body_y, body_y))/cross_norm) @ cross_jacobian
+    body_x = np.cross(body_y, body_z)
+    body_x_jacobian = (-_skew(body_z)@body_y_jacobian
+                       +_skew(body_y)@body_z_jacobian)
+    rotation = np.column_stack((body_x, body_y, body_z))
+    tangent_jacobian = np.empty((3, 4))
+    for index in range(4):
+        derivative = np.column_stack((body_x_jacobian[:, index],
+                                      body_y_jacobian[:, index],
+                                      body_z_jacobian[:, index]))
+        skew = derivative@rotation.T
+        tangent_jacobian[:, index] = [skew[2, 1], skew[0, 2], skew[1, 0]]
+    return rotation, tangent_jacobian
+
+
+def _skew(vector):
+    x, y, z = np.asarray(vector, dtype=float)
+    return np.array([[0., -z, y], [z, 0., -x], [-y, x, 0.]])
 
 
 __all__ = ["AerialManipulatorTrajectory"]

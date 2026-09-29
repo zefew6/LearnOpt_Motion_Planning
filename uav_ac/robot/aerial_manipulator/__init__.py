@@ -81,9 +81,40 @@ class AerialManipulator:
         return self._model.point_positions_and_jacobians(
             configuration, body_names, local_points, check_limits=check_limits)
 
+    def point_positions_and_pose_jacobians(
+            self, configuration, body_names, local_points, *, check_limits=True):
+        return self._model.point_positions_and_pose_jacobians(
+            configuration, body_names, local_points, check_limits=check_limits)
+
     def point_positions(self, configuration, body_names, local_points, *, check_limits=True):
         return self._model.point_positions(
             configuration, body_names, local_points, check_limits=check_limits)
+
+    def point_positions_batch(self, configurations, body_names, local_points,
+                              *, check_limits=True):
+        return self._model.point_positions_batch(
+            configurations, body_names, local_points, check_limits=check_limits)
+
+    def exact_collision_distances(
+            self, configuration=None, pairs=None, *, payload_attached=False,
+            payload_position_ned=None, payload_radius=None,
+            with_jacobians=False, with_pose_jacobians=False,
+            jacobian_distance_thresholds=None, check_limits=True):
+        return self._model.exact_collision_distances(
+            configuration, pairs, payload_attached=payload_attached,
+            payload_position_ned=payload_position_ned, payload_radius=payload_radius,
+            with_jacobians=with_jacobians, with_pose_jacobians=with_pose_jacobians,
+            jacobian_distance_thresholds=jacobian_distance_thresholds,
+            check_limits=check_limits)
+
+    def collision_pairs(self, kind="self"):
+        return self._model.collision_pairs(kind)
+
+    def collision_environment_aabbs(self):
+        return self._model.collision_environment_aabbs()
+
+    def base_inscribed_collision_radius(self):
+        return self._model.base_inscribed_collision_radius()
 
     def collision_geometries(self):
         return self._model.collision_geometries()

@@ -37,6 +37,14 @@ def test_analytic_whole_body_sample_gradient_matches_finite_difference():
         .06, carry_payload=True)
     assert len(evaluator.self_pairs)
     assert len(evaluator.payload_pairs)
+    assert evaluator.rrt_fixed_clearance_self_pairs_skipped == 3
+    skipped_gripper_pairs = {
+        frozenset(("gripper_pad_left", "gripper_pad_right")),
+        frozenset(("gripper_finger_left", "gripper_pad_right")),
+        frozenset(("gripper_pad_left", "gripper_finger_right")),
+    }
+    assert not any(frozenset(pair) in skipped_gripper_pairs
+                   for pair in evaluator.self_geom_pairs)
     assert all(evaluator.geometry[sphere][0] not in {
         "gripper_palm_body", "gripper_left_body", "gripper_right_body"
     } for sphere, _ in evaluator.payload_pairs)
@@ -73,8 +81,9 @@ def test_complete_shared_total_time_and_minco_adjoint_gradient():
         record_actual_trajectory=False)
     robot = simulation.robot
     config = AerialManipulatorMINCOConfig(
-        pieces=2, integral_resolution=2, max_iterations=2,
-        obstacle_clearance=.02, constraint_weight=10.)
+        integral_resolution=2, max_iterations=2,
+        obstacle_clearance=.02, constraint_weight=10.,
+        joint_waypoint_parameterization="direct")
     esdf = ESDF.from_axis_aligned_boxes(
         np.empty((0, 6)), [-2., -2., -3.], [2., 2., 1.], .2,
         ground_height=0.)
@@ -170,7 +179,7 @@ def test_dense_validation_checks_collision_with_flatness_recovered_attitude():
         "uav_ac/simulation/models/aerial_manipulator_pick_place.xml",
         record_actual_trajectory=False)
     robot = simulation.robot
-    config = AerialManipulatorMINCOConfig(pieces=1, validation_dt=.05)
+    config = AerialManipulatorMINCOConfig(validation_dt=.05)
     esdf = ESDF.from_axis_aligned_boxes(
         np.empty((0, 6)), [-2., -2., -3.], [2., 2., 1.], .2, ground_height=0.)
     evaluator = AerialManipulatorTrajectoryEvaluator(
@@ -194,3 +203,50 @@ def test_dense_validation_checks_collision_with_flatness_recovered_attitude():
     evaluator.dense_validate(trajectory)
     robot.check_collision = original
     assert any(np.linalg.norm(quaternion[1:3]) > 1e-3 for quaternion in seen)
+
+
+def test_collision_gradient_chains_full_pose_through_acceleration_and_yaw():
+    simulation = MujocoSimulation(
+        "uav_ac/simulation/models/aerial_manipulator_pick_place.xml",
+        record_actual_trajectory=False)
+    robot = simulation.robot
+    origin = np.array([-2., -2., -3.])
+    resolution = .2
+    axes = [origin[i]+np.arange(36)*resolution for i in range(3)]
+    xx, yy, zz = np.meshgrid(*axes, indexing="ij")
+    field = .1*xx+.2*yy+.3*zz-1.
+    esdf = ESDF(field, origin, resolution)
+    config = AerialManipulatorMINCOConfig(
+        esdf_resolution=resolution, esdf_discretization_margin=np.sqrt(3)*resolution,
+        obstacle_clearance=.05)
+    evaluator = AerialManipulatorTrajectoryEvaluator(
+        robot, esdf, simulation.quad, config, simulation.space_limits, .06, False)
+    # Isolate the smooth shared-distance-field term; exact MuJoCo checks are
+    # covered by a separate full-pose witness-Jacobian test.
+    evaluator.sphere_geom_indices[:] = -1
+    evaluator.self_pairs = np.empty((0, 2), dtype=int)
+    evaluator.payload_pairs = np.empty((0, 2), dtype=int)
+    evaluator.world_geom_pairs = ()
+    sigma = np.r_[.2, -.1, -1., .25, .2, -.3, .1, -.15]
+    acceleration = np.array([.7, -.4, .5, 0., 0., 0., 0., 0.])
+    value, gradient, grad_acceleration = evaluator.collision_cost_gradient(
+        sigma, acceleration)[:3]
+    assert value > 0.
+    assert np.linalg.norm(grad_acceleration[:3]) > 0.
+    epsilon = 1e-6
+    numerical_state = np.empty(8)
+    numerical_acceleration = np.empty(8)
+    for index in range(8):
+        plus, minus = sigma.copy(), sigma.copy()
+        plus[index] += epsilon; minus[index] -= epsilon
+        numerical_state[index] = (
+            evaluator.collision_cost_gradient(plus, acceleration)[0]
+            -evaluator.collision_cost_gradient(minus, acceleration)[0])/(2*epsilon)
+        plus_acc, minus_acc = acceleration.copy(), acceleration.copy()
+        plus_acc[index] += epsilon; minus_acc[index] -= epsilon
+        numerical_acceleration[index] = (
+            evaluator.collision_cost_gradient(sigma, plus_acc)[0]
+            -evaluator.collision_cost_gradient(sigma, minus_acc)[0])/(2*epsilon)
+    np.testing.assert_allclose(gradient, numerical_state, rtol=2e-4, atol=3e-3)
+    np.testing.assert_allclose(grad_acceleration, numerical_acceleration,
+                               rtol=3e-4, atol=5e-3)

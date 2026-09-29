@@ -1,6 +1,7 @@
 import numpy as np
 import mujoco
 import pytest
+from scipy.spatial.transform import Rotation
 
 from uav_ac.robot.aerial_manipulator import AerialManipulatorCommand
 from uav_ac.simulation.mujoco_sim import DEFAULT_SCENE_PATH, ENU_TO_NED, MujocoSimulation
@@ -46,6 +47,25 @@ def test_joint_limits_and_nonadjacent_self_collision_are_checked():
         sim.configuration_collision([0.0, 2.3, 0.0, 0.0])
     folded = np.full(4, -2.2)
     assert sim.configuration_collision(folded) is True
+
+
+def test_opposing_gripper_geometries_keep_more_than_planning_self_clearance():
+    sim = MujocoSimulation(
+        "uav_ac/simulation/models/aerial_manipulator_pick_place.xml",
+        record_actual_trajectory=False)
+    pairs = (
+        ("gripper_pad_left", "gripper_pad_right"),
+        ("gripper_finger_left", "gripper_pad_right"),
+        ("gripper_pad_left", "gripper_finger_right"),
+    )
+    q = sim.robot.configuration.copy()
+    for opening in (.020, .025, .070):
+        q[11] = opening
+        for joints in (np.zeros(4), np.array([.3, -.4, .2, -.1])):
+            q[7:11] = joints
+            result = sim.robot.exact_collision_distances(
+                q, pairs=pairs, check_limits=False)
+            assert np.all(result["distances"] >= opening-1e-10)
 
 
 def test_joint_jacobian_matches_finite_difference_at_rotated_configuration():
@@ -174,10 +194,10 @@ def test_logical_payload_sphere_is_checked_against_obstacles_and_robot():
     robot = sim.robot
     configuration = robot.configuration
     hit = robot.check_collision(
-        configuration, clearance=0., payload_position_ned=[1., .2, -1.5],
+        configuration, clearance=0., payload_position_ned=[1., .4, -1.5],
         payload_radius=.035)
     assert hit["collision"]
-    assert any("obstacle_ab_main" in pair["geoms"] for pair in hit["pairs"])
+    assert any("obstacle_wall_1_right" in pair["geoms"] for pair in hit["pairs"])
 
     attached = robot.check_collision(configuration, clearance=0., payload_attached=True)
     assert not any("gripper_" in name for pair in attached["pairs"] for name in pair["geoms"]
@@ -234,3 +254,135 @@ def test_public_planning_point_jacobian_supports_soft_limit_queries_without_live
     np.testing.assert_array_equal(sim.data.qpos, before[0])
     np.testing.assert_array_equal(sim.data.qvel, before[1])
     assert sim.time == before[2]
+
+
+def test_exact_collision_distance_query_is_public_signed_and_non_mutating():
+    sim = MujocoSimulation(MODEL, record_actual_trajectory=False)
+    robot = sim.robot
+    q = robot.configuration.copy()
+    q[:3] = [.3, -.1, -1.1]
+    q[7:11] = [.2, -.3, .1, -.15]
+    pairs = robot.collision_pairs("world")[:4]
+    before = sim.data.qpos.copy(), sim.data.qvel.copy(), sim.time
+    result = robot.exact_collision_distances(
+        q, pairs=pairs, with_jacobians=True)
+    assert {frozenset(pair) for pair in result["pairs"]} == {
+        frozenset(pair) for pair in pairs}
+    assert result["distances"].shape == (len(pairs),)
+    assert result["points_ned"].shape == (len(pairs), 2, 3)
+    assert result["jacobians"].shape == (len(pairs), 8)
+    assert np.all(np.isfinite(result["distances"]))
+    assert np.all(np.isfinite(result["jacobians"]))
+    np.testing.assert_array_equal(sim.data.qpos, before[0])
+    np.testing.assert_array_equal(sim.data.qvel, before[1])
+    assert sim.time == before[2]
+
+
+def test_exact_collision_distance_jacobian_matches_configuration_finite_difference():
+    sim = MujocoSimulation(
+        "uav_ac/simulation/models/aerial_manipulator_pick_place.xml",
+        record_actual_trajectory=False)
+    robot = sim.robot
+    q = robot.configuration.copy()
+    q[:3] = [.8, -.1, -1.15]
+    q[7:11] = [.35, -.4, .2, -.25]
+    pair = ("arm_0", "obstacle_wall_1_left")
+    analytic = robot.exact_collision_distances(
+        q, pairs=(pair,), with_jacobians=True)["jacobians"][0]
+    epsilon = 1.0e-6
+    numerical = np.empty(8)
+    for column in range(8):
+        plus, minus = q.copy(), q.copy()
+        if column < 3:
+            plus[column] += epsilon
+            minus[column] -= epsilon
+        elif column == 3:
+            plus[3:7] = [np.cos(epsilon/2), 0., 0., np.sin(epsilon/2)]
+            minus[3:7] = [np.cos(epsilon/2), 0., 0., -np.sin(epsilon/2)]
+        else:
+            plus[7+column-4] += epsilon
+            minus[7+column-4] -= epsilon
+        distances = [robot.exact_collision_distances(
+            state, pairs=(pair,))["distances"][0] for state in (plus, minus)]
+        numerical[column] = (distances[0]-distances[1])/(2.*epsilon)
+    np.testing.assert_allclose(analytic, numerical, rtol=2e-4, atol=2e-5)
+
+
+def test_batch_point_positions_use_kinematics_and_match_scalar_queries():
+    sim = MujocoSimulation(MODEL, record_actual_trajectory=False)
+    robot = sim.robot
+    configurations = np.repeat(robot.configuration[None, :], 3, axis=0)
+    configurations[:, :3] = [[.2, -.3, -1.], [.5, .1, -1.2], [-.1, .2, -.9]]
+    for index, angles in enumerate((.2, -.35, .6)):
+        configurations[index, 3:7] = [np.cos(angles/2), 0., 0., np.sin(angles/2)]
+    configurations[:, 7:11] = [[.1, -.2, .3, -.1], [.2, -.3, .1, -.2],
+                                [-.1, .15, -.2, .1]]
+    names = ("quadrotor", "arm_link_2_body", "gripper_palm_body")
+    local = np.array([[.02, 0., -.03], [0., .01, -.04], [.01, 0., 0.]])
+    before = sim.data.qpos.copy(), sim.data.qvel.copy(), sim.time
+    actual = robot.point_positions_batch(configurations, names, local)
+    expected = np.asarray([robot.point_positions(q, names, local)
+                           for q in configurations])
+    np.testing.assert_allclose(actual, expected, atol=1e-12)
+    np.testing.assert_array_equal(sim.data.qpos, before[0])
+    np.testing.assert_array_equal(sim.data.qvel, before[1])
+    assert sim.time == before[2]
+
+
+def test_full_pose_point_jacobian_matches_world_rotation_tangent():
+    sim = MujocoSimulation(MODEL, record_actual_trajectory=False)
+    robot = sim.robot
+    q = robot.configuration.copy()
+    q[:3] = [.4, -.2, -1.1]
+    q[3:7] = Rotation.from_euler("xyz", [.2, -.25, .35]).as_quat()[[3, 0, 1, 2]]
+    q[7:11] = [.2, -.3, .1, -.15]
+    body, local = "arm_link_2_body", np.array([[.02, 0., -.04]])
+    positions, jacobians = robot.point_positions_and_pose_jacobians(q, [body], local)
+    assert jacobians.shape == (1, 3, 10)
+    epsilon = 1e-7
+    for column in range(10):
+        shifted = q.copy()
+        if column < 3:
+            shifted[column] += epsilon
+        elif column < 6:
+            rotvec = np.zeros(3); rotvec[column-3] = epsilon
+            quaternion = Rotation.from_quat(q[4:7].tolist()+[q[3]])
+            shifted[3:7] = (Rotation.from_rotvec(rotvec)*quaternion).as_quat()[[3, 0, 1, 2]]
+        else:
+            shifted[7+column-6] += epsilon
+        moved = robot.point_positions_and_pose_jacobians(shifted, [body], local)[0]
+        np.testing.assert_allclose((moved-positions)[0]/epsilon,
+                                   jacobians[0, :, column], atol=2e-5)
+
+
+def test_exact_collision_distance_supports_full_pose_tangent_jacobian():
+    sim = MujocoSimulation(
+        "uav_ac/simulation/models/aerial_manipulator_pick_place.xml",
+        record_actual_trajectory=False)
+    robot = sim.robot
+    q = robot.configuration.copy()
+    q[:3] = [.8, -.1, -1.15]
+    q[3:7] = Rotation.from_euler("xyz", [.15, -.2, .1]).as_quat()[[3, 0, 1, 2]]
+    q[7:11] = [.35, -.4, .2, -.25]
+    pair = ("arm_0", "obstacle_wall_1_left")
+    analytic = robot.exact_collision_distances(
+        q, pairs=(pair,), with_jacobians=True,
+        with_pose_jacobians=True)["jacobians"][0]
+    assert analytic.shape == (10,)
+    epsilon = 1e-7
+    numerical = np.empty(10)
+    for column in range(10):
+        plus, minus = q.copy(), q.copy()
+        if column < 3:
+            plus[column] += epsilon; minus[column] -= epsilon
+        elif column < 6:
+            rotvec = np.zeros(3); rotvec[column-3] = epsilon
+            quaternion = Rotation.from_quat(q[4:7].tolist()+[q[3]])
+            plus[3:7] = (Rotation.from_rotvec(rotvec)*quaternion).as_quat()[[3, 0, 1, 2]]
+            minus[3:7] = (Rotation.from_rotvec(-rotvec)*quaternion).as_quat()[[3, 0, 1, 2]]
+        else:
+            plus[7+column-6] += epsilon; minus[7+column-6] -= epsilon
+        distances = [robot.exact_collision_distances(state, pairs=(pair,))["distances"][0]
+                     for state in (plus, minus)]
+        numerical[column] = (distances[0]-distances[1])/(2.*epsilon)
+    np.testing.assert_allclose(analytic, numerical, rtol=3e-4, atol=3e-5)

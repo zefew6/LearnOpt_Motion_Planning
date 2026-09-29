@@ -65,6 +65,35 @@ def test_minimal_config_receives_runtime_defaults(tmp_path):
     assert config["gcopter"] == {}
 
 
+def test_aerial_pick_place_accepts_workcell_scene_with_optional_xml_suffix(tmp_path):
+    config = main.load_config(write_config(
+        tmp_path,
+        "task: aerial_pick_place\n"
+        "scene: aerial_manipulator_workcell.xml\n"
+        "planner: aerial_manipulator_minco\n"
+        "controller: cascaded\n"
+        "pick_place:\n"
+        "  pick_position_ned: [1.45, 1.35, -0.95]\n"
+        "  place_position_ned: [5.05, -1.30, -0.85]\n"
+        "  pick_yaw: 0.0\n"
+        "  place_yaw: 0.0\n"
+        "  pick_nominal_joints: [0, 0, 0, 0]\n"
+        "  place_nominal_joints: [0, 0, 0, 0]\n"
+        "  gripper_open: 0.06\n"
+        "  gripper_closed: 0.025\n"))
+    assert config["scene"].endswith("aerial_manipulator_workcell.xml")
+
+
+def test_aerial_pick_place_rejects_unrelated_scene(tmp_path):
+    with pytest.raises(ValueError, match="aerial manipulator pick/place scene"):
+        main.load_config(write_config(
+            tmp_path,
+            "task: aerial_pick_place\n"
+            "scene: lab_course\n"
+            "planner: aerial_manipulator_minco\n"
+            "controller: cascaded\n"))
+
+
 def test_follow_camera_is_loaded_from_flight_yaml(tmp_path):
     config = main.load_config(write_config(
         tmp_path, "scene: lab_course\nplanner: mini_snap\ncontroller: cascaded\nfollow_camera: true\n"))
