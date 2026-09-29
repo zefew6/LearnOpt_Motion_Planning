@@ -15,6 +15,7 @@ class LBFGSResult:
     iterations: int
     converged: bool
     message: str
+    relative_cost_change: float
 
 
 def scipy_lbfgs(
@@ -27,6 +28,7 @@ def scipy_lbfgs(
     relative_cost_tolerance: float,
     is_feasible: Callable | None = None,
     feasible_iteration_patience: int = 1,
+    require_convergence: bool = False,
 ) -> LBFGSResult:
     """Run unconstrained limited-memory BFGS through SciPy.
 
@@ -40,6 +42,7 @@ def scipy_lbfgs(
     recent_costs: list[float] = []
     feasible_iterations = 0
     stop_message: str | None = None
+    relative_cost_change = np.inf
 
     def scipy_objective(x: np.ndarray) -> tuple[float, np.ndarray]:
         nonlocal latest_x, latest_cost, latest_gradient
@@ -50,12 +53,12 @@ def scipy_lbfgs(
         return latest_cost, latest_gradient
 
     def callback(intermediate_result) -> None:
-        nonlocal feasible_iterations, stop_message
+        nonlocal feasible_iterations, stop_message, relative_cost_change
         accepted_x = np.asarray(intermediate_result.x, dtype=float)
         if latest_x is None or not np.array_equal(accepted_x, latest_x):
             scipy_objective(accepted_x)
         feasible = is_feasible is None or is_feasible()
-        if is_feasible is not None and feasible:
+        if is_feasible is not None and feasible and not require_convergence:
             feasible_iterations += 1
             if feasible_iterations >= feasible_iteration_patience:
                 stop_message = "constraint-feasible solution reached"
@@ -68,8 +71,10 @@ def scipy_lbfgs(
         recent_costs.append(latest_cost)
         if len(recent_costs) > 4:
             old_cost = recent_costs.pop(0)
-            relative_change = abs(old_cost - latest_cost) / max(1.0, abs(latest_cost))
-            if relative_change <= relative_cost_tolerance and is_feasible is None:
+            relative_cost_change = (abs(old_cost-latest_cost)
+                                    / max(1.0, abs(latest_cost)))
+            if (relative_cost_change <= relative_cost_tolerance
+                    and (is_feasible is None or require_convergence and feasible)):
                 stop_message = "relative cost tolerance reached"
                 raise StopIteration
 
@@ -78,7 +83,6 @@ def scipy_lbfgs(
         np.asarray(initial, dtype=float),
         method="L-BFGS-B",
         jac=True,
-        bounds=None,
         callback=callback,
         options={"maxiter": max_iterations, "maxcor": memory, "ftol": 0.0,
                  "gtol": 0.0, "maxls": 40},
@@ -90,7 +94,8 @@ def scipy_lbfgs(
     if result.success and not feasible:
         message = f"SciPy stopped before constraints became feasible: {result.message}"
     return LBFGSResult(np.asarray(result.x, dtype=float), latest_cost, latest_gradient,
-                       int(result.nit), converged, message)
+                       int(result.nit), converged, message,
+                       float(relative_cost_change))
 
 
 __all__ = ["LBFGSResult", "scipy_lbfgs"]

@@ -83,8 +83,10 @@ mission scenes remain under `uav_ac/simulation/models/`. The aerial manipulator 
 gripper opening state. The base controller uses total vehicle mass and a
 configuration-dependent diagonal inertia approximation; MuJoCo integrates the
 full coupled multibody dynamics. Generic link and gripper masses/dimensions are
-simulation assumptions. Whole-body pick/place planning uses the dedicated
-`aerial_manipulator_pick_place` scene and `aerial_manipulator_minco` planner.
+simulation assumptions. Whole-body pick/place planning uses the
+`aerial_manipulator_minco` planner. Static XML scenes provide planning bounds,
+pick/place targets, joint poses, and gripper widths; box, sphere, cylinder, and
+horizontal plane obstacles are converted to a shared conservative voxel map.
 
 Whole-body planning code should use `simulation.robot` rather than MuJoCo data
 arrays. Its 12-value configuration is NED position, scalar-first

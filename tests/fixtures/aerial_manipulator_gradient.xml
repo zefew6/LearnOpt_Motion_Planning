@@ -1,4 +1,4 @@
-<mujoco model="aerial_manipulator_pick_place">
+<mujoco model="aerial_manipulator_gradient_fixture">
   <compiler angle="radian" autolimits="true"/>
   <default>
     <default class="quadrotor_parts"><geom contype="1" conaffinity="1"/></default>
@@ -42,25 +42,17 @@
          y=[0.75, 1.25], z=[-1.19, -0.91] (0.32 m wide by 0.28 m high).
          The top board starts at y=0.84 to leave the vehicle clearance at the
          mouth while still requiring the L-shaped gripper insertion. -->
-    <geom name="obstacle_shelf_bottom" type="box" pos="2 -1 0.87" size="0.24 0.25 0.04" rgba="0.48 0.30 0.16 1"/>
-    <geom name="obstacle_shelf_top" type="box" pos="2 -1.045 1.23" size="0.24 0.205 0.04" rgba="0.48 0.30 0.16 1"/>
-    <geom name="obstacle_shelf_left" type="box" pos="1.8 -1 1.05" size="0.04 0.25 0.14" rgba="0.48 0.30 0.16 1"/>
-    <geom name="obstacle_shelf_right" type="box" pos="2.2 -1 1.05" size="0.04 0.25 0.14" rgba="0.48 0.30 0.16 1"/>
-    <geom name="obstacle_shelf_back" type="box" pos="2 -1.29 1.05" size="0.24 0.04 0.22" rgba="0.38 0.24 0.13 1"/>
+    <geom name="obstacle_fixture_bottom" type="box" pos="2 -1 0.87" size="0.24 0.25 0.04" rgba="0.48 0.30 0.16 1"/>
+    <geom name="obstacle_fixture_top" type="box" pos="2 -1.045 1.23" size="0.24 0.205 0.04" rgba="0.48 0.30 0.16 1"/>
+    <geom name="obstacle_fixture_left" type="box" pos="1.8 -1 1.05" size="0.04 0.25 0.14" rgba="0.48 0.30 0.16 1"/>
+    <geom name="obstacle_fixture_right" type="box" pos="2.2 -1 1.05" size="0.04 0.25 0.14" rgba="0.48 0.30 0.16 1"/>
+    <geom name="obstacle_fixture_back" type="box" pos="2 -1.29 1.05" size="0.24 0.04 0.22" rgba="0.38 0.24 0.13 1"/>
     <body name="quadrotor" pos="0 0 1" childclass="quadrotor_parts">
-      <include file="../model/aerial_manipulator.xml"/>
+      <include file="../../uav_ac/simulation/model/aerial_manipulator.xml"/>
     </body>
     <body name="payload_marker" mocap="true">
       <geom name="payload_marker_geom" type="sphere" size="0.035"
             rgba="0.95 0.35 0.08 1" contype="0" conaffinity="0"/>
-    </body>
-    <body name="pick_target_marker" mocap="true">
-      <geom name="pick_target_geom" type="sphere" size="0.055"
-            rgba="0.2 0.9 0.35 0.35" contype="0" conaffinity="0"/>
-    </body>
-    <body name="place_target_marker" mocap="true">
-      <geom name="place_target_geom" type="sphere" size="0.055"
-            rgba="0.2 0.45 1.0 0.35" contype="0" conaffinity="0"/>
     </body>
   </worldbody>
   <actuator>

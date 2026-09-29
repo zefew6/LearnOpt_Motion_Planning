@@ -679,6 +679,15 @@ class AerialManipulatorModel:
         return {"mass": mass, "center_of_mass": S@com,
                 "inertia_com": S@inertia@S}
 
+    @property
+    def payload_radius(self):
+        """Radius of the scene's payload sphere, in meters."""
+        geom = mujoco.mj_name2id(
+            self.model, mujoco.mjtObj.mjOBJ_GEOM, "payload_marker_geom")
+        if geom < 0 or self.model.geom_type[geom] != mujoco.mjtGeom.mjGEOM_SPHERE:
+            raise ValueError("aerial manipulator scene requires spherical payload_marker_geom")
+        return float(self.model.geom_size[geom, 0])
+
     def dynamics(self, configuration=None, velocity=None):
         """Return reduced numerical dynamics at a configuration and tangent velocity.
 

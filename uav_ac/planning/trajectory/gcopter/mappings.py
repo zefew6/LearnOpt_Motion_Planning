@@ -189,6 +189,24 @@ def polynomial_bases(times: np.ndarray) -> np.ndarray:
     return np.stack((position, velocity, acceleration, jerk, snap), axis=0)
 
 
+def evaluate_piecewise_quintic(
+        durations: np.ndarray, coefficients: np.ndarray,
+        times: float | np.ndarray, derivative: int) -> np.ndarray:
+    """Evaluate ascending-power quintic pieces at clipped trajectory times."""
+    durations = np.asarray(durations, dtype=float)
+    coefficients = np.asarray(coefficients, dtype=float)
+    query = np.asarray(times, dtype=float)
+    scalar = query.ndim == 0
+    flat = np.clip(query.reshape(-1), 0.0, float(np.sum(durations)))
+    boundaries = np.cumsum(durations)
+    pieces = np.minimum(np.searchsorted(boundaries, flat, side="right"), len(durations)-1)
+    starts = np.r_[0.0, boundaries[:-1]]
+    local = flat-starts[pieces]
+    basis = polynomial_basis_matrix(local, derivative)
+    result = np.einsum("nk,nkc->nc", basis, coefficients[pieces])
+    return result[0] if scalar else result
+
+
 def smoothed_l1_array(
         values: np.ndarray, epsilon: float,
 ) -> tuple[np.ndarray, np.ndarray]:

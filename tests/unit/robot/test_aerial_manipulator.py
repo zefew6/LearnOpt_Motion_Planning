@@ -51,7 +51,7 @@ def test_joint_limits_and_nonadjacent_self_collision_are_checked():
 
 def test_opposing_gripper_geometries_keep_more_than_planning_self_clearance():
     sim = MujocoSimulation(
-        "uav_ac/simulation/models/aerial_manipulator_pick_place.xml",
+        "tests/fixtures/aerial_manipulator_gradient.xml",
         record_actual_trajectory=False)
     pairs = (
         ("gripper_pad_left", "gripper_pad_right"),
@@ -189,7 +189,7 @@ def test_full_configuration_collision_reports_environment_and_nonadjacent_self_p
 
 def test_logical_payload_sphere_is_checked_against_obstacles_and_robot():
     sim = MujocoSimulation(
-        "uav_ac/simulation/models/aerial_manipulator_pick_place.xml",
+        "tests/fixtures/aerial_manipulator_gradient.xml",
         record_actual_trajectory=False)
     robot = sim.robot
     configuration = robot.configuration
@@ -280,7 +280,7 @@ def test_exact_collision_distance_query_is_public_signed_and_non_mutating():
 
 def test_exact_collision_distance_jacobian_matches_configuration_finite_difference():
     sim = MujocoSimulation(
-        "uav_ac/simulation/models/aerial_manipulator_pick_place.xml",
+        "tests/fixtures/aerial_manipulator_gradient.xml",
         record_actual_trajectory=False)
     robot = sim.robot
     q = robot.configuration.copy()
@@ -357,7 +357,7 @@ def test_full_pose_point_jacobian_matches_world_rotation_tangent():
 
 def test_exact_collision_distance_supports_full_pose_tangent_jacobian():
     sim = MujocoSimulation(
-        "uav_ac/simulation/models/aerial_manipulator_pick_place.xml",
+        "tests/fixtures/aerial_manipulator_gradient.xml",
         record_actual_trajectory=False)
     robot = sim.robot
     q = robot.configuration.copy()

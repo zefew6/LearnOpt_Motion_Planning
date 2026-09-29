@@ -3,20 +3,11 @@ scene: aerial_manipulator_workcell
 planner: aerial_manipulator_minco
 controller: cascaded
 control_dt: 0.01
-seed: 8
+seed: 10
 visualize: true
 wind: none
 
 pick_place:
-  # Tool targets sit 15 cm above the pick and pack work surfaces.
-  pick_position_ned: [1.45, 1.35, -0.95]
-  place_position_ned: [5.05, -1.30, -0.85]
-  pick_yaw: 0.0
-  place_yaw: 0.0
-  pick_nominal_joints: [0.0, 0.0, 0.0, 0.0]
-  place_nominal_joints: [0.0, 0.0, 0.0, 0.0]
-  gripper_open: 0.060
-  gripper_closed: 0.025
   position_tolerance: 0.02
   velocity_tolerance: 0.05
   angular_velocity_tolerance: 0.2
@@ -24,19 +15,23 @@ pick_place:
   event_timeout: 10.0
 
 aerial_manipulator_minco:
-  time_weight: 2.0
-  max_speed: 2.0
+  time_weight: 20.0
+  max_speed: 5.0
   max_acceleration: 3.0
   obstacle_clearance: 0.05
-  rrt_obstacle_margin: 0.01
+  rrt_obstacle_margin: 0.05
   obstacle_weight: 20000.0
   esdf_resolution: 0.02
   esdf_discretization_margin: 0.035
-  minco_sample_spacing_m: 0.25
+  minco_sample_spacing_m: 1.5
   # Coarse optimization quadrature is followed by dense full-geometry validation.
-  integral_resolution: 4
-  integral_resolution_floor_unloaded: 4
-  integral_resolution_floor_loaded: 6
+  integral_resolution: 2
+  integral_resolution_floor_unloaded: 2
+  integral_resolution_floor_loaded: 2
+  relative_cost_tolerance: 0.001
+  # Gradient tolerance is evaluated after scaling waypoints by 0.05 of the path metric.
+  gradient_tolerance: 0.8
+  optimizer_waypoint_step_scale: 0.05
   max_iterations: 60
   rrt_step_size: 1.0
   # Same endpoint arm angles still need to admit a broad transit-fold range.
@@ -53,5 +48,5 @@ aerial_manipulator_minco:
   rrt_simplify_attempts: 64
   rrt_simplify_budget_s: 0.05
   planning_budget_s: 60.0
-  initial_duration_scale: 3.0
+  initial_duration_scale: 1.2
   joint_waypoint_parameterization: tanh

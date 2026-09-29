@@ -8,13 +8,13 @@ import numpy as np
 @dataclass(frozen=True)
 class AerialManipulatorMINCOConfig:
     jerk_weights: tuple[float, ...] = (1., 1., 1., .2, .08, .08, .08, .08)
-    time_weight: float = 2.0
-    max_speed: float = 2.0
+    time_weight: float = 10.0
+    max_speed: float = 3.0
     max_acceleration: float = 3.0
     max_body_rate: float = 2.1
     max_yaw_rate: float = 1.2
     max_yaw_acceleration: float = 2.5
-    joint_velocity_limits: tuple[float, ...] = (1.5, 1.5, 1.5, 1.5)
+    joint_velocity_limits: tuple[float, ...] = (2., 2., 2., 2.)
     joint_acceleration_limits: tuple[float, ...] = (4., 4., 4., 4.)
     obstacle_clearance: float = .05
     # RRT uses the shared occupancy grid and full collision envelopes.
@@ -22,7 +22,6 @@ class AerialManipulatorMINCOConfig:
     esdf_discretization_margin: float = .035
     esdf_resolution: float = .02
     self_clearance: float = .015
-    payload_radius: float = .035
     obstacle_weight: float = 2.0e4
     self_collision_weight: float = 1.0e4
     constraint_weight: float = 1.0e3
@@ -33,6 +32,8 @@ class AerialManipulatorMINCOConfig:
     max_iterations: int = 60
     lbfgs_memory: int = 12
     gradient_tolerance: float = 1.0e-4
+    relative_cost_tolerance: float = 1.0e-3
+    optimizer_waypoint_step_scale: float = .05
     rrt_step_size: float = .5
     rrt_joint_sampling_padding_rad: float = .2
     astar_guidance_enabled: bool = True
@@ -46,7 +47,7 @@ class AerialManipulatorMINCOConfig:
     astar_tube_std_m: float = .10
     rrt_simplify_attempts: int = 32
     rrt_simplify_budget_s: float = .02
-    minco_sample_spacing_m: float = .25
+    minco_sample_spacing_m: float = .8
     position_scale: float = .5
     yaw_scale: float = .7
     joint_scales: tuple[float, ...] = (.8, .8, .8, .8)
@@ -57,7 +58,7 @@ class AerialManipulatorMINCOConfig:
     validation_dt: float = .025
     minimum_total_time: float = .15
     planning_budget_s: float = 60.0
-    initial_duration_scale: float = 1.5
+    initial_duration_scale: float = 1.2
 
     def __post_init__(self):
         for name in ("integral_resolution", "integral_resolution_floor_unloaded",
@@ -84,8 +85,10 @@ class AerialManipulatorMINCOConfig:
         positive = ("time_weight", "max_speed", "max_acceleration", "max_body_rate", "max_yaw_rate",
                     "max_yaw_acceleration", "obstacle_clearance",
                     "esdf_discretization_margin", "esdf_resolution", "self_clearance",
-                    "payload_radius", "obstacle_weight", "self_collision_weight",
+                    "obstacle_weight", "self_collision_weight",
                     "constraint_weight", "smoothing_epsilon", "gradient_tolerance",
+                    "relative_cost_tolerance",
+                    "optimizer_waypoint_step_scale",
                     "rrt_step_size", "minco_sample_spacing_m", "position_scale", "yaw_scale",
                     "rrt_joint_sampling_padding_rad",
                     "astar_grid_resolution", "astar_fallback_grid_resolution",
@@ -117,21 +120,8 @@ class AerialManipulatorMINCOConfig:
 
     @classmethod
     def from_mapping(cls, settings):
-        """Load current settings and explain removed parameters explicitly."""
+        """Load the compact set of supported planner settings."""
         values = dict(settings)
-        migrations = {
-            "pieces": "remove it; MINCO segment count is derived from minco_sample_spacing_m",
-            "rrt_collision_radius_scale": "remove it; RRT now checks complete collision envelopes",
-            "rrt_max_iterations": "remove it; OMPL search is controlled by the shared planning deadline",
-            "rrt_endpoint_seed_attempts": "remove it; OMPL uses the configured state sampler",
-            "rrt_goal_bias": "remove it; OMPL receives the 20/40/40 sampler",
-            "rrt_edge_position_resolution": "remove it; edge checks use edge_position_resolution",
-            "esdf_interpolation_margin": "rename it to esdf_discretization_margin and set at least sqrt(3)*esdf_resolution",
-        }
-        found = {key: message for key, message in migrations.items() if key in values}
-        if found:
-            details = "; ".join(f"{key}: {message}" for key, message in found.items())
-            raise ValueError(f"obsolete aerial_manipulator_minco settings ({details})")
         accepted = {field.name for field in fields(cls)}
         unknown = sorted(set(values)-accepted)
         if unknown:

@@ -5,7 +5,7 @@ from typing import Protocol, Sequence
 
 import numpy as np
 
-from .mappings import polynomial_basis_matrix, polynomial_bases
+from .mappings import evaluate_piecewise_quintic, polynomial_basis_matrix, polynomial_bases
 
 
 class HalfSpaceRegion(Protocol):
@@ -64,16 +64,8 @@ class GCOPTERTrajectory:
     def evaluate(self, times: float | np.ndarray, derivative: int = 0) -> np.ndarray:
         if not 0 <= derivative <= 5:
             raise ValueError("derivative must lie in [0, 5]")
-        query = np.asarray(times, dtype=float)
-        scalar = query.ndim == 0
-        query = np.clip(query.reshape(-1), 0.0, self.duration)
-        boundaries = np.cumsum(self.durations)
-        pieces = np.minimum(np.searchsorted(boundaries, query, side="right"), self.piece_count - 1)
-        starts = np.concatenate(([0.0], boundaries[:-1]))
-        local_times = query - starts[pieces]
-        basis = polynomial_basis_matrix(local_times, derivative)
-        result = np.einsum("nk,nkc->nc", basis, self.coefficients[pieces])
-        return result[0] if scalar else result
+        return evaluate_piecewise_quintic(
+            self.durations, self.coefficients, times, derivative)
 
     def sample(self, dt: float = 0.01) -> TrajectorySamples:
         if dt <= 0.0:

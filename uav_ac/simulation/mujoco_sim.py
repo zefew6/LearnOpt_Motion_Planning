@@ -178,6 +178,8 @@ class MujocoSimulation:
         self.gcs_guide_paths = self.scene.gcs_guide_paths
         self.space_limits = self.scene.space_limits
         self.obstacles = self.scene.obstacles
+        self.scene_geometries = self.scene.collision_geometries
+        self.pick_place = self.scene.pick_place
         if self.has_collision:
             raise ValueError("quadrotor starts in collision")
 

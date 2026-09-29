@@ -5,6 +5,7 @@ import pytest
 
 from uav_ac.planning.trajectory.gcopter import GCOPTER, GCOPTERConfig
 from uav_ac.planning.trajectory.gcopter.minco import MINCOQuintic as _MINCOQuintic
+from uav_ac.planning.trajectory.gcopter.optimizer import scipy_lbfgs
 from uav_ac.planning.trajectory.gcopter.penalties import (
     stack_piece_halfspaces as _stack_piece_halfspaces,
 )
@@ -155,6 +156,18 @@ def test_gcopter_config_should_validate_numerical_settings():
         GCOPTERConfig(inverse_map_iterations=0)
     with pytest.raises(ValueError, match="thrust bounds"):
         GCOPTERConfig(min_thrust=2.0, max_thrust=1.0)
+
+
+def test_require_convergence_does_not_stop_on_feasibility_alone():
+    result = scipy_lbfgs(
+        lambda value: (float(value[0]**4+value[0]**2),
+                       np.array([4.*value[0]**3+2.*value[0]])),
+        np.array([2.]), max_iterations=1, memory=3,
+        gradient_tolerance=1e-12, relative_cost_tolerance=0.,
+        is_feasible=lambda: True, feasible_iteration_patience=1,
+        require_convergence=True)
+    assert not result.converged
+    assert "ITERATIONS REACHED LIMIT" in result.message
 
 
 def test_minco_banded_plu_and_analytic_gradient_should_match_dense_reference():

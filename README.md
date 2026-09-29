@@ -200,57 +200,6 @@ The aerial-manipulator workcell demo uses its own scene, task settings, and
 .venv/bin/python -m uav_ac.main --config configs/aerial_manipulator_workcell.yaml
 ```
 
-The V1 payload follows the grasp frame kinematically and does not add mass or
-contact dynamics. The workcell has loaded racks, two broad routes around a
-central pallet island, open pick and pack benches, and one machine opening that
-requires the arm to fold during transit. The earlier aperture-and-bookshelf
-scene remains available as a narrow-passage stress test. See the
-[planning guide](uav_ac/planning/README.md) for collision and validation details.
-Artifacts: [scene layout](artifacts/aerial_manipulator_workcell/workcell_overview.png),
-[seed-8 execution video](artifacts/aerial_manipulator_workcell/seed8_execution.mp4),
-and [executed arm-joint curves](artifacts/aerial_manipulator_workcell/seed8_joint_trajectory.png).
-
-The legacy `aerial_manipulator_pick_place` pressure-test scene contains two
-full-height walls and a 0.32 m by 0.28 m bookshelf opening. The current
-workcell instead uses shelves, totes, benches, and a transfer machine. The
-planner searches base pose and all four arm joints; during loaded transit the
-arm can reconfigure while the gripper stays closed. To measure cold planning
-(ESDF build, search, optimization, and dense validation) without opening the
-viewer, run:
-
-```bash
-PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 .venv/bin/python tests/benchmark_aerial_manipulator_minco.py
-```
-
-The benchmark rebuilds the scene for each run in a fresh process, tests seeds
-0–99, repeats seed 8 ten more times, and reports map, search, MINCO, and
-validation timings separately. Add `--search-only` to measure both RRT legs
-even when MINCO would fail. The RRT performance target is under 1 second for
-the pick and place searches combined; this is measured independently from the
-shared 60-second end-to-end planning budget.
-
-OMPL's `RRTConnect` searches the eight-dimensional state
-`[x, y, z, yaw, q1, q2, q3, q4]` in `R3 × SO2 × R4`. A single voxelized scene
-feeds both the RRT occupancy check and the open-source `edt` signed distance
-transform; SciPy's first-order tensor spline supplies distance and analytic
-gradient queries. MINCO samples its initial knots every 0.25 equivalent meters
-along that same eight-dimensional path, retaining RRT corners. Its collision
-cost and final MuJoCo validation use the complete roll/pitch/yaw recovered from
-flatness, with analytic gradients through acceleration and yaw. RRT checks use
-full-size robot and payload envelopes, fine shared edge spacing, and exact
-geometry confirmation near contacts. Obsolete `pieces`, reduced-radius, and
-separate coarse-edge settings are rejected with migration guidance.
-
-A base-center 3-D grid A* route shapes OMPL's early position domain. OMPL also
-starts with arm-joint bounds around the endpoint configurations, widens them
-for the A*-guided stage, and eventually samples the full workspace and joint
-limits on the same continuing tree; yaw remains free throughout. The Python
-bindings omit the custom state-sampler allocator, and OMPL does not provide a
-classical occupancy-grid A* planner, so the guide uses the shared voxel map
-directly. It is only a sampling hint; the returned path still comes from exact
-OMPL RRT-Connect.
-
-For GCOPTER, keep `speed` as the shared velocity bound. `gcopter:` exposes trajectory scale (`length_per_piece`, `time_weight`), dynamic limits (`max_acceleration`, `max_body_rate`), soft-constraint weights, and optimizer convergence settings. `gcs:` exposes the Bézier graph optimization and solver settings; `mpc:` exposes NMPC horizon, tracking weights, and solver settings; `cascaded:` exposes response time constants, damping, and altitude integration. Mass, thrust, tilt, and flight-speed limits remain in the selected XML vehicle.
 
 ## Optional MPC and RL workflows
 

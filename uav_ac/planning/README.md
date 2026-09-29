@@ -85,11 +85,11 @@ dense trajectory validation, mission state, collision status, and failure
 reason. The final collision check is dense sampling; it does not certify every
 continuous-time point between samples.
 
-The workcell configuration uses equal straight-arm pick and place terminal
-states. A 1.80 m wide, 0.58 m high opening in the transfer machine requires a
-transit fold, while the loaded central rack leaves routes on both sides. The
-older `aerial_manipulator_pick_place` scene remains as a narrow-passage stress
-case; its dedicated configuration is unchanged.
+The aerial manipulator task reads targets and gripper widths from the selected
+XML scene. Static boxes, spheres, cylinders, and horizontal ground are shared
+by occupancy search, ESDF optimization, and final MuJoCo collision checks.
+Adding a compatible robot environment therefore requires a scene XML and a
+configuration that selects its filename, not a scene-specific code branch.
 
 ## Package structure
 

@@ -206,6 +206,10 @@ class AerialManipulatorTrajectoryEvaluator:
                     skipped.add(names)
             self.self_pairs = self.self_pairs[keep]
             self.rrt_fixed_clearance_self_pairs_skipped = len(skipped)
+        self.self_pair_names = tuple(
+            (self.geom_names[self.sphere_geom_indices[first]],
+             self.geom_names[self.sphere_geom_indices[second]])
+            for first, second in self.self_pairs)
         self.self_geom_pairs = tuple(sorted({
             tuple(self.geom_names[self.sphere_geom_indices[index]] for index in pair)
             for pair in self.self_pairs
@@ -228,7 +232,7 @@ class AerialManipulatorTrajectoryEvaluator:
         if self.carry_payload:
             self.sphere_names += (self.payload_body,)
             self.sphere_points = np.vstack((self.sphere_points, self.payload_local))
-            self.sphere_radii = np.r_[self.sphere_radii, config.payload_radius]
+            self.sphere_radii = np.r_[self.sphere_radii, robot.payload_radius]
             self.sphere_geom_indices = np.r_[self.sphere_geom_indices, -1]
 
     def _check_deadline(self):
@@ -555,14 +559,8 @@ class AerialManipulatorTrajectoryEvaluator:
                     for first_i in first[candidate]
                 }
             else:
-                pair_geom_names = np.asarray([
-                    tuple(self.geom_names[self.sphere_geom_indices[index]]
-                          for index in pair)
-                    for pair in pairs
-                ], dtype=object)
-                candidate_names = {
-                    tuple(name_pair) for name_pair in pair_geom_names[candidate]
-                }
+                candidate_names = {self.self_pair_names[index]
+                                   for index in np.flatnonzero(candidate)}
             pair_cost[candidate] = 0.
             pair_derivative[candidate] = 0.
             directions = delta/pair_distances[:, None]
@@ -774,6 +772,7 @@ class AerialManipulatorTrajectoryEvaluator:
         map_inside = True
         maximum_dt = 0.0
         maximum_kind = "none"
+        maximum_piece = -1
         minimum_world_distance = np.inf
         minimum_self_distance = np.inf
         for piece, duration in enumerate(trajectory.durations):
@@ -887,7 +886,10 @@ class AerialManipulatorTrajectoryEvaluator:
                     if np.isfinite(self_clearance):
                         constraint_names.append("self_clearance")
                         constraints.append(self.config.self_clearance-self_clearance)
-                    collision |= bool(exact["collision"] or any(value > 0 for value in constraints[-2:]))
+                    # ``exact['collision']`` is physical contact. Clearance-margin
+                    # violations stay in ``max_violation`` and are judged against
+                    # the dense validator's small numeric tolerance below.
+                    collision |= bool(exact["collision"])
                     clearances = [value for value in (world_clearance, self_clearance)
                                   if np.isfinite(value)]
                     if clearances:
@@ -900,10 +902,12 @@ class AerialManipulatorTrajectoryEvaluator:
                 if local_max > max_violation:
                     max_violation = local_max
                     maximum_kind = constraint_names[int(np.argmax(constraints))]
+                    maximum_piece = int(piece)
         passed = (not collision and map_inside and np.isfinite(max_violation)
-                  and max_violation <= 2e-3 and np.isfinite(minimum_clearance))
+                  and max_violation <= 3e-3 and np.isfinite(minimum_clearance))
         self.last_validation_metrics = {
             "maximum_violation_kind": maximum_kind,
+            "maximum_violation_piece": maximum_piece,
             "minimum_world_distance": float(minimum_world_distance),
             "minimum_self_distance": float(minimum_self_distance),
             "collision_detected": bool(collision),

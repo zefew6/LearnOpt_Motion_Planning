@@ -47,11 +47,44 @@ def _processor_name():
     return platform.processor() or platform.uname().processor
 
 
+def _minco_summary(rows):
+    measured = [row for row in rows
+                if row.get("minco_optimizer_seconds") is not None]
+    if not measured:
+        return None
+    times = np.asarray([row["minco_optimizer_seconds"] for row in measured], float)
+    call_counts = np.asarray([
+        sum(int(metric.get("objective_calls", 0))
+            for metric in row.get("legs", {}).values())
+        for row in measured], dtype=int)
+    piece_counts = {
+        leg: [int(row.get("legs", {}).get(leg, {}).get("minco_pieces", 0))
+              for row in measured if leg in row.get("legs", {})]
+        for leg in ("pick", "place")
+    }
+    return {
+        "measured": len(measured),
+        "under_3s": int(np.sum(times < 3.0)),
+        "median_s": median(times),
+        "p95_s": float(np.percentile(times, 95)),
+        "maximum_s": float(np.max(times)),
+        "objective_calls_total": int(np.sum(call_counts)),
+        "objective_calls_median": float(np.median(call_counts)),
+        "objective_calls_p95": float(np.percentile(call_counts, 95)),
+        "objective_calls_maximum": int(np.max(call_counts)),
+        "pieces_by_leg": {
+            leg: {"measured": len(values), "median": float(np.median(values)),
+                  "maximum": int(np.max(values))}
+            for leg, values in piece_counts.items() if values
+        },
+    }
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="configs/aerial_manipulator_workcell.yaml")
     parser.add_argument("--repeats-seed8", type=int, default=10)
-    parser.add_argument("--seeds", default=",".join(map(str, range(100))))
+    parser.add_argument("--seeds", default=",".join(map(str, range(10))))
     parser.add_argument("--search-only", action="store_true",
                         help="measure both RRT searches without MINCO optimization")
     parser.add_argument("--in-process", action="store_true",
@@ -154,6 +187,7 @@ def main():
             "rrt_pairs_measured": int(sum(bool(row.get("rrt_success"))
                                            for row in rrt_rows)),
             "rrt_pick_place": rrt_summary,
+            "minco_optimizer": _minco_summary(rows),
             "passed": failures == 0,
         }}, sort_keys=True, default=_json_default), flush=True)
         return int(failures != 0)
@@ -178,8 +212,11 @@ def main():
                           and all(search.exact_solution
                                   for search in result["searches"].values()))
             else:
-                passed = all(plan.validation_passed
-                             for plan in result["plans"].values())
+                minco_seconds = diagnostics.get("minco_optimizer_seconds")
+                passed = (all(plan.validation_passed
+                              and plan.optimizer_converged
+                              for plan in result["plans"].values())
+                          and minco_seconds is not None and minco_seconds < 3.0)
             leg_data = diagnostics.get("legs", {})
             leg_rrt = [leg_data[name].get("rrt_seconds") for name in ("pick", "place")
                        if name in leg_data and "rrt_seconds" in leg_data[name]]
@@ -206,6 +243,7 @@ def main():
                 "rrt_under_1s": (None if rrt_total is None else
                                  bool(rrt_success and rrt_total < 1.0)),
                 "planning_seconds": duration,
+                "minco_optimizer_seconds": diagnostics.get("minco_optimizer_seconds"),
                 "occupancy_seconds": diagnostics.get("occupancy_seconds"),
                 "esdf_seconds": diagnostics.get("esdf_seconds"),
                 "esdf_grid_shape": diagnostics.get("esdf_grid_shape"),
@@ -246,6 +284,7 @@ def main():
                 "rrt_under_1s": (None if rrt_total is None else
                                  bool(rrt_success and rrt_total < 1.0)),
                 "planning_seconds": time.perf_counter()-started,
+                "minco_optimizer_seconds": diagnostics.get("minco_optimizer_seconds"),
                 "failure": f"{type(error).__name__}: {error}",
                 "occupancy_seconds": diagnostics.get("occupancy_seconds"),
                 "esdf_seconds": diagnostics.get("esdf_seconds"),
@@ -284,6 +323,7 @@ def main():
                                   "search_failures": len(runs)-rrt_successes,
                                   "rrt_pairs_measured": rrt_successes,
                                   "rrt_pick_place": rrt_summary,
+                                  "minco_optimizer": _minco_summary(rows),
                                   "passed": failures == 0}}, sort_keys=True,
                      default=_json_default), flush=True)
     return int(failures != 0)

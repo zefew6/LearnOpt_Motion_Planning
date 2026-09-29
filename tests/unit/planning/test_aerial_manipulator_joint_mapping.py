@@ -75,7 +75,7 @@ def test_joint_waypoint_parameterization_and_esdf_grid_configuration_are_validat
 
 def test_tanh_objective_gradient_is_the_minco_adjoint_gradient_times_mapping_jacobian():
     simulation = MujocoSimulation(
-        "uav_ac/simulation/models/aerial_manipulator_pick_place.xml",
+        "tests/fixtures/aerial_manipulator_gradient.xml",
         record_actual_trajectory=False)
     robot = simulation.robot
     direct_config = AerialManipulatorMINCOConfig(

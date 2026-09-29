@@ -107,19 +107,18 @@ def load_config(path: str | Path = DEFAULT_CONFIG) -> dict:
         if config.get("wind", "none") != "none":
             raise ValueError("gate_racing deployment does not support flight wind options")
     elif config["task"] == "aerial_pick_place":
-        scene_name = Path(scene).stem
-        pick_place_scenes = {
-            "aerial_manipulator_pick_place",
-            "aerial_manipulator_workcell",
-        }
         if (config["planner"] != "aerial_manipulator_minco"
-                or config["controller"] != "cascaded"
-                or scene_name not in pick_place_scenes):
+                or config["controller"] != "cascaded"):
             raise ValueError(
                 "aerial_pick_place requires an aerial manipulator pick/place scene, "
                 "aerial_manipulator_minco, and cascaded controller")
         if config.get("wind", "none") != "none":
             raise ValueError("aerial pick/place requires wind: none")
+        from uav_ac.scenes.loader import load_scene
+        metadata = load_scene(scene_path)
+        if metadata.space_limits is None or metadata.pick_place is None:
+            raise ValueError(
+                "aerial pick/place XML requires planning_bounds and pick/place numerics")
     elif config["planner"] == "none":
         raise ValueError("planner: none is only valid for task: gate_racing")
     config.setdefault("speed", 3.0)
@@ -174,42 +173,18 @@ def load_config(path: str | Path = DEFAULT_CONFIG) -> dict:
     AerialManipulatorMINCOConfig.from_mapping(sections["aerial_manipulator_minco"])
     pick_place = config.setdefault("pick_place", {})
     _only(pick_place, {
-        "pick_position_ned", "place_position_ned", "pick_yaw", "place_yaw",
-        "pick_nominal_joints", "place_nominal_joints", "gripper_open", "gripper_closed",
         "position_tolerance", "velocity_tolerance", "settle_time", "event_timeout",
-        "angular_velocity_tolerance",
+        "angular_velocity_tolerance", "record_joint_trace",
     }, "pick_place")
     if config["task"] == "aerial_pick_place":
-        required_pick_place = {
-            "pick_position_ned", "place_position_ned", "pick_yaw", "place_yaw",
-            "pick_nominal_joints", "place_nominal_joints", "gripper_open", "gripper_closed",
-        }
-        missing = required_pick_place-pick_place.keys()
-        if missing:
-            raise ValueError(f"pick_place.{sorted(missing)[0]} is required")
-        for name in ("pick_position_ned", "place_position_ned"):
-            value = np.asarray(pick_place[name], dtype=float)
-            if value.shape != (3,) or not np.all(np.isfinite(value)):
-                raise ValueError(f"pick_place.{name} must be a finite 3-vector")
-            pick_place[name] = value.tolist()
-        for name in ("pick_nominal_joints", "place_nominal_joints"):
-            value = np.asarray(pick_place[name], dtype=float)
-            if value.shape != (4,) or not np.all(np.isfinite(value)):
-                raise ValueError(f"pick_place.{name} must be a finite 4-vector")
-            pick_place[name] = value.tolist()
-        for name in ("pick_yaw", "place_yaw", "gripper_open", "gripper_closed"):
-            value = pick_place[name]
-            if (isinstance(value, bool) or not isinstance(value, (int, float))
-                    or not math.isfinite(value)):
-                raise ValueError(f"pick_place.{name} must be a finite number")
-            pick_place[name] = float(value)
-        if not (.02 <= pick_place["gripper_closed"] < pick_place["gripper_open"] <= .07):
-            raise ValueError("gripper_closed and gripper_open must satisfy 0.02 <= closed < open <= 0.07")
         for name, default in (("position_tolerance", .02), ("velocity_tolerance", .05),
                               ("angular_velocity_tolerance", .2),
                               ("settle_time", .30), ("event_timeout", 10.0)):
             pick_place.setdefault(name, default)
             _positive(pick_place[name], f"pick_place.{name}")
+        if not isinstance(pick_place.get("record_joint_trace", False), bool):
+            raise ValueError("pick_place.record_joint_trace must be true or false")
+        pick_place.setdefault("record_joint_trace", False)
     _only(sections["rl"], {"checkpoint", "device"}, "rl")
     _only(sections["cascaded"], {f.name for f in fields(CascadedConfig)}, "cascaded")
 

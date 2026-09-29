@@ -50,6 +50,10 @@ class AerialManipulator:
         return self._model.mass_properties()["mass"]
 
     @property
+    def payload_radius(self) -> float:
+        return self._model.payload_radius
+
+    @property
     def center_of_mass(self) -> np.ndarray:
         return self._model.mass_properties()["center_of_mass"].copy()
 

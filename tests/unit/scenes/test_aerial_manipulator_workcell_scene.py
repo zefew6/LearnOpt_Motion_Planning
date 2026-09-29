@@ -22,7 +22,7 @@ def test_workcell_loads_exact_layout_and_terminal_targets_are_valid():
     assert simulation.obstacles.shape == (20, 6)
     np.testing.assert_allclose(simulation.robot.configuration[:3], [0., -1.4, -1.45])
 
-    settings = config["pick_place"]
+    settings = simulation.pick_place.as_mapping()
     pick = make_terminal_state(
         simulation.robot, settings["pick_position_ned"], 0., np.zeros(4),
         gripper_opening=settings["gripper_open"],

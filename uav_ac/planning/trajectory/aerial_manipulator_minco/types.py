@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import numpy as np
 from scipy.spatial.transform import Rotation
 
-from ..gcopter.mappings import polynomial_basis_matrix
+from ..gcopter.mappings import evaluate_piecewise_quintic
 
 
 @dataclass(frozen=True)
@@ -49,9 +49,8 @@ class AerialManipulatorTrajectory:
                 or path.ndim != 2 or path.shape[1] != 8
                 or not np.all(np.isfinite(durations))
                 or not np.all(np.isfinite(coefficients))
-                or not np.all(np.isfinite(path))
-                or not np.allclose(durations, durations[0], rtol=1e-10, atol=1e-12)):
-            raise ValueError("trajectory arrays must be finite, shaped correctly, and equally timed")
+                or not np.all(np.isfinite(path))):
+            raise ValueError("trajectory arrays must be finite and shaped correctly")
         for value in (durations, coefficients, path):
             value.setflags(write=False)
         object.__setattr__(self, "durations", durations)
@@ -63,16 +62,8 @@ class AerialManipulatorTrajectory:
         return float(np.sum(self.durations))
 
     def evaluate(self, time, derivative=0):
-        query = np.asarray(time, dtype=float)
-        scalar = query.ndim == 0
-        flat = np.clip(query.reshape(-1), 0., self.total_time)
-        boundaries = np.cumsum(self.durations)
-        pieces = np.minimum(np.searchsorted(boundaries, flat, side="right"), len(self.durations)-1)
-        starts = np.r_[0., boundaries[:-1]]
-        local = flat-starts[pieces]
-        result = np.einsum("nk,nkd->nd", polynomial_basis_matrix(local, derivative),
-                           self.coefficients[pieces])
-        return result[0] if scalar else result
+        return evaluate_piecewise_quintic(
+            self.durations, self.coefficients, time, derivative)
 
     def reference(self, time, robot, *, gripper_opening):
         """Convert flat-output state into a full NED/FRD robot reference."""
@@ -87,12 +78,8 @@ class AerialManipulatorTrajectory:
         q = np.r_[sigma[:3], quaternion, sigma[4:8], float(gripper_opening)]
         v = np.r_[velocity[:3], angular_velocity, velocity[4:8], 0.]
         a = np.r_[acceleration[:3], np.zeros(3), acceleration[4:8], 0.]
-        return robot_reference(q, v, a)
-
-
-def robot_reference(configuration, velocity, acceleration):
-    from uav_ac.robot.aerial_manipulator import AerialManipulatorReference
-    return AerialManipulatorReference(configuration, velocity, acceleration)
+        from uav_ac.robot.aerial_manipulator import AerialManipulatorReference
+        return AerialManipulatorReference(q, v, a)
 
 
 def _flatness_attitude(acceleration, jerk, yaw, yaw_rate, gravity=9.81):

@@ -105,6 +105,56 @@ class InflatedOccupancyGrid:
             occupied[first:last] = slab
         return cls(occupied, lower, resolution)
 
+    @classmethod
+    def from_scene_geometries(cls, geometries, lower, upper, resolution):
+        """Conservatively rasterize static MuJoCo primitives in NED coordinates."""
+        lower, upper = np.asarray(lower, float), np.asarray(upper, float)
+        if (lower.shape != (3,) or upper.shape != (3,) or np.any(upper <= lower)
+                or not np.isfinite(resolution) or resolution <= 0):
+            raise ValueError("grid bounds and resolution are invalid")
+        counts = np.ceil((upper-lower)/resolution).astype(int)+1
+        axes = [lower[i]+np.arange(counts[i])*resolution for i in range(3)]
+        occupied = np.zeros(tuple(counts), dtype=bool)
+        cell_radius = np.sqrt(3.)*.5*float(resolution)
+        for geometry in geometries:
+            center = np.asarray(geometry.center, float)
+            rotation = np.asarray(geometry.rotation, float)
+            size = np.asarray(geometry.size, float)
+            if geometry.kind == "plane":
+                if abs(rotation[2, 2]) < 1.-1e-8:
+                    raise ValueError(f"planning ground '{geometry.name}' must be horizontal")
+                z0 = int(np.clip(np.floor(
+                    (center[2]-cell_radius-lower[2])/resolution), 0, counts[2]-1))
+                occupied[:, :, z0:] = True
+                continue
+            if geometry.kind not in {"box", "sphere", "cylinder"}:
+                raise ValueError(f"unsupported planning geometry '{geometry.kind}'")
+            half_extent = geometry.half_extents
+            lo = np.maximum(0, np.floor(
+                (center-half_extent-cell_radius-lower)/resolution).astype(int))
+            hi = np.minimum(counts, np.ceil(
+                (center+half_extent+cell_radius-lower)/resolution).astype(int)+1)
+            if np.any(hi <= lo):
+                continue
+            x, y, z = np.meshgrid(axes[0][lo[0]:hi[0]], axes[1][lo[1]:hi[1]],
+                                  axes[2][lo[2]:hi[2]], indexing="ij")
+            local = np.column_stack((x.ravel(), y.ravel(), z.ravel()))-center
+            local = local @ rotation
+            if geometry.kind == "sphere":
+                inside = np.linalg.norm(local, axis=1) <= size[0]+cell_radius
+            elif geometry.kind == "cylinder":
+                radial = np.linalg.norm(local[:, :2], axis=1)-size[0]
+                axial = np.abs(local[:, 2])-size[1]
+                outside = np.linalg.norm(np.maximum(
+                    np.column_stack((radial, axial)), 0.), axis=1)
+                inside = outside <= cell_radius
+            else:
+                q = np.abs(local)-size[:3]
+                inside = np.linalg.norm(np.maximum(q, 0.), axis=1) <= cell_radius
+            region = occupied[lo[0]:hi[0], lo[1]:hi[1], lo[2]:hi[2]]
+            region |= inside.reshape(region.shape)
+        return cls(occupied, lower, float(resolution))
+
     def collision_mask(self, points: np.ndarray, radii: np.ndarray,
                        margin: float) -> tuple[np.ndarray, np.ndarray]:
         """Return per-point occupancy hits and out-of-grid flags.

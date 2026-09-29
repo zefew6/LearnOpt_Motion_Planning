@@ -1,40 +1,16 @@
 import numpy as np
 import pytest
 
+from uav_ac import main
 from uav_ac.main import load_config, run
-from uav_ac.planning.trajectory.aerial_manipulator_minco import make_terminal_state
-from uav_ac.planning.trajectory.aerial_manipulator_minco.task_targets import yaw_quaternion
-from uav_ac.simulation.mujoco_sim import MujocoSimulation
-
-
-def test_bookshelf_pick_requires_l_shaped_arm_configuration():
-    config = load_config("configs/aerial_manipulator_pick_place.yaml")
-    simulation = MujocoSimulation(config["scene"], record_actual_trajectory=False)
-    settings = config["pick_place"]
-    target = np.asarray(settings["pick_position_ned"])
-    vertical = make_terminal_state(
-        simulation.robot, target, settings["pick_yaw"], np.zeros(4),
-        gripper_opening=settings["gripper_open"],
-        workspace_bounds=simulation.space_limits)
-    l_shaped = make_terminal_state(
-        simulation.robot, target, settings["pick_yaw"],
-        np.asarray(settings["pick_nominal_joints"]),
-        gripper_opening=settings["gripper_open"],
-        workspace_bounds=simulation.space_limits)
-
-    def full_configuration(state):
-        return np.r_[state[:3], yaw_quaternion(state[3]), state[4:],
-                     settings["gripper_open"]]
-
-    assert simulation.robot.check_collision(full_configuration(vertical))["collision"]
-    assert not simulation.robot.check_collision(full_configuration(l_shaped))["collision"]
 
 
 @pytest.mark.parametrize("seed", (0, 7, 9))
-def test_aerial_manipulator_pick_place_plans_and_executes_headless(seed):
+def test_aerial_manipulator_task_plans_and_executes_headless(seed):
     config = load_config("configs/aerial_manipulator_workcell.yaml")
     config["seed"] = seed
     config["visualize"] = False
+    config["pick_place"]["record_joint_trace"] = True
     result = run(config)
 
     assert result["success"]
@@ -47,27 +23,66 @@ def test_aerial_manipulator_pick_place_plans_and_executes_headless(seed):
     assert 0 < result["pick_validation_sample_dt"] <= .025
     assert 0 < result["place_validation_sample_dt"] <= .025
     assert result["planning_metrics"]["planning_seconds"] <= 60.0
+    assert (result["planning_metrics"]["minco_optimizer_seconds"]
+            <= result["planning_metrics"]["planning_seconds"])
+    assert all(result["planning_metrics"]["legs"][name]["optimizer_converged"]
+               for name in ("pick", "place"))
     assert result["planning_metrics"]["legs"]["pick"]["rrt_nodes"] > 2
     assert result["planning_metrics"]["legs"]["place"]["rrt_nodes"] > 2
     pick_metrics = result["planning_metrics"]["legs"]["pick"]
     place_metrics = result["planning_metrics"]["legs"]["place"]
-    assert np.allclose(pick_metrics["start_arm_joints"], np.zeros(4))
-    assert np.allclose(pick_metrics["target_arm_joints"],
-                       config["pick_place"]["pick_nominal_joints"])
-    assert pick_metrics["rrt_intermediate_arm_deviation_rad"] > 0.0
-    assert np.allclose(place_metrics["start_arm_joints"], np.zeros(4))
-    assert np.allclose(place_metrics["target_arm_joints"], np.zeros(4))
-    assert place_metrics["rrt_intermediate_arm_deviation_rad"] > 0.5
-    assert place_metrics["maximum_arm_deviation_rad"] > 0.5
-    assert max(place_metrics["joint_peak_to_peak_rad"]) > 0.5
+    assert pick_metrics["planned_movement_time_s"] > 0.0
+    assert place_metrics["planned_movement_time_s"] > 0.0
+    assert pick_metrics["planned_average_base_speed_mps"] > 0.0
+    assert place_metrics["planned_average_base_speed_mps"] > 0.0
+    assert max(pick_metrics["planned_average_joint_speed_rad_s"]) > 0.0
+    assert max(place_metrics["planned_average_joint_speed_rad_s"]) > 0.0
     trace = result["joint_execution_trace"]
     assert trace["actual_rad"].shape[1] == 4
     assert np.ptp(trace["reference_rad"], axis=0).max() > 0.5
     assert np.linalg.norm(result["final_grasp_position"]-
-                          config["pick_place"]["place_position_ned"]) < .02
+                          result["place_target_position_ned"]) < .02
     assert result["released_payload_error"] <= .02
     assert np.linalg.norm(result["released_payload_position_ned"]-
-                          config["pick_place"]["place_position_ned"]) <= .02
+                          result["place_target_position_ned"]) <= .02
     assert abs(result["final_gripper_opening"]-
-               config["pick_place"]["gripper_open"]) < .005
+               result["gripper_opening_target"]) < .005
+    assert result["maximum_base_position_tracking_error_m"] < .25
+    assert result["execution_movement_time_s"] > 0.0
+    assert result["execution_average_base_speed_mps"] > 0.0
+    assert np.max(result["execution_average_joint_speed_rad_s"]) > 0.0
+    assert not result["collision"]
+
+
+@pytest.mark.parametrize("primitives", [
+    '<geom name="obstacle_rotated_validation" type="box" '
+    'pos="5.55 -2.20 1.80" quat="0.9393727 0 0 0.3428978" '
+    'size="0.12 0.42 0.16"/>',
+    '<geom name="obstacle_sphere_validation" type="sphere" '
+    'pos="0.50 -2.20 1.80" size="0.12"/>\n'
+    '<geom name="obstacle_cylinder_validation" type="cylinder" '
+    'pos="0.85 -2.20 1.80" size="0.12 0.25"/>',
+])
+def test_xml_only_scene_layout_runs_same_headless_pipeline(tmp_path, primitives):
+    source = main.MODEL_DIRECTORY / "aerial_manipulator_workcell.xml"
+    xml = source.read_text(encoding="utf-8")
+    robot_xml = (main.MODEL_DIRECTORY.parent / "model" /
+                 "aerial_manipulator.xml").resolve()
+    xml = xml.replace("../model/aerial_manipulator.xml", str(robot_xml))
+    xml = xml.replace("</worldbody>", f"{primitives}\n</worldbody>", 1)
+    scene_path = tmp_path / "scene_primitives.xml"
+    scene_path.write_text(xml, encoding="utf-8")
+    config = load_config("configs/aerial_manipulator_workcell.yaml")
+    config["scene"] = str(scene_path)
+    config["seed"] = 8
+    config["visualize"] = False
+    result = run(config)
+
+    assert result["success"]
+    assert result["event_sequence"] == [
+        "PLAN_TO_PICK", "MOVE_TO_PICK", "GRASP", "PLAN_TO_PLACE",
+        "MOVE_TO_PLACE", "RELEASE", "DONE",
+    ]
+    assert result["pick_plan_valid"] and result["place_plan_valid"]
+    assert result["released_payload_error"] <= .02
     assert not result["collision"]

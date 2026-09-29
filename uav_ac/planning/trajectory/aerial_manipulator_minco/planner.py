@@ -209,6 +209,7 @@ class AerialManipulatorMINCO:
 
         regions = []
         phase = rrt_started
+        search_error = None
         try:
             if not state_valid(start) or not state_valid(goal):
                 raise ValueError("OMPL RRT start and goal must be valid states")
@@ -223,43 +224,17 @@ class AerialManipulatorMINCO:
                 simplify_budget_s=cfg.rrt_simplify_budget_s,
                 timeout_s=max(.001, deadline-time.perf_counter()))
         except (RuntimeError, ValueError, TimeoutError) as error:
-            self.last_metrics = {
-                **getattr(error, "metrics", {}),
-                **astar_metrics,
-                "rrt_seconds": time.perf_counter()-phase,
-                "rrt_collision_model": "shared_edt_occupancy_full_envelope",
-                "rrt_occupancy_margin": float(cfg.rrt_obstacle_margin),
-                "rrt_state_queries": rrt_state_queries,
-                "rrt_state_cache_hits": rrt_state_cache_hits,
-                "rrt_collision_batches": rrt_collision_batches,
-                "rrt_edge_cache_hits": rrt_edge_cache_hits,
-                "rrt_sampling_guidance_mode": "progressive_position_joint_bounds",
-                "rrt_sampling_regions": [region["name"] for region in regions],
-                "rrt_exact_candidate_states": evaluator.rrt_exact_candidate_states,
-                "rrt_exact_candidate_seconds": evaluator.rrt_exact_candidate_seconds,
-                "rrt_batch_fk_seconds": evaluator.rrt_batch_fk_seconds,
-                "rrt_occupancy_check_seconds": evaluator.rrt_occupancy_check_seconds,
-                "rrt_sphere_pair_check_seconds": evaluator.rrt_sphere_pair_check_seconds,
-                "rrt_world_pair_filter_seconds": evaluator.rrt_world_pair_filter_seconds,
-                "rrt_exact_geometry_seconds": evaluator.rrt_exact_geometry_seconds,
-                "rrt_exact_pair_queries": evaluator.rrt_exact_pair_queries,
-                "rrt_environment_candidates": evaluator.rrt_environment_candidates,
-                "rrt_self_candidates": evaluator.rrt_self_candidates,
-                "rrt_fixed_clearance_self_pairs_skipped":
-                    evaluator.rrt_fixed_clearance_self_pairs_skipped,
-                "rrt_payload_candidates": evaluator.rrt_payload_candidates,
-                "rrt_exact_rejected_states": evaluator.rrt_exact_rejected_states,
-                "failure_reason": str(error),
-                "total_seconds": time.perf_counter()-started,
-            }
-            raise
-        # Preserve completed search timings even if the shared deadline is
-        # reached while validating or smoothing the returned route.
+            search_error = error
+            search_metrics = getattr(error, "metrics", {})
+        # Preserve search diagnostics on later optimization failures and retries.
+        rrt_seconds = time.perf_counter()-phase
         self.last_metrics = {
             **search_metrics,
             **astar_metrics,
-            "rrt_seconds": time.perf_counter()-phase,
-            "rrt_collision_model": "ompl_shared_edt_occupancy_full_envelope",
+            "rrt_seconds": rrt_seconds,
+            "rrt_collision_model": ("shared_edt_occupancy_full_envelope"
+                                    if search_error else
+                                    "ompl_shared_edt_occupancy_full_envelope"),
             "rrt_occupancy_margin": float(cfg.rrt_obstacle_margin),
             "rrt_state_queries": rrt_state_queries,
             "rrt_state_cache_hits": rrt_state_cache_hits,
@@ -282,16 +257,72 @@ class AerialManipulatorMINCO:
             "rrt_payload_candidates": evaluator.rrt_payload_candidates,
             "rrt_exact_rejected_states": evaluator.rrt_exact_rejected_states,
         }
-        rrt_seconds = time.perf_counter()-phase
-        self.last_metrics["rrt_seconds"] = rrt_seconds
+        if search_error is not None:
+            self.last_metrics.update(
+                failure_reason=str(search_error), total_seconds=time.perf_counter()-started)
+            raise search_error
         if search_only:
             self.last_metrics["rrt_path_states"] = int(len(path))
             return AerialManipulatorSearchResult(path, self.last_metrics)
         path = _unwrap_path_yaw(path)
+        path, shortcut_attempts = _greedy_shortcut(path, edge_valid)
         knots = _resample_preserving_corners(
             path, cfg.minco_sample_spacing_m, cfg.position_scale,
             cfg.yaw_scale, cfg.joint_scales)
+        search_diagnostics = dict(self.last_metrics)
+        attempts = []
+        trajectory = None
+
+        for attempt_index in range(2):
+            if attempt_index:
+                evaluator = AerialManipulatorTrajectoryEvaluator(
+                    robot, esdf, quad, cfg, bounds, gripper_opening, carry_payload,
+                    deadline, occupancy=occupancy)
+                validity_cache.clear()
+                edge_cache.clear()
+                rrt_state_queries = rrt_state_cache_hits = 0
+                rrt_collision_batches = rrt_edge_cache_hits = 0
+            self.last_metrics = dict(search_diagnostics)
+            try:
+                trajectory = self._optimize_path(
+                    path, knots, evaluator, robot, edge_valid, metric_scale,
+                    deadline, shortcut_attempts)
+            except (RuntimeError, TimeoutError, ValueError, np.linalg.LinAlgError) as error:
+                attempts.append(dict(self.last_metrics))
+                self.last_metrics = _combined_metrics(
+                    search_diagnostics, attempts, time.perf_counter()-started)
+                self.last_metrics["failure_reason"] = str(error)
+                raise
+            attempts.append(dict(self.last_metrics))
+            if trajectory.validation_passed or attempt_index:
+                break
+
+            failing_piece = int(evaluator.last_validation_metrics.get(
+                "maximum_violation_piece", -1))
+            if not 0 <= failing_piece < len(knots)-1:
+                break
+            midpoint = _interpolate_state(
+                knots[failing_piece], knots[failing_piece+1], .5)
+            if not (edge_valid(knots[failing_piece], midpoint)
+                    and edge_valid(midpoint, knots[failing_piece+1])):
+                break
+            path = np.insert(knots, failing_piece+1, midpoint, axis=0)
+            knots = path.copy()
+
+        self.last_metrics = _combined_metrics(
+            search_diagnostics, attempts, time.perf_counter()-started)
+        return trajectory
+
+    def _optimize_path(self, path, knots, evaluator, robot, edge_valid,
+                       metric_scale, deadline, shortcut_attempts):
+        cfg = self.config
+
+        def check_deadline():
+            if time.perf_counter() >= deadline:
+                raise TimeoutError("aerial_manipulator_minco planning budget exceeded")
+
         pieces = len(knots)-1
+        time_proportions = _segment_time_proportions(knots, cfg)
         initial_duration_scale = cfg.initial_duration_scale
         total_time = _initial_duration(knots, cfg)*initial_duration_scale
         minco = MINCOQuintic(_boundary_pva(knots[0]), _boundary_pva(knots[-1]), pieces)
@@ -334,14 +365,15 @@ class AerialManipulatorMINCO:
             # physical joint-angle scale here would distort the chain-rule
             # gradient sent to L-BFGS.
             waypoint_variable_scale[4:8] = 1.0
-        variable_scale = np.r_[np.tile(waypoint_variable_scale, pieces-1), 1.0]
-
+        variable_scale = np.r_[
+            np.tile(waypoint_variable_scale*cfg.optimizer_waypoint_step_scale,
+                    pieces-1),
+            cfg.optimizer_waypoint_step_scale,
+        ]
         objective_calls = 0
         # Publish the optimizer setup before its first objective evaluation so
         # a shared planning deadline still leaves useful diagnostics behind.
         self.last_metrics.update({
-            "minco_path_length_equivalent_m": _path_length_8d(
-                path, cfg.position_scale, cfg.yaw_scale, cfg.joint_scales),
             "minco_sample_spacing_m": float(cfg.minco_sample_spacing_m),
             "minco_initial_waypoints": int(len(knots)),
             "minco_pieces": int(pieces),
@@ -359,7 +391,8 @@ class AerialManipulatorMINCO:
             return self._objective(
                 variables, minco, pieces, evaluator,
                 joint_lower=joint_lower, joint_upper=joint_upper,
-                joint_parameterization=waypoint_parameterization)
+                joint_parameterization=waypoint_parameterization,
+                time_proportions=time_proportions)
 
         def scaled_objective(scaled_variables):
             cost, gradient = objective(scaled_variables*variable_scale)
@@ -371,12 +404,13 @@ class AerialManipulatorMINCO:
                 scaled_objective, initial/variable_scale,
                 max_iterations=cfg.max_iterations,
                 memory=cfg.lbfgs_memory, gradient_tolerance=cfg.gradient_tolerance,
-                relative_cost_tolerance=1e-7,
+                relative_cost_tolerance=cfg.relative_cost_tolerance,
                 # Require all optimization quadrature samples to clear their
                 # constraints; dense full-geometry validation below remains
                 # authoritative between quadrature samples.
                 is_feasible=lambda: evaluator.last_violation <= 0.0,
-                feasible_iteration_patience=2)
+                feasible_iteration_patience=10_000,
+                require_convergence=True)
         except (RuntimeError, TimeoutError, ValueError, np.linalg.LinAlgError):
             self.last_metrics.update({
                 "objective_calls": int(objective_calls),
@@ -387,12 +421,25 @@ class AerialManipulatorMINCO:
             })
             raise
         optimizer_seconds = time.perf_counter()-phase
+        relative_cost_change = (float(result.relative_cost_change)
+                                if np.isfinite(result.relative_cost_change) else None)
+        self.last_metrics.update({
+            "optimizer_seconds": optimizer_seconds,
+            "objective_calls": int(objective_calls),
+            "objective_samples": int(evaluator.objective_samples),
+            "optimizer_status": result.message,
+            "optimizer_converged": bool(result.converged),
+            "optimizer_iterations": int(result.iterations),
+            "optimizer_gradient_inf_norm": float(np.linalg.norm(result.gradient, ord=np.inf)),
+            "optimizer_relative_cost_change": relative_cost_change,
+            "optimizer_last_violation": float(evaluator.last_violation),
+        })
         optimized_variables = result.x*variable_scale
         points = _decode_internal_joint_waypoints(
             optimized_variables[:8*(pieces-1)].reshape(pieces-1, 8),
             waypoint_parameterization, joint_lower, joint_upper)
         total = cfg.minimum_total_time+float(forward_time(optimized_variables[-1:])[0])
-        durations = np.full(pieces, total/pieces)
+        durations = time_proportions*total
         coefficients, _ = minco.solve(points, durations)
         coefficients = coefficients.reshape(pieces, 6, 8)
         provisional = AerialManipulatorTrajectory(
@@ -419,44 +466,24 @@ class AerialManipulatorMINCO:
             phase = time.perf_counter()
             valid, clearance, violation, sample_dt = evaluator.dense_validate(provisional)
             validation_seconds += time.perf_counter()-phase
-        self.last_metrics = {
-            **search_metrics,
-            **astar_metrics,
-            "rrt_seconds": rrt_seconds,
-            "rrt_collision_model": "ompl_shared_edt_occupancy_full_envelope",
-            "rrt_occupancy_margin": float(cfg.rrt_obstacle_margin),
-            "rrt_state_queries": rrt_state_queries,
-            "rrt_state_cache_hits": rrt_state_cache_hits,
-            "rrt_collision_batches": rrt_collision_batches,
-            "rrt_edge_cache_hits": rrt_edge_cache_hits,
-            "rrt_sampling_guidance_mode": "progressive_position_joint_bounds",
-            "rrt_sampling_regions": [region["name"] for region in regions],
-            "rrt_exact_candidate_states": evaluator.rrt_exact_candidate_states,
-            "rrt_exact_candidate_seconds": evaluator.rrt_exact_candidate_seconds,
+        self.last_metrics.update({
             "esdf_discretization_margin_used": evaluator.esdf_discretization_margin,
-            "minco_path_length_equivalent_m": _path_length_8d(
-                path, cfg.position_scale, cfg.yaw_scale, cfg.joint_scales),
-            "minco_sample_spacing_m": float(cfg.minco_sample_spacing_m),
-            "minco_initial_waypoints": int(len(knots)),
-            "minco_pieces": int(pieces),
-            "initial_duration_scale": initial_duration_scale,
-            "optimizer_seconds": optimizer_seconds,
-            "objective_calls": objective_calls,
-            "objective_samples": evaluator.objective_samples,
-            "optimizer_status": result.message,
+            "rrt_greedy_shortcut_attempts": int(shortcut_attempts),
             "validation_seconds": validation_seconds,
             "validation_samples": evaluator.validation_samples,
+            "optimized_total_time_s": float(provisional.total_time),
             "retiming_attempts": retiming_attempts,
             "retiming_scale": retiming_scale,
-            "total_seconds": time.perf_counter()-started,
             "joint_waypoint_parameterization_used": waypoint_parameterization,
-        }
+        })
         self.last_metrics.update(evaluator.last_validation_metrics)
-        return AerialManipulatorTrajectory(
+        trajectory = AerialManipulatorTrajectory(
             provisional.durations, provisional.coefficients, path,
             result.cost, result.iterations,
             result.converged, result.message, valid, clearance, violation,
             sample_dt)
+        return trajectory
+
 
     def search_initial_path(self, *args, **kwargs):
         """Return only the exact RRT path and search diagnostics."""
@@ -466,7 +493,7 @@ class AerialManipulatorMINCO:
 
     def _objective(self, variables, minco, pieces, evaluator, *,
                    joint_lower=None, joint_upper=None,
-                   joint_parameterization=None):
+                   joint_parameterization=None, time_proportions=None):
         cfg = self.config
         joint_parameterization = (cfg.joint_waypoint_parameterization
                                   if joint_parameterization is None
@@ -485,7 +512,12 @@ class AerialManipulatorMINCO:
             points = raw_points
         tau = variables[-1:]
         total = cfg.minimum_total_time+float(forward_time(tau)[0])
-        durations = np.full(pieces, total/pieces)
+        time_proportions = (np.full(pieces, 1./pieces) if time_proportions is None
+                            else np.asarray(time_proportions, dtype=float))
+        if (time_proportions.shape != (pieces,) or np.any(time_proportions <= 0.)
+                or not np.isclose(np.sum(time_proportions), 1.)):
+            raise ValueError("time_proportions must be positive and sum to one")
+        durations = time_proportions*total
         try:
             coefficients, system = minco.solve(points, durations)
         except (np.linalg.LinAlgError, ValueError):
@@ -501,7 +533,7 @@ class AerialManipulatorMINCO:
             system, coefficients.reshape(-1, 8), durations,
             (grad_coefficients.reshape(-1, 8)+penalty_grad.reshape(-1, 8)),
             direct_times)
-        grad_total = float(np.mean(grad_times))
+        grad_total = float(np.dot(grad_times, time_proportions))
         grad_tau = backward_time_gradient(tau, np.array([grad_total]))
         if joint_parameterization == "tanh":
             # ``grad_points`` is the physical waypoint gradient after the
@@ -675,12 +707,37 @@ def _unwrap_path_yaw(path):
     return result
 
 
-def _path_length_8d(path, position_scale, yaw_scale, joint_scales):
-    path = _unwrap_path_yaw(path)
-    scale = np.r_[np.full(3, float(position_scale)), float(yaw_scale),
-                  np.asarray(joint_scales, dtype=float)]
-    delta = np.diff(path, axis=0)
-    return float(position_scale*np.sum(np.sqrt(np.sum((delta/scale)**2, axis=1))))
+def _greedy_shortcut(path, edge_valid):
+    """Remove redundant route knots while validating every replacement edge."""
+    path = np.asarray(path, dtype=float)
+    if len(path) <= 2:
+        return path.copy(), 0
+    result, current, attempts = [path[0].copy()], 0, 0
+    while current < len(path)-1:
+        following = len(path)-1
+        while following > current+1:
+            attempts += 1
+            if edge_valid(path[current], path[following]):
+                break
+            following -= 1
+        result.append(path[following].copy())
+        current = following
+    return _unwrap_path_yaw(np.asarray(result)), attempts
+
+
+def _combined_metrics(search_metrics, attempts, total_seconds):
+    metrics = dict(search_metrics)
+    if attempts:
+        metrics.update(attempts[-1])
+        for key in ("objective_calls", "objective_samples", "optimizer_iterations",
+                    "validation_samples"):
+            metrics[key] = sum(int(attempt.get(key, 0)) for attempt in attempts)
+        for key in ("optimizer_seconds", "validation_seconds"):
+            metrics[key] = sum(float(attempt.get(key, 0.)) for attempt in attempts)
+        if len(attempts) > 1:
+            metrics["optimizer_refinement_attempts"] = len(attempts)-1
+    metrics["total_seconds"] = float(total_seconds)
+    return metrics
 
 
 def _resample_preserving_corners(path, spacing, position_scale=.5,
@@ -702,37 +759,45 @@ def _resample_preserving_corners(path, spacing, position_scale=.5,
     scale = np.r_[np.full(3, position_scale), yaw_scale, joint_scales]
     delta = np.diff(path, axis=0)
     edge_lengths = position_scale*np.sqrt(np.sum((delta/scale)**2, axis=1))
-    cumulative = np.r_[0., np.cumsum(edge_lengths)]
-    if cumulative[-1] <= 1e-12:
+    if np.sum(edge_lengths) <= 1e-12:
         raise ValueError("RRT start and goal have zero 8-D path length")
-    regular = np.arange(0., cumulative[-1], float(spacing))
-    distances = np.r_[regular, cumulative, cumulative[-1]]
-    distances.sort()
-    unique = [float(distances[0])]
-    for value in distances[1:]:
-        if value-unique[-1] > 1e-10:
-            unique.append(float(value))
-    knots = []
-    for distance in unique:
-        corners = np.flatnonzero(np.abs(cumulative-distance) <= 1e-10)
-        if len(corners):
-            knots.append(path[int(corners[-1])].copy())
-            continue
-        edge = min(int(np.searchsorted(cumulative, distance, side="right")-1),
-                   len(edge_lengths)-1)
-        fraction = (distance-cumulative[edge])/max(edge_lengths[edge], 1e-12)
-        knots.append(_interpolate_state(path[edge], path[edge+1], fraction))
+    knots = [path[0].copy()]
+    for edge, length in enumerate(edge_lengths):
+        count = max(1, int(np.ceil(length/float(spacing))))
+        knots.extend((path[edge+1].copy() if step == count else
+                      path[edge]+(path[edge+1]-path[edge])*(step/count))
+                     for step in range(1, count+1))
     return np.asarray(knots)
 
 
+def _segment_time_proportions(path, config):
+    delta = np.abs(np.diff(np.asarray(path, dtype=float), axis=0))
+    estimates = np.maximum.reduce((
+        np.linalg.norm(delta[:, :3], axis=1)/config.max_speed,
+        delta[:, 3]/config.max_yaw_rate,
+        np.max(delta[:, 4:8]/np.asarray(config.joint_velocity_limits), axis=1),
+        np.full(len(delta), .05),
+    ))
+    return estimates/np.sum(estimates)
+
+
 def _initial_duration(path, config):
-    lengths = np.sum(np.abs(np.diff(path, axis=0)), axis=0)
-    time = max(float(np.sum(np.linalg.norm(np.diff(path[:, :3], axis=0), axis=1))
-                            /config.max_speed),
-               float(lengths[3]/config.max_yaw_rate),
-               float(np.max(lengths[4:8]/np.asarray(config.joint_velocity_limits))),
-               config.minimum_total_time+.25)
-    return config.minimum_total_time+1.35*max(time, .25)
+    delta = np.abs(np.diff(np.asarray(path, dtype=float), axis=0))
+    position_length = float(np.sum(np.linalg.norm(delta[:, :3], axis=1)))
+    yaw_length = float(np.sum(delta[:, 3]))
+    joint_lengths = np.sum(delta[:, 4:8], axis=0)
+    velocity_time = max(
+        position_length/config.max_speed,
+        yaw_length/config.max_yaw_rate,
+        float(np.max(joint_lengths/np.asarray(config.joint_velocity_limits))),
+    )
+    acceleration_time = max(
+        np.sqrt(6.0*position_length/config.max_acceleration),
+        np.sqrt(6.0*yaw_length/config.max_yaw_acceleration),
+        float(np.max(np.sqrt(
+            6.0*joint_lengths/np.asarray(config.joint_acceleration_limits)))),
+    )
+    return max(velocity_time, acceleration_time, config.minimum_total_time+.25)
 
 
 __all__ = ["AerialManipulatorMINCO"]

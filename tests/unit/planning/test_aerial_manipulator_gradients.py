@@ -1,4 +1,7 @@
+from math import factorial
+
 import numpy as np
+import pytest
 
 from uav_ac.planning.geometry.esdf import ESDF
 from uav_ac.planning.trajectory.aerial_manipulator_minco.config import (
@@ -6,9 +9,12 @@ from uav_ac.planning.trajectory.aerial_manipulator_minco.config import (
 )
 from uav_ac.planning.trajectory.aerial_manipulator_minco.evaluator import (
     AerialManipulatorTrajectoryEvaluator,
+    _flatness_body_rate_squared,
 )
 from uav_ac.planning.trajectory.aerial_manipulator_minco.planner import (
     AerialManipulatorMINCO,
+    _combined_metrics,
+    _initial_duration,
     _time_stretch,
 )
 from uav_ac.planning.trajectory.aerial_manipulator_minco.types import (
@@ -16,12 +22,100 @@ from uav_ac.planning.trajectory.aerial_manipulator_minco.types import (
 )
 from uav_ac.planning.trajectory.gcopter.mappings import inverse_time
 from uav_ac.planning.trajectory.gcopter.minco import MINCOQuintic
+from uav_ac.planning.trajectory.gcopter.types import GCOPTERTrajectory
 from uav_ac.simulation.mujoco_sim import MujocoSimulation
+
+
+def test_piecewise_quintic_evaluation_is_shared_and_preserves_boundaries():
+    rng = np.random.default_rng(17)
+    durations = np.array([.35, .8])
+    coefficients = rng.normal(size=(2, 6, 8))
+    path = np.zeros((2, 8))
+    aerial = AerialManipulatorTrajectory(
+        durations, coefficients, path, 0.0, 0, True, "test")
+    gcopter = GCOPTERTrajectory(
+        durations, coefficients, np.zeros(2, dtype=int), 0.0, 0, True, "test")
+    times = np.array([-.1, 0., .35, .35+1.e-10, 1.15, 1.4])
+
+    def baseline(query, derivative):
+        query = np.asarray(query, dtype=float)
+        scalar = query.ndim == 0
+        flat = np.clip(query.reshape(-1), 0., np.sum(durations))
+        boundaries = np.cumsum(durations)
+        pieces = np.minimum(np.searchsorted(boundaries, flat, side="right"), 1)
+        starts = np.r_[0., boundaries[:-1]]
+        values = []
+        for local, piece in zip(flat-starts[pieces], pieces, strict=True):
+            basis = np.array([
+                0. if power < derivative else
+                factorial(power)/factorial(power-derivative)*local**(power-derivative)
+                for power in range(6)])
+            values.append(basis@coefficients[piece])
+        values = np.asarray(values)
+        return values[0] if scalar else values
+
+    for derivative in range(6):
+        expected = baseline(times, derivative)
+        assert gcopter.evaluate(times, derivative) == pytest.approx(expected)
+        assert aerial.evaluate(times, derivative) == pytest.approx(expected)
+        assert aerial.evaluate(.35, derivative) == pytest.approx(
+            gcopter.evaluate(.35, derivative))
+
+
+def test_local_refinement_metrics_sum_attempt_costs_once():
+    base = {"rrt_nodes": 12, "rrt_seconds": .4, "astar_expansions": 8}
+    attempts = [
+        {"optimizer_seconds": .7, "objective_calls": 20,
+         "objective_samples": 80, "optimizer_iterations": 12,
+         "validation_seconds": .1, "validation_samples": 50,
+         "minco_pieces": 5},
+        {"optimizer_seconds": .3, "objective_calls": 10,
+         "objective_samples": 40, "optimizer_iterations": 7,
+         "validation_seconds": .2, "validation_samples": 60,
+         "minco_pieces": 6},
+    ]
+
+    metrics = _combined_metrics(base, attempts, 2.0)
+
+    assert metrics["rrt_nodes"] == 12
+    assert metrics["rrt_seconds"] == .4
+    assert metrics["astar_expansions"] == 8
+    assert metrics["optimizer_seconds"] == pytest.approx(1.0)
+    assert metrics["objective_calls"] == 30
+    assert metrics["objective_samples"] == 120
+    assert metrics["optimizer_iterations"] == 19
+    assert metrics["validation_seconds"] == pytest.approx(.3)
+    assert metrics["validation_samples"] == 110
+    assert metrics["minco_pieces"] == 6
+    assert metrics["total_seconds"] == 2.0
+
+
+def test_flatness_body_rate_gradient_matches_finite_difference():
+    acceleration = np.array([.7, -.3, .2])
+    jerk = np.array([.4, .1, -.2])
+    yaw, yaw_rate, gravity = .6, -.25, 9.81
+    value, gradient = _flatness_body_rate_squared(
+        acceleration, jerk, yaw, yaw_rate, gravity)
+    variables = np.r_[acceleration, jerk, yaw, yaw_rate]
+    epsilon = 1e-6
+    numerical = np.empty(8)
+    for index in range(8):
+        plus, minus = variables.copy(), variables.copy()
+        plus[index] += epsilon
+        minus[index] -= epsilon
+        numerical[index] = (
+            _flatness_body_rate_squared(
+                plus[:3], plus[3:6], plus[6], plus[7], gravity)[0]
+            -_flatness_body_rate_squared(
+                minus[:3], minus[3:6], minus[6], minus[7], gravity)[0]
+        )/(2*epsilon)
+    assert np.isfinite(value)
+    np.testing.assert_allclose(gradient, numerical, rtol=2e-6, atol=2e-7)
 
 
 def test_analytic_whole_body_sample_gradient_matches_finite_difference():
     simulation = MujocoSimulation(
-        "uav_ac/simulation/models/aerial_manipulator_pick_place.xml",
+        "tests/fixtures/aerial_manipulator_gradient.xml",
         record_actual_trajectory=False)
     robot = simulation.robot
     config = AerialManipulatorMINCOConfig(
@@ -77,7 +171,7 @@ def test_analytic_whole_body_sample_gradient_matches_finite_difference():
 
 def test_complete_shared_total_time_and_minco_adjoint_gradient():
     simulation = MujocoSimulation(
-        "uav_ac/simulation/models/aerial_manipulator_pick_place.xml",
+        "tests/fixtures/aerial_manipulator_gradient.xml",
         record_actual_trajectory=False)
     robot = simulation.robot
     config = AerialManipulatorMINCOConfig(
@@ -100,15 +194,30 @@ def test_complete_shared_total_time_and_minco_adjoint_gradient():
     midpoint = .5*(start+goal)
     variables = np.r_[midpoint, inverse_time(np.array([1.0]))]
     planner = AerialManipulatorMINCO(config)
-    cost, gradient = planner._objective(variables, minco, 2, evaluator)
+    proportions = np.array([.3, .7])
+    cost, gradient = planner._objective(
+        variables, minco, 2, evaluator, time_proportions=proportions)
     epsilon = 2e-6
     for index in (0, 2, 3, 4, 8):
         plus, minus = variables.copy(), variables.copy()
         plus[index] += epsilon; minus[index] -= epsilon
-        numerical = (planner._objective(plus, minco, 2, evaluator)[0]
-                     -planner._objective(minus, minco, 2, evaluator)[0])/(2*epsilon)
+        numerical = (planner._objective(
+                         plus, minco, 2, evaluator, time_proportions=proportions)[0]
+                     -planner._objective(
+                         minus, minco, 2, evaluator, time_proportions=proportions)[0])/(2*epsilon)
         np.testing.assert_allclose(gradient[index], numerical, rtol=4e-3, atol=3e-2)
     assert np.isfinite(cost)
+
+    durations = proportions*1.4
+    coefficients, _ = minco.solve(np.array([midpoint]), durations)
+    coefficients = coefficients.reshape(2, 6, 8)
+    for derivative in range(4):
+        left = sum(coefficients[0, order]*
+                   (durations[0]**(order-derivative))*
+                   factorial(order)/factorial(order-derivative)
+                   for order in range(derivative, 6))
+        right = coefficients[1, derivative]*factorial(derivative)
+        np.testing.assert_allclose(left, right, atol=2e-8, rtol=2e-8)
 
 
 def test_flatness_references_keep_quaternion_sign_continuous_across_pi():
@@ -152,9 +261,20 @@ def test_uniform_time_stretch_preserves_path_and_scales_derivatives():
                                    trajectory.evaluate(time, 2)/scale**2, atol=1e-12)
 
 
+def test_initial_duration_accounts_for_acceleration_demand():
+    config = AerialManipulatorMINCOConfig(
+        max_speed=3., max_acceleration=3., initial_duration_scale=1.2)
+    path = np.zeros((2, 8))
+    path[1, 0] = 4.
+    expected = max(
+        np.sqrt(6.0*4./config.max_acceleration),
+        config.minimum_total_time+.25)
+    assert _initial_duration(path, config) == expected
+
+
 def test_esdf_out_of_bounds_penalty_gradient_points_back_into_the_map():
     simulation = MujocoSimulation(
-        "uav_ac/simulation/models/aerial_manipulator_pick_place.xml",
+        "tests/fixtures/aerial_manipulator_gradient.xml",
         record_actual_trajectory=False)
     robot = simulation.robot
     config = AerialManipulatorMINCOConfig(obstacle_clearance=.05)
@@ -176,7 +296,7 @@ def test_esdf_out_of_bounds_penalty_gradient_points_back_into_the_map():
 
 def test_dense_validation_checks_collision_with_flatness_recovered_attitude():
     simulation = MujocoSimulation(
-        "uav_ac/simulation/models/aerial_manipulator_pick_place.xml",
+        "tests/fixtures/aerial_manipulator_gradient.xml",
         record_actual_trajectory=False)
     robot = simulation.robot
     config = AerialManipulatorMINCOConfig(validation_dt=.05)
@@ -207,7 +327,7 @@ def test_dense_validation_checks_collision_with_flatness_recovered_attitude():
 
 def test_collision_gradient_chains_full_pose_through_acceleration_and_yaw():
     simulation = MujocoSimulation(
-        "uav_ac/simulation/models/aerial_manipulator_pick_place.xml",
+        "tests/fixtures/aerial_manipulator_gradient.xml",
         record_actual_trajectory=False)
     robot = simulation.robot
     origin = np.array([-2., -2., -3.])

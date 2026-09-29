@@ -65,27 +65,25 @@ def test_minimal_config_receives_runtime_defaults(tmp_path):
     assert config["gcopter"] == {}
 
 
-def test_aerial_pick_place_accepts_workcell_scene_with_optional_xml_suffix(tmp_path):
+def test_aerial_pick_place_accepts_new_xml_scenario_without_target_yaml(tmp_path, monkeypatch):
+    source = main.MODEL_DIRECTORY / "aerial_manipulator_workcell.xml"
+    xml = source.read_text(encoding="utf-8")
+    include = (main.MODEL_DIRECTORY.parent / "model" / "aerial_manipulator.xml").resolve()
+    xml = xml.replace("../model/aerial_manipulator.xml", str(include))
+    monkeypatch.setattr(main, "MODEL_DIRECTORY", tmp_path)
+    (tmp_path / "scenario_green.xml").write_text(xml, encoding="utf-8")
     config = main.load_config(write_config(
         tmp_path,
         "task: aerial_pick_place\n"
-        "scene: aerial_manipulator_workcell.xml\n"
+        "scene: scenario_green.xml\n"
         "planner: aerial_manipulator_minco\n"
-        "controller: cascaded\n"
-        "pick_place:\n"
-        "  pick_position_ned: [1.45, 1.35, -0.95]\n"
-        "  place_position_ned: [5.05, -1.30, -0.85]\n"
-        "  pick_yaw: 0.0\n"
-        "  place_yaw: 0.0\n"
-        "  pick_nominal_joints: [0, 0, 0, 0]\n"
-        "  place_nominal_joints: [0, 0, 0, 0]\n"
-        "  gripper_open: 0.06\n"
-        "  gripper_closed: 0.025\n"))
-    assert config["scene"].endswith("aerial_manipulator_workcell.xml")
+        "controller: cascaded\n"))
+    assert config["scene"].endswith("scenario_green.xml")
+    assert "pick_position_ned" not in config["pick_place"]
 
 
-def test_aerial_pick_place_rejects_unrelated_scene(tmp_path):
-    with pytest.raises(ValueError, match="aerial manipulator pick/place scene"):
+def test_aerial_pick_place_rejects_xml_without_pick_place_metadata(tmp_path):
+    with pytest.raises(ValueError, match="planning_bounds and pick/place numerics"):
         main.load_config(write_config(
             tmp_path,
             "task: aerial_pick_place\n"
