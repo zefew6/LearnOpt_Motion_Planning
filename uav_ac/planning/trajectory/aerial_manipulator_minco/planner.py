@@ -4,13 +4,16 @@ import time
 
 import numpy as np
 
-from ...search.A_star import plan_aerial_astar_guide
-from ...search.RRT_connect import plan_rrt_connect
+from ...search.rrt_connect import plan_rrt_connect
 from ..gcopter.mappings import backward_time_gradient, forward_time, inverse_time
 from ..gcopter.minco import MINCOQuintic
 from ..gcopter.optimizer import scipy_lbfgs
 from .config import AerialManipulatorMINCOConfig
 from .evaluator import AerialManipulatorTrajectoryEvaluator
+from .search_adapter import (
+    AerialManipulatorStateSpaceAdapter,
+    plan_aerial_astar_guide,
+)
 from .types import AerialManipulatorSearchResult, AerialManipulatorTrajectory
 
 
@@ -46,11 +49,12 @@ class AerialManipulatorMINCO:
             deadline, occupancy=occupancy)
         metric_scale = np.r_[np.full(3, cfg.position_scale), cfg.yaw_scale,
                              np.asarray(cfg.joint_scales)]
+        state_space_adapter = AerialManipulatorStateSpaceAdapter()
         guide = None
         if cfg.astar_guidance_enabled and occupancy is not None:
             try:
                 guide, astar_metrics = plan_aerial_astar_guide(
-                    start[:3], goal[:3], bounds, occupancy, esdf,
+                    occupancy, start[:3], goal[:3], esdf,
                     proxy_radius=robot.base_inscribed_collision_radius(),
                     margin=cfg.rrt_obstacle_margin,
                     grid_resolution=cfg.astar_grid_resolution,
@@ -157,7 +161,7 @@ class AerialManipulatorMINCO:
         def sampling_regions():
             if not cfg.astar_guidance_enabled:
                 return [{"name": "global_workspace",
-                         "lower": bounds[0].copy(), "upper": bounds[1].copy(),
+                         "lower": lower.copy(), "upper": upper.copy(),
                          "fraction": 1.0}]
             endpoint_lower = np.maximum(
                 bounds[0], np.minimum(start[:3], goal[:3])-.40)
@@ -178,9 +182,8 @@ class AerialManipulatorMINCO:
             endpoint_joint_lower, endpoint_joint_upper = joint_bounds(
                 cfg.rrt_joint_sampling_padding_rad)
             endpoint_region = {"name": "valid_endpoint_region",
-                               "lower": endpoint_lower, "upper": endpoint_upper,
-                               "joint_lower": endpoint_joint_lower,
-                               "joint_upper": endpoint_joint_upper,
+                               "lower": np.r_[endpoint_lower, lower[3], endpoint_joint_lower],
+                               "upper": np.r_[endpoint_upper, upper[3], endpoint_joint_upper],
                                "fraction": .40}
             if guide is not None:
                 route_lower = np.maximum(
@@ -190,9 +193,8 @@ class AerialManipulatorMINCO:
                 route_joint_lower, route_joint_upper = joint_bounds(
                     2.*cfg.rrt_joint_sampling_padding_rad)
                 route_region = {"name": "astar_route_region",
-                                "lower": route_lower, "upper": route_upper,
-                                "joint_lower": route_joint_lower,
-                                "joint_upper": route_joint_upper,
+                                "lower": np.r_[route_lower, lower[3], route_joint_lower],
+                                "upper": np.r_[route_upper, upper[3], route_joint_upper],
                                 "fraction": .40}
                 global_fraction = .20
                 regions = [route_region, endpoint_region]
@@ -200,7 +202,7 @@ class AerialManipulatorMINCO:
                 global_fraction = .60
                 regions = [endpoint_region]
             regions.append({"name": "global_workspace",
-                            "lower": bounds[0].copy(), "upper": bounds[1].copy(),
+                            "lower": lower.copy(), "upper": upper.copy(),
                             "fraction": global_fraction})
             return regions
 
@@ -212,7 +214,7 @@ class AerialManipulatorMINCO:
                 raise ValueError("OMPL RRT start and goal must be valid states")
             regions = sampling_regions()
             path, search_metrics = plan_rrt_connect(
-                start, goal, lower, upper, metric_scale,
+                state_space_adapter, start, goal, lower, upper, metric_scale,
                 state_valid=state_valid, edge_valid=edge_valid,
                 range_size=cfg.rrt_step_size,
                 sampling_regions=regions,

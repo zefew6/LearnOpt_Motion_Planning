@@ -2,6 +2,39 @@ import numpy as np
 import pytest
 
 from uav_ac.planning.search import RRTStar
+from uav_ac.planning.geometry import segment_intersects_aabb
+
+
+def test_rrt_star_accepts_arbitrary_dimension_and_callback_collision_model():
+    def edge_valid(first, second):
+        return not (first[0] < 1.5 < second[0] or second[0] < 1.5 < first[0])
+
+    planner = RRTStar(
+        np.array([[0., 0.], [3., 3.]]),
+        np.array([0., 0.]),
+        np.array([3., 3.]),
+        max_distance=0.5,
+        max_iterations=10,
+        state_valid=lambda state: np.all((state >= 0.) & (state <= 3.)),
+        edge_valid=edge_valid,
+        rng=np.random.default_rng(4),
+    )
+
+    assert planner.start.shape == (2,)
+    assert planner._generate_random_node().shape == (2,)
+    assert not hasattr(planner, "obstacles")
+    assert not planner._is_valid_connection(np.array([0., 0.]), np.array([2., 0.]))
+
+
+def test_rrt_star_rejects_mismatched_bounds_and_state_dimension():
+    with pytest.raises(ValueError, match="space_limits"):
+        RRTStar(
+            np.array([[0., 0.], [1., 1.]]),
+            np.array([0., 0., 0.]),
+            np.array([1., 1., 1.]),
+            max_distance=0.5,
+            max_iterations=10,
+        )
 
 
 def test_path_cost():
@@ -17,7 +50,6 @@ def test_path_cost():
 
 def test_simplify_path_should_remove_redundant_waypoints_when_direct_connection_is_clear(rrt_object):
     # Arrange
-    rrt_object.obstacles = None
     path = np.array([[0., 0., 0.], [2., 0., 0.], [4., 0., 0.], [6., 0., 0.]])
 
     # Act
@@ -29,8 +61,10 @@ def test_simplify_path_should_remove_redundant_waypoints_when_direct_connection_
 
 def test_simplify_path_should_preserve_collision_free_detour_around_obstacle(rrt_object):
     # Arrange
-    rrt_object.obstacles = np.array([[5., 7., -1., 1., -1., 1.]])
-    path = np.array([[0., 0., 0.], [4., 2., 0.], [8., 2., 0.], [12., 0., 0.]])
+    obstacles = np.array([[5., 7., -1., 1., -1., 1.]])
+    rrt_object.edge_valid = lambda first, second: not any(
+        segment_intersects_aabb(first, second, obstacle) for obstacle in obstacles)
+    path = np.array([[0., 0., 0.], [4., 2., 0.], [8., 2., 0.], [10., 0., 0.]])
 
     # Act
     result = rrt_object.simplify_path(path)
@@ -38,18 +72,6 @@ def test_simplify_path_should_preserve_collision_free_detour_around_obstacle(rrt
     # Assert
     assert len(result) > 2
     assert all(rrt_object._is_valid_connection(start, end) for start, end in zip(result[:-1], result[1:]))
-
-
-def test_plan_mission_legs_should_preserve_every_mandatory_waypoint():
-    waypoints = np.array([[0., 0., 0.], [2., 1., 1.], [4., 0., 2.]])
-
-    legs = RRTStar.plan_mission_legs(
-        np.array([[-1., -1., -1.], [5., 2., 3.]]), waypoints,
-        obstacles=None, seed=3)
-
-    assert len(legs) == 2
-    assert legs[0] == pytest.approx(waypoints[:2])
-    assert legs[1] == pytest.approx(waypoints[1:])
 
 
 def test__generate_random_node_in_limits(rrt_object):
@@ -211,7 +233,9 @@ def test__update_tree_keeps_cheaper_existing_parent(rrt_object):
 
 def test__is_valid_connection_detects_thin_obstacle_between_samples(rrt_object):
     # Arrange
-    rrt_object.obstacles = np.array([[4.999, 5.001, -10., 10., -10., 10.]])
+    obstacle = np.array([4.999, 5.001, -10., 10., -10., 10.])
+    rrt_object.edge_valid = lambda first, second: not segment_intersects_aabb(
+        first, second, obstacle)
     node1 = np.array([0., 0., 0.])
     node2 = np.array([10., 0., 0.])
 
@@ -224,7 +248,9 @@ def test__is_valid_connection_detects_thin_obstacle_between_samples(rrt_object):
 
 def test__is_valid_connection_accepts_segment_missing_obstacle(rrt_object):
     # Arrange
-    rrt_object.obstacles = np.array([[4., 6., 1., 2., -10., 10.]])
+    obstacle = np.array([4., 6., 1., 2., -10., 10.])
+    rrt_object.edge_valid = lambda first, second: not segment_intersects_aabb(
+        first, second, obstacle)
     node1 = np.array([0., 0., 0.])
     node2 = np.array([10., 0., 0.])
 

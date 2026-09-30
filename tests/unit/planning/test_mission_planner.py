@@ -20,3 +20,14 @@ def test_minimum_snap_mission_solves_the_full_waypoint_sequence(monkeypatch):
     assert result is trajectory
     constructor.assert_called_once_with(waypoints, obstacles, 3.0, 0.01)
     solver.get_trajectory.assert_called_once_with()
+
+
+def test_mission_rrt_callbacks_reject_padded_obstacle_edges():
+    state_valid, edge_valid = mission_planner._mission_rrt_callbacks(
+        np.array([[0., 2., -1., 1., -1., 1.]]),
+        np.array([[0., 0., 0.], [3., 3., 3.]]),
+    )
+
+    assert state_valid(np.array([1., 0., 0.]))
+    assert not state_valid(np.array([4., 0., 0.]))
+    assert not edge_valid(np.array([0., 0., 0.]), np.array([3., 0., 0.]))

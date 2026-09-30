@@ -43,6 +43,25 @@ cover = firi.cover_free_space(collision_checked_free_samples)
 Each returned `FIRIRegion` owns its half-spaces and visualization geometry:
 `region.contains(points)`, `region.vertices()`, and `region.edges()`.
 
+## Search library boundaries
+
+`uav_ac.planning.search` contains reusable algorithms only:
+
+- `astar_search(grid_map, start_world, goal_world, ...)` consumes a
+  `GridMap` and returns a world-coordinate `AStarResult`. It does not know
+  about robots, ESDFs, MuJoCo, or vehicle clearance.
+- `RRTStar` receives state, edge-validity, sampling, and distance callbacks;
+  mission-level obstacle geometry is adapted by `pipeline/mission_planner.py`.
+- `plan_rrt_connect` receives a `StateSpaceAdapter` protocol implementation;
+  the core owns the OMPL planner lifecycle while each planner supplies its
+  state-space representation and sampling-bound conversion.
+
+The aerial manipulator MINCO planner keeps its GridMap/ESDF inflation,
+clearance costs, guide diagnostics, and `R3 × SO2 × R4` state-space conversion
+in its local `search_adapter.py`. This keeps the generic package independent
+of aerial-specific dimensions and lets other planners provide their own
+adapters.
+
 ## Aerial-manipulator pick and place
 
 The whole-body manipulation task plans each leg in
@@ -97,7 +116,7 @@ The implementation is split by responsibility:
 
 ```text
 geometry/              shared polytope, ellipsoid, collision and sampling tools
-search/                geometric path search (RRT*)
+search/                generic GridMap A*, callback RRT*, and adapter RRT-Connect
 corridor/firi/         FIRI configuration, separation, MVIE and corridor planning
 trajectory/minimum_snap.py
 trajectory/gcopter/    MINCO, mappings, penalties, L-BFGS and planner orchestration

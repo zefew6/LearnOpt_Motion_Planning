@@ -6,6 +6,7 @@ import numpy as np
 from scipy.ndimage import distance_transform_edt
 
 from ..corridor.firi import FIRI3D, FIRIConfig, FIRIRegion
+from ..geometry import segment_intersects_aabb
 from ..search import RRTStar
 from ..trajectory.gcopter import GCOPTER, GCOPTERConfig, GCOPTERTrajectory
 from ..trajectory.gcs import GCSConfig, GCSPlanner, GCSTrajectory
@@ -68,10 +69,24 @@ def build_mission_corridor(
     padded_obstacles = simulation.obstacles.copy()
     padded_obstacles[:, ::2] -= config.obstacle_padding
     padded_obstacles[:, 1::2] += config.obstacle_padding
-    rrt_legs = RRTStar.plan_mission_legs(
-        simulation.space_limits, waypoints, max_distance=config.rrt_step_size,
-        max_iterations=config.rrt_max_iterations, obstacles=padded_obstacles,
-        seed=config.rrt_seed)
+    state_valid, edge_valid = _mission_rrt_callbacks(
+        padded_obstacles, simulation.space_limits)
+    rng = np.random.default_rng(config.rrt_seed)
+    rrt_legs = []
+    for start, goal in zip(waypoints[:-1], waypoints[1:], strict=True):
+        planner = RRTStar(
+            simulation.space_limits, start, goal,
+            max_distance=config.rrt_step_size,
+            max_iterations=config.rrt_max_iterations,
+            state_valid=state_valid,
+            edge_valid=edge_valid,
+            rng=rng,
+        )
+        if state_valid(start) and state_valid(goal) and edge_valid(start, goal):
+            rrt_legs.append(np.stack((start, goal)))
+            continue
+        planner.run(verbose=False)
+        rrt_legs.append(planner.simplify_path(planner.best_path))
     firi = FIRI3D(
         simulation.get_planning_obstacle_points(spacing=config.obstacle_point_spacing),
         simulation.space_limits[0], simulation.space_limits[1],
@@ -89,6 +104,27 @@ def build_mission_corridor(
     if visualize:
         simulation.set_convex_polyhedra_visualization(regions)
     return MissionCorridor(regions, fixed_boundaries, rrt_legs)
+
+
+def _mission_rrt_callbacks(obstacles: np.ndarray, space_limits: np.ndarray):
+    """Adapt mission AABBs to the generic RRT* validity callbacks."""
+    obstacles = np.asarray(obstacles, dtype=float).reshape(-1, 6)
+    limits = np.asarray(space_limits, dtype=float)
+    if (limits.shape != (2, 3) or not np.all(np.isfinite(limits))
+            or np.any(limits[1] <= limits[0])):
+        raise ValueError("space_limits must be ordered finite 3-D bounds")
+
+    def state_valid(state):
+        state = np.asarray(state, dtype=float)
+        return (state.shape == (3,) and np.all(np.isfinite(state))
+                and np.all(state >= limits[0]) and np.all(state <= limits[1]))
+
+    def edge_valid(first, second):
+        return not any(
+            segment_intersects_aabb(first, second, obstacle)
+            for obstacle in obstacles)
+
+    return state_valid, edge_valid
 
 
 def build_gcs_corridor(

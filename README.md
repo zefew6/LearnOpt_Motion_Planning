@@ -11,12 +11,10 @@ Built on [Mdhvince/UAV-Autonomous-control](https://github.com/Mdhvince/UAV-Auton
 - [x] Construct collision-free convex flight corridors with FIRI
 - [x] Optimize constrained multicopter trajectories with GCOPTER/MINCO
 - [x] Plan routes and Bézier trajectories using GCS
-- [x] Track trajectories with acados nonlinear MPC
 - [x] Simulate deterministic and randomized wind disturbances
-- [x] Train PPO trajectory-tracking policies with an MLP baseline
+- [x] Train PPO trajectory-tracking policies and reference-free gate racin with an MLP baseline
 - [x] Integrate differentiable MPC into PPO policies (ACMPC)
 - [x] Independently implement biconvex minimum-time planning (BMTP)
-- [x] Add reference-free gate racing with PPO-MLP and PPO-ACMPC
 - [x] Add an aerial manipulator platform for research on whole-body motion planning and control
 - [ ] Implement diffusion-based motion planning
 
