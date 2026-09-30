@@ -5,7 +5,7 @@ import time
 import numpy as np
 from scipy.spatial.transform import Rotation
 
-from ...geometry.esdf import InflatedOccupancyGrid
+from ...geometry.grid_map import GridMap
 from ..gcopter.mappings import polynomial_basis_matrix, smoothed_l1_array
 from .types import _flatness_attitude, _flatness_attitude_tangent_jacobian
 
@@ -129,7 +129,7 @@ class AerialManipulatorTrajectoryEvaluator:
         # RRT only needs a conservative binary feasibility map.  Keep the
         # signed field for optimization and validation, but avoid trilinear
         # ESDF interpolation on every search sample and edge state.
-        self.occupancy = (InflatedOccupancyGrid.from_esdf(esdf)
+        self.occupancy = (GridMap.from_esdf(esdf)
                           if occupancy is None else occupancy)
         self.geometry = []
         self.esdf_discretization_margin = max(

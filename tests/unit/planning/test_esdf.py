@@ -1,7 +1,8 @@
 import numpy as np
 import pytest
 
-from uav_ac.planning.geometry.esdf import ESDF, InflatedOccupancyGrid
+from uav_ac.planning.geometry.esdf import ESDF
+from uav_ac.planning.geometry.grid_map import GridMap
 
 
 def test_trilinear_esdf_recovers_linear_field_and_gradient():
@@ -29,7 +30,7 @@ def test_box_esdf_and_outside_grid_behavior():
 def test_inflated_occupancy_grid_uses_batched_voxel_boxes():
     occupied = np.zeros((5, 5, 5), dtype=bool)
     occupied[2, 2, 2] = True
-    grid = InflatedOccupancyGrid(occupied, np.zeros(3), 1.0)
+    grid = GridMap(occupied, np.zeros(3), 1.0)
     hits, outside = grid.collision_mask(
         np.array([[2., 2., 2.], [0., 0., 0.], [4., 4., 4.], [5., 2., 2.]]),
         np.zeros(4), 0.0)
@@ -40,7 +41,7 @@ def test_inflated_occupancy_grid_uses_batched_voxel_boxes():
 def test_inflated_occupancy_grid_inflates_each_query_radius():
     occupied = np.zeros((7, 7, 7), dtype=bool)
     occupied[3, 3, 3] = True
-    grid = InflatedOccupancyGrid(occupied, np.zeros(3), 1.0)
+    grid = GridMap(occupied, np.zeros(3), 1.0)
     hits, outside = grid.collision_mask(
         np.array([[1., 3., 3.], [1., 3., 3.]]),
         np.array([0.0, 1.0]), 0.0)
@@ -50,7 +51,7 @@ def test_inflated_occupancy_grid_inflates_each_query_radius():
 
 def test_occupancy_grid_can_rasterize_boxes_without_distance_evaluation():
     boxes = np.array([[1., 1., 1., 2., 2., 2.]])
-    grid = InflatedOccupancyGrid.from_axis_aligned_boxes(
+    grid = GridMap.from_axis_aligned_boxes(
         boxes, np.zeros(3), np.full(3, 3.), .5, ground_height=None)
     assert grid.occupied[2, 2, 2]
     assert not grid.occupied[0, 0, 0]

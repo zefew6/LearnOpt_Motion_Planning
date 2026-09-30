@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from uav_ac.planning.search.ompl_rrt_connect import (
+from uav_ac.planning.search.RRT_connect import (
     RRTConnectPlanningError, _AerialStateSpace, _write_state, plan_rrt_connect,
 )
 from uav_ac.planning.trajectory.aerial_manipulator_minco.planner import (

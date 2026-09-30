@@ -1,6 +1,6 @@
 import numpy as np
 
-from uav_ac.planning.geometry.esdf import InflatedOccupancyGrid
+from uav_ac.planning.geometry.grid_map import GridMap
 from uav_ac.scenes.loader import SceneGeometry
 
 
@@ -22,7 +22,7 @@ def test_scene_primitives_are_conservatively_voxelized_in_local_frames():
         _geometry("cylinder", [2., 0., 0.], np.eye(3), [.24, .35], "obstacle_cylinder"),
         _geometry("plane", [0., 0., -1.], np.eye(3), [], "ground"),
     )
-    grid = InflatedOccupancyGrid.from_scene_geometries(
+    grid = GridMap.from_scene_geometries(
         geometries, [-1., -1., -2.], [3., 1., .5], .1)
     indices = np.rint((np.array([
         [0., 0., 0.], [1., 0., 0.], [2., 0., 0.], [0., 0., -1.0],

@@ -7,7 +7,7 @@
   <size nuser_site="1"/>
   <statistic center="2.6 0 1.3" extent="4.5"/>
   <custom>
-    <numeric name="planning_bounds" data="-0.6 -2.4 -2.05 5.8 2.4 -0.85"/>
+    <numeric name="planning_bounds" data="-0.6 -2.4 -2.7 5.8 2.4 -0.85"/>
     <numeric name="flight_limits" data="3 2 8 12 0.7"/>
     <numeric name="pick_position_ned" data="1.45 1.35 -0.95"/>
     <numeric name="place_position_ned" data="5.05 -1.30 -0.85"/>
@@ -61,11 +61,11 @@
           size="0.30 0.425 0.425" rgba="0.31 0.42 0.50 1"/>
 
     <!-- Transfer machine: conveyor, overhead housing, and side cabinets.
-         The 1.80 m wide by 0.58 m high opening admits folded configurations. -->
-    <geom name="obstacle_transfer_conveyor" type="box" pos="3.90 0 0.475"
-          size="0.15 0.90 0.475" rgba="0.28 0.34 0.38 1"/>
-    <geom name="obstacle_transfer_hood" type="box" pos="3.90 0 2.065"
-          size="0.15 0.90 0.535" rgba="0.36 0.45 0.51 1"/>
+         The 1.80 m wide by 0.58 m high opening is raised 1 m to z=[1.95, 2.53]. -->
+    <geom name="obstacle_transfer_conveyor" type="box" pos="3.90 0 0.975"
+          size="0.15 0.90 0.975" rgba="0.28 0.34 0.38 1"/>
+    <geom name="obstacle_transfer_hood" type="box" pos="3.90 0 2.565"
+          size="0.15 0.90 0.035" rgba="0.36 0.45 0.51 1"/>
     <geom name="obstacle_transfer_cabinet_south" type="box" pos="3.90 1.75 1.30"
           size="0.15 0.85 1.30" rgba="0.43 0.51 0.57 1"/>
     <geom name="obstacle_transfer_cabinet_north" type="box" pos="3.90 -1.75 1.30"

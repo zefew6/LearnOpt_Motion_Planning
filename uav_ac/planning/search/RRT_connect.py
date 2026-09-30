@@ -181,7 +181,12 @@ def plan_rrt_connect(start, goal, lower, upper, metric_scale, *,
         allotted = min(remaining, float(timeout_s)*float(region["fraction"])/total_fraction)
         name = str(region["name"])
         try:
-            status = planner.solve(max(.001, allotted))
+            log_level = ou.getLogLevel()
+            ou.setLogLevel(ou.LOG_WARN)
+            try:
+                status = planner.solve(max(.001, allotted))
+            finally:
+                ou.setLogLevel(log_level)
         except TimeoutError as error:
             stage_seconds[name] = (stage_seconds.get(name, 0.)
                                    +time.perf_counter()-stage_started)

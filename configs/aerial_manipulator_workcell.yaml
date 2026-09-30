@@ -15,7 +15,7 @@ pick_place:
   event_timeout: 10.0
 
 aerial_manipulator_minco:
-  time_weight: 40.0
+  time_weight: 20.0
   max_speed: 5.0
   max_acceleration: 3.0
   obstacle_clearance: 0.05

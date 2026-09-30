@@ -419,6 +419,7 @@ dependencies = [
     { name = "mujoco" },
     { name = "numpy" },
     { name = "ompl" },
+    { name = "pathfinding3d" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "pyyaml" },
@@ -438,6 +439,7 @@ requires-dist = [
     { name = "mujoco", specifier = ">=3.3.7" },
     { name = "numpy", specifier = ">=2.3.4" },
     { name = "ompl", specifier = "==2.0.1" },
+    { name = "pathfinding3d", specifier = "==0.7.2" },
     { name = "pytest", specifier = ">=8.3" },
     { name = "pytest-cov", specifier = ">=6.0" },
     { name = "pyyaml", specifier = ">=6.0" },
@@ -752,6 +754,18 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/f1/8d/36dade89b49e4f9d5cbdbe863772581f98c0c6d78fc39ad4c557f6f2e17e/pandas-3.0.5-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:db172144bb56422bd157812f3b021eacc255451470b31e2c633c349490a1cfee", size = 11989004, upload-time = "2026-07-22T22:18:42.208Z" },
     { url = "https://files.pythonhosted.org/packages/9c/ba/18c4ec8a746e177da05a9e7a7963781d8ea195780724f854601b6ebd6b78/pandas-3.0.5-cp313-cp313-win_amd64.whl", hash = "sha256:0d298e951f23016ce4699951d044ae6418dbc91bf68cefca0f77666fcbb4e5c6", size = 9826896, upload-time = "2026-07-22T22:18:44.539Z" },
     { url = "https://files.pythonhosted.org/packages/de/ec/28a57266b753799a87b8bc79e7887ac6fd981b8c6d2978a0b7e7b6bd708c/pandas-3.0.5-cp313-cp313-win_arm64.whl", hash = "sha256:66266d3442a5e8b3c90274c2b8b230bee42dd1c286bc822cc2f9f2c7e12b883e", size = 9094790, upload-time = "2026-07-22T22:18:47.468Z" },
+]
+
+[[package]]
+name = "pathfinding3d"
+version = "0.7.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/98/c1/67dcddcc647f8cef6c9096e9d249f9e3255918046e25fbdd3e6aa4fc9053/pathfinding3d-0.7.2.tar.gz", hash = "sha256:5dfa91b2d248357f41d451f5167d2079901156c0bb8a1193d2cf630d7e8810e8", size = 30039, upload-time = "2024-03-21T13:18:34.562Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f1/2c/1972b527e0120ca32540ab389b82dabd787fd4221fcb991aee51473e9695/pathfinding3d-0.7.2-py3-none-any.whl", hash = "sha256:e7c9286a504607a12e89f5c43d6e973480a3ed81952e148f7934f0a9b3a0bbc9", size = 31470, upload-time = "2024-03-21T13:18:33.251Z" },
 ]
 
 [[package]]

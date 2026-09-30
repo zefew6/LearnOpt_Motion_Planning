@@ -1,7 +1,8 @@
 import numpy as np
 
-from uav_ac.planning.geometry.esdf import ESDF, InflatedOccupancyGrid
-from uav_ac.planning.search.aerial_astar_guide import plan_aerial_astar_guide
+from uav_ac.planning.geometry.esdf import ESDF
+from uav_ac.planning.geometry.grid_map import GridMap
+from uav_ac.planning.search.A_star import plan_aerial_astar_guide
 
 
 def _grid_with_wall_opening():
@@ -10,7 +11,7 @@ def _grid_with_wall_opening():
     occupied[10, 5:16, 5:16] = False
     # Add another occupied voxel away from the route so the SDF has both signs.
     occupied[2, 2, 2] = True
-    occupancy = InflatedOccupancyGrid(occupied, np.zeros(3), .05)
+    occupancy = GridMap(occupied, np.zeros(3), .05)
     return occupancy, ESDF.from_occupancy(occupancy)
 
 

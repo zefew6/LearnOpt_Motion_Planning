@@ -4,8 +4,8 @@ import time
 
 import numpy as np
 
-from ...search.aerial_astar_guide import plan_aerial_astar_guide
-from ...search.ompl_rrt_connect import plan_rrt_connect
+from ...search.A_star import plan_aerial_astar_guide
+from ...search.RRT_connect import plan_rrt_connect
 from ..gcopter.mappings import backward_time_gradient, forward_time, inverse_time
 from ..gcopter.minco import MINCOQuintic
 from ..gcopter.optimizer import scipy_lbfgs

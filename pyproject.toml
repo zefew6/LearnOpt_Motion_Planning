@@ -16,6 +16,7 @@ dependencies = [
     "mujoco>=3.3.7",
     "numpy>=2.3.4",
     "ompl==2.0.1",
+    "pathfinding3d==0.7.2",
     "PyYAML>=6.0",
     "pytest>=8.3",
     "pytest-cov>=6.0",
