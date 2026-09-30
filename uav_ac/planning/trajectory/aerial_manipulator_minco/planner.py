@@ -56,8 +56,6 @@ class AerialManipulatorMINCO:
                     margin=cfg.rrt_obstacle_margin,
                     grid_resolution=cfg.astar_grid_resolution,
                     fallback_resolution=cfg.astar_fallback_grid_resolution,
-                    budget_s=min(cfg.astar_budget_s,
-                                 max(0., deadline-time.perf_counter())),
                     clearance_weight_m=cfg.astar_clearance_weight_m,
                     clearance_offset_m=cfg.astar_clearance_offset_m,
                     sample_spacing_m=cfg.astar_guide_sample_spacing_m,

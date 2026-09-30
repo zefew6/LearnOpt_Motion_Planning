@@ -31,6 +31,10 @@ def test_aerial_manipulator_task_plans_and_executes_headless(seed):
     assert result["planning_metrics"]["legs"]["place"]["rrt_nodes"] > 2
     pick_metrics = result["planning_metrics"]["legs"]["pick"]
     place_metrics = result["planning_metrics"]["legs"]["place"]
+    assert pick_metrics["astar_expansions"] > 0
+    assert place_metrics["astar_expansions"] > 0
+    assert "astar_route_region" in pick_metrics["rrt_sampling_regions"]
+    assert "astar_route_region" in place_metrics["rrt_sampling_regions"]
     assert pick_metrics["planned_movement_time_s"] > 0.0
     assert place_metrics["planned_movement_time_s"] > 0.0
     assert pick_metrics["planned_average_base_speed_mps"] > 0.0

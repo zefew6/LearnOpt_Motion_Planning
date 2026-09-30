@@ -39,7 +39,6 @@ class AerialManipulatorMINCOConfig:
     astar_guidance_enabled: bool = True
     astar_grid_resolution: float = .08
     astar_fallback_grid_resolution: float = .04
-    astar_budget_s: float = .10
     astar_clearance_weight_m: float = .10
     astar_clearance_offset_m: float = .05
     astar_heuristic_weight: float = 2.0
@@ -92,7 +91,7 @@ class AerialManipulatorMINCOConfig:
                     "rrt_step_size", "minco_sample_spacing_m", "position_scale", "yaw_scale",
                     "rrt_joint_sampling_padding_rad",
                     "astar_grid_resolution", "astar_fallback_grid_resolution",
-                    "astar_budget_s", "astar_clearance_weight_m",
+                    "astar_clearance_weight_m",
                     "astar_clearance_offset_m", "astar_heuristic_weight",
                     "astar_guide_sample_spacing_m",
                     "astar_tube_std_m", "rrt_simplify_budget_s",

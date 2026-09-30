@@ -1,13 +1,13 @@
 # Interactive planning and controller deployment.
 scene: lab_course      # lab_course / open_field / gcs_building / bmtp_village
 planner: gcopter      # mini_snap / gcopter / gcs / bmtp
-controller: cascaded   # cascaded / mpc / rl
+controller: mpc # cascaded / mpc / rl
 
 speed: 5.0
 wind: none             # none / fixed_gust
 visualize: false
 follow_camera: true   # false: free scene view; true: follow the UAV
-seed: 50
+seed: 5
 
 # GCOPTER preset; read only when planner: gcopter.
 # `speed` above owns max_velocity; vehicle mass, thrust, and tilt come from XML.

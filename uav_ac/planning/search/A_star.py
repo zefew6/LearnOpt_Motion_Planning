@@ -10,7 +10,6 @@ from pathfinding3d.core.diagonal_movement import DiagonalMovement
 from pathfinding3d.core.grid import Grid
 from pathfinding3d.core.heuristic import octile
 from pathfinding3d.finder.a_star import AStarFinder
-from pathfinding3d.finder.finder import ExecutionTimeException
 
 
 @dataclass(frozen=True)
@@ -21,26 +20,13 @@ class AStarGuide:
     metrics: dict
 
 
-class _AStarTimeout(TimeoutError):
-    def __init__(self, expansions):
-        super().__init__("A* guide exceeded its time budget")
-        self.expansions = int(expansions)
-
-
 def plan_aerial_astar_guide(
         start, goal, bounds, occupancy, esdf, *, proxy_radius, margin,
-        grid_resolution=.08, fallback_resolution=.04, budget_s=.10,
+        grid_resolution=.08, fallback_resolution=.04,
         clearance_weight_m=.10, clearance_offset_m=.05,
         sample_spacing_m=.10, clearance_error_m=0., heuristic_weight=2.):
     """Plan a collision-checked base-center route to guide whole-body sampling."""
     started = time.perf_counter()
-    try:
-        budget_s = float(budget_s)
-    except (TypeError, ValueError):
-        raise ValueError("budget_s must be finite and non-negative") from None
-    if not np.isfinite(budget_s) or budget_s < 0.:
-        raise ValueError("budget_s must be finite and non-negative")
-    deadline = started+budget_s
     start, goal = np.asarray(start, float), np.asarray(goal, float)
     bounds = np.asarray(bounds, float)
     metrics = {
@@ -75,27 +61,20 @@ def plan_aerial_astar_guide(
 
     resolutions = [float(grid_resolution)]
     while resolutions:
-        if time.perf_counter() >= deadline:
-            metrics["astar_failure_reason"] = "budget_exceeded"
-            break
         resolution = resolutions.pop(0)
         metrics["astar_grid_resolution"] = resolution
         try:
             route, expansions = _search_grid(
                 start, goal, bounds, occupancy, esdf, proxy_radius, margin,
-                resolution, deadline, clearance_weight_m, clearance_offset_m,
+                resolution, clearance_weight_m, clearance_offset_m,
                 clearance_error_m, heuristic_weight)
             metrics["astar_expansions"] += expansions
             if route is not None:
                 route = _simplify(route, occupancy, proxy_radius, margin,
-                                  occupancy.resolution*.5, deadline)
+                                  occupancy.resolution*.5)
                 samples, clearances = _resample(
                     route, esdf, proxy_radius+margin+clearance_error_m,
                     sample_spacing_m)
-                if time.perf_counter() > deadline:
-                    # Search expansions were already added above; a plain
-                    # timeout avoids counting them twice in the outer handler.
-                    raise TimeoutError("A* guide post-processing exceeded its time budget")
                 metrics["astar_seconds"] = time.perf_counter()-started
                 metrics["astar_route_length_m"] = float(np.sum(
                     np.linalg.norm(np.diff(route, axis=0), axis=1)))
@@ -106,56 +85,33 @@ def plan_aerial_astar_guide(
                 low_count = max(1, int(np.ceil(len(samples)*.25)))
                 guide = AStarGuide(route, samples, samples[order[:low_count]], metrics)
                 return guide, metrics
-        except _AStarTimeout as error:
-            # The exception count is local to this resolution attempt;
-            # earlier failed attempts have already been added to metrics.
-            metrics["astar_expansions"] += error.expansions
-            metrics["astar_failure_reason"] = "budget_exceeded"
-            break
-        except TimeoutError:
-            metrics["astar_failure_reason"] = "budget_exceeded"
-            break
         except (ValueError, IndexError, FloatingPointError) as error:
             metrics["astar_failure_reason"] = f"guide_error: {error}"
             break
 
         metrics["astar_failure_reason"] = "no_proxy_route"
         if (resolution == float(grid_resolution)
-                and fallback_resolution < grid_resolution
-                and time.perf_counter() < deadline):
+                and fallback_resolution < grid_resolution):
             metrics["astar_fallback_used"] = True
             resolutions.insert(0, float(fallback_resolution))
-        elif time.perf_counter() >= deadline:
-            metrics["astar_failure_reason"] = "budget_exceeded"
-            break
 
     metrics["astar_seconds"] = time.perf_counter()-started
-    if metrics["astar_failure_reason"] is None:
-        metrics["astar_failure_reason"] = "budget_exceeded"
     return None, metrics
 
 
 def _search_grid(start, goal, bounds, occupancy, esdf, proxy_radius, margin,
-                 resolution, deadline, clearance_weight, clearance_offset,
+                 resolution, clearance_weight, clearance_offset,
                  clearance_error, heuristic_weight):
     shape = np.floor((bounds[1]-bounds[0])/resolution+1e-9).astype(int)+1
     shape = tuple(int(value) for value in shape)
     matrix = occupancy.to_pathfinding3d_matrix(
         bounds[0], shape, resolution, radius=proxy_radius, margin=margin)
-    if time.perf_counter() >= deadline:
-        raise _AStarTimeout(0)
-
     matrix = _clearance_weighted_matrix(
         matrix, bounds[0], resolution, esdf, proxy_radius, margin,
         clearance_error, clearance_weight, clearance_offset)
-    if time.perf_counter() >= deadline:
-        raise _AStarTimeout(0)
 
-    # Grid construction creates the library's node graph; it is part of the
-    # same user-visible guide budget even though the library timer starts later.
+    # Grid construction creates the library's node graph before the search.
     grid = Grid(matrix=matrix)
-    if time.perf_counter() >= deadline:
-        raise _AStarTimeout(0)
     starts = _connectable_nodes(start, bounds[0], resolution, shape,
                                 matrix, occupancy, proxy_radius, margin)
     goals = _connectable_nodes(goal, bounds[0], resolution, shape,
@@ -170,21 +126,15 @@ def _search_grid(start, goal, bounds, occupancy, esdf, proxy_radius, margin,
     searched = False
     for start_index, start_node_position in starts:
         for goal_index, goal_node_position in goals:
-            remaining = deadline-time.perf_counter()
-            if remaining <= 0.:
-                raise _AStarTimeout(expansions)
             if searched:
                 grid.cleanup()
             finder = AStarFinder(
                 heuristic=heuristic,
                 diagonal_movement=DiagonalMovement.only_when_no_obstacle,
-                time_limit=remaining)
-            try:
-                searched = True
-                nodes, runs = finder.find_path(
-                    grid.node(*start_index), grid.node(*goal_index), grid)
-            except ExecutionTimeException as error:
-                raise _AStarTimeout(expansions+finder.runs) from error
+                time_limit=float("inf"))
+            searched = True
+            nodes, runs = finder.find_path(
+                grid.node(*start_index), grid.node(*goal_index), grid)
             expansions += int(runs)
             if not nodes:
                 continue
@@ -193,8 +143,7 @@ def _search_grid(start, goal, bounds, occupancy, esdf, proxy_radius, margin,
                 for node in nodes], dtype=float)
             route = np.vstack((start, coordinates, goal))
             route = route[np.r_[True, np.any(np.diff(route, axis=0) != 0., axis=1)]]
-            if _route_edges_clear(route, occupancy, proxy_radius, margin,
-                                  deadline, expansions):
+            if _route_edges_clear(route, occupancy, proxy_radius, margin):
                 return route, expansions
     return None, expansions
 
@@ -258,11 +207,8 @@ def _endpoint_candidates(point, lower, resolution, shape):
     return [tuple(int(value) for value in row) for row in indices[inside]]
 
 
-def _route_edges_clear(route, occupancy, proxy_radius, margin, deadline,
-                       expansions):
+def _route_edges_clear(route, occupancy, proxy_radius, margin):
     for first, second in zip(route[:-1], route[1:], strict=True):
-        if time.perf_counter() >= deadline:
-            raise _AStarTimeout(expansions)
         if not _segment_clear(first, second, occupancy, proxy_radius, margin):
             return False
     return True
@@ -277,14 +223,12 @@ def _segment_clear(first, second, occupancy, proxy_radius, margin):
     return not bool(hits[0] or outside[0])
 
 
-def _simplify(route, occupancy, proxy_radius, margin, step, deadline):
+def _simplify(route, occupancy, proxy_radius, margin, step):
     if len(route) <= 2:
         return route
     result = [route[0]]
     anchor = 0
     while anchor < len(route)-1:
-        if time.perf_counter() >= deadline:
-            raise TimeoutError("A* route simplification exceeded its time budget")
         target = len(route)-1
         while target > anchor+1:
             delta = route[target]-route[anchor]

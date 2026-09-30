@@ -1,3 +1,6 @@
+import importlib
+from types import SimpleNamespace
+
 import numpy as np
 
 from uav_ac.planning.geometry.esdf import ESDF
@@ -15,17 +18,28 @@ def _grid_with_wall_opening():
     return occupancy, ESDF.from_occupancy(occupancy)
 
 
-def test_a_star_guidance_routes_through_wall_opening_and_checks_simplified_edges():
+def test_a_star_guidance_finishes_after_elapsed_time_and_checks_simplified_edges(
+        monkeypatch):
     occupancy, esdf = _grid_with_wall_opening()
+    astar_module = importlib.import_module("uav_ac.planning.search.A_star")
+    clock = {"time": 0.}
+
+    def advance_clock():
+        clock["time"] += .25
+        return clock["time"]
+
+    monkeypatch.setattr(astar_module, "time",
+                        SimpleNamespace(perf_counter=advance_clock))
     guide, metrics = plan_aerial_astar_guide(
         np.array([.2, .25, .25]), np.array([.8, .25, .25]),
         np.array([[0., 0., 0.], [1., 1., 1.]]), occupancy, esdf,
         proxy_radius=.02, margin=0., grid_resolution=.1,
-        fallback_resolution=.05, budget_s=1., sample_spacing_m=.1)
+        fallback_resolution=.05, sample_spacing_m=.1)
     assert guide is not None, metrics
     assert guide.path.shape[1] == 3
     assert len(guide.samples) >= 2
     assert metrics["astar_expansions"] > 0
+    assert metrics["astar_seconds"] > .1
     assert metrics["astar_route_length_m"] > .6
     for first, second in zip(guide.path[:-1], guide.path[1:], strict=True):
         count = max(2, int(np.ceil(np.linalg.norm(second-first)/.025)))
@@ -41,17 +55,6 @@ def test_a_star_endpoint_inside_proxy_obstacle_returns_no_guide():
         np.array([.5, .25, .25]), np.array([.8, .25, .25]),
         np.array([[0., 0., 0.], [1., 1., 1.]]), occupancy, esdf,
         proxy_radius=.02, margin=0., grid_resolution=.1,
-        fallback_resolution=.05, budget_s=.1)
+        fallback_resolution=.05)
     assert guide is None
-    assert metrics["astar_failure_reason"] in {"no_proxy_route", "budget_exceeded"}
-
-
-def test_a_star_zero_budget_falls_back_without_throwing():
-    occupancy, esdf = _grid_with_wall_opening()
-    guide, metrics = plan_aerial_astar_guide(
-        np.array([.2, .25, .25]), np.array([.8, .25, .25]),
-        np.array([[0., 0., 0.], [1., 1., 1.]]), occupancy, esdf,
-        proxy_radius=.02, margin=0., grid_resolution=.1,
-        fallback_resolution=.05, budget_s=0.)
-    assert guide is None
-    assert metrics["astar_failure_reason"] == "budget_exceeded"
+    assert metrics["astar_failure_reason"] == "no_proxy_route"

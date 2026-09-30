@@ -39,7 +39,6 @@ aerial_manipulator_minco:
   astar_guidance_enabled: true
   astar_grid_resolution: 0.08
   astar_fallback_grid_resolution: 0.04
-  astar_budget_s: 0.10
   astar_clearance_weight_m: 0.10
   astar_clearance_offset_m: 0.05
   astar_heuristic_weight: 2.0
