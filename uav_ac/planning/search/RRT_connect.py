@@ -10,21 +10,6 @@ from ompl import geometric as og
 from ompl import util as ou
 
 
-_OMPL_SEEDED = False
-
-
-def seed_ompl_once(seed):
-    """Set OMPL's process-wide seed before its first random draw."""
-    global _OMPL_SEEDED
-    if _OMPL_SEEDED:
-        return False
-    if isinstance(seed, bool) or int(seed) < 0:
-        raise ValueError("OMPL seed must be a non-negative integer")
-    ou.RNG.setSeed(int(seed))
-    _OMPL_SEEDED = True
-    return True
-
-
 class RRTConnectPlanningError(RuntimeError):
     """Search failure with the OMPL work completed before termination."""
 
@@ -116,16 +101,15 @@ class _BatchMotionValidator(ob.MotionValidator):
 
 
 def plan_rrt_connect(start, goal, lower, upper, metric_scale, *,
-                     state_valid, edge_valid, seed, range_size,
+                     state_valid, edge_valid, range_size,
                      sampling_regions=None,
                      simplify_attempts=32, simplify_budget_s=.02,
                      timeout_s=60.0):
     """Find an exact 8-D route and apply a bounded number of valid shortcuts."""
-    if (isinstance(seed, bool) or int(seed) < 0
-            or not np.isfinite(timeout_s) or timeout_s <= 0.0
+    if (not np.isfinite(timeout_s) or timeout_s <= 0.0
             or isinstance(simplify_attempts, bool) or int(simplify_attempts) < 0
             or not np.isfinite(simplify_budget_s) or simplify_budget_s < 0.0):
-        raise ValueError("seed and timeout_s must be valid")
+        raise ValueError("timeout_s and simplification settings must be valid")
     start, goal = np.asarray(start, float), np.asarray(goal, float)
     lower, upper = np.asarray(lower, float), np.asarray(upper, float)
     metric_scale = np.asarray(metric_scale, float)
@@ -135,7 +119,6 @@ def plan_rrt_connect(start, goal, lower, upper, metric_scale, *,
         raise ValueError("aerial RRT start, goal, bounds, and scales must be 8-D")
 
     started = time.perf_counter()
-    ompl_seeded_here = seed_ompl_once(seed)
     setup_started = time.perf_counter()
     space = _AerialStateSpace(lower, upper, metric_scale)
     si = ob.SpaceInformation(space)
@@ -204,7 +187,6 @@ def plan_rrt_connect(start, goal, lower, upper, metric_scale, *,
                 "rrt_valid_motions": int(motion_validator.checked-motion_validator.invalid),
                 "rrt_path_states": 0,
                 "rrt_sampling_stage_seconds": stage_seconds,
-                "rrt_ompl_seed_initialized": bool(ompl_seeded_here),
                 "rrt_first_exact_solution_s": None,
             }
             raise RRTConnectPlanningError(str(error), metrics) from error
@@ -235,7 +217,7 @@ def plan_rrt_connect(start, goal, lower, upper, metric_scale, *,
                          for state in path.getStates()])
     states[0], states[-1] = start, goal
     simplify_started = time.perf_counter()
-    shortcut_rng = np.random.default_rng(int(seed) ^ 0x5EED5EED)
+    shortcut_rng = np.random.default_rng()
     attempts = 0
     while (len(states) > 2 and attempts < int(simplify_attempts)
            and time.perf_counter()-simplify_started < simplify_budget_s):
@@ -262,10 +244,9 @@ def plan_rrt_connect(start, goal, lower, upper, metric_scale, *,
         "rrt_valid_motions": int(motion_validator.checked-motion_validator.invalid),
         "rrt_path_states": int(len(states)),
         "rrt_first_exact_solution_s": float(search_seconds),
-        "rrt_ompl_seed_initialized": bool(ompl_seeded_here),
         "rrt_shortcut_attempts": int(attempts),
         "rrt_sampling_stage_seconds": stage_seconds,
     }
 
 
-__all__ = ["RRTConnectPlanningError", "plan_rrt_connect", "seed_ompl_once"]
+__all__ = ["RRTConnectPlanningError", "plan_rrt_connect"]

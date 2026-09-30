@@ -79,6 +79,7 @@ def test_aerial_pick_place_accepts_new_xml_scenario_without_target_yaml(tmp_path
         "planner: aerial_manipulator_minco\n"
         "controller: cascaded\n"))
     assert config["scene"].endswith("scenario_green.xml")
+    assert "seed" not in config
     assert "pick_position_ned" not in config["pick_place"]
 
 

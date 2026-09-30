@@ -1,4 +1,4 @@
-"""Deterministic aerial-manipulator pick, carry and place simulation."""
+"""Aerial-manipulator pick, carry and place simulation."""
 
 from dataclasses import dataclass
 from enum import Enum, auto
@@ -161,7 +161,7 @@ def _leg_metrics(plan, planner, result, search_only):
     return metrics
 
 
-def plan_pick_place(simulation, config, *, deadline=None, seed=None, diagnostics=None,
+def plan_pick_place(simulation, config, *, deadline=None, diagnostics=None,
                     search_only=False, settings=None, planner_config=None):
     """Plan and validate both pick/place legs through the production path."""
     diagnostics = {} if diagnostics is None else diagnostics
@@ -185,7 +185,6 @@ def plan_pick_place(simulation, config, *, deadline=None, seed=None, diagnostics
         gripper_opening=gap, workspace_bounds=bounds)
         for name, position, gap in (("pick", pick, gap_open), ("place", place, gap_closed)))
     planner = AerialManipulatorMINCO(planner_config)
-    rng = np.random.default_rng(int(config["seed"] if seed is None else seed))
     plans, searches, legs, optimizer_seconds, optimizer_calls = {}, {}, {}, 0., 0
     requests = (("pick", start, pick_state, gap_open, False),
                 ("place", pick_state, place_state, gap_closed, True))
@@ -197,7 +196,7 @@ def plan_pick_place(simulation, config, *, deadline=None, seed=None, diagnostics
         try:
             result = planner.plan(leg_start, goal, robot=robot, esdf=esdf, quad=simulation.quad,
                 workspace_bounds=bounds, gripper_opening=opening, carry_payload=carry,
-                rng=rng, deadline=leg_deadline, occupancy=occupancy, search_only=search_only)
+                deadline=leg_deadline, occupancy=occupancy, search_only=search_only)
         except (ValueError, RuntimeError, TimeoutError, np.linalg.LinAlgError) as error:
             legs[name] = {**planner.last_metrics, "failure_reason": str(error)}
             diagnostics.update(plans=plans, searches=searches)

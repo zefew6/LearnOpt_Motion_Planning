@@ -1,4 +1,4 @@
-"""Reproducible cold-plan timing for the whole-body pick/place planner.
+"""Cold-plan timing for the whole-body pick/place planner.
 
 Each isolated run rebuilds the binary RRT occupancy map and signed ESDF.
 """
@@ -83,34 +83,23 @@ def _minco_summary(rows):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="configs/aerial_manipulator_workcell.yaml")
-    parser.add_argument("--repeats-seed8", type=int, default=10)
-    parser.add_argument("--seeds", default=",".join(map(str, range(10))))
+    parser.add_argument("--repeats", type=int, default=20)
     parser.add_argument("--search-only", action="store_true",
                         help="measure both RRT searches without MINCO optimization")
     parser.add_argument("--in-process", action="store_true",
-                        help="run all requested seeds in one process")
-    parser.add_argument("--_single-run-seed", type=int, help=argparse.SUPPRESS)
+                        help="run all repeats in one process")
     parser.add_argument("--_single-run-repeat", type=int, default=-1,
                         help=argparse.SUPPRESS)
     args = parser.parse_args()
-    if args.repeats_seed8 < 0:
-        parser.error("--repeats-seed8 cannot be negative")
-    try:
-        seeds = [int(value) for value in args.seeds.split(",") if value.strip()]
-    except ValueError:
-        parser.error("--seeds must be comma-separated nonnegative integers")
-    if any(seed < 0 for seed in seeds):
-        parser.error("seeds must be nonnegative")
+    if args.repeats < 0:
+        parser.error("--repeats cannot be negative")
 
     config = load_config(args.config)
     planner_config = AerialManipulatorMINCOConfig.from_mapping(
         config["aerial_manipulator_minco"])
     budget = float(planner_config.planning_budget_s)
-    runs = ([(args._single_run_seed,
-              None if args._single_run_repeat < 0 else args._single_run_repeat)]
-            if args._single_run_seed is not None else
-            [(seed, None) for seed in seeds]
-            + [(8, repeat) for repeat in range(args.repeats_seed8)])
+    runs = ([args._single_run_repeat] if args._single_run_repeat >= 0 else
+            list(range(args.repeats)))
     environment = {
         "python": platform.python_version(),
         "numpy": np.__version__,
@@ -121,20 +110,18 @@ def main():
         "logical_cpus": os.cpu_count(),
         "budget_s": budget,
         "planner_config": asdict(planner_config),
-        "seeds": [seed for seed, _ in runs],
-        "independent_seed8_repeats": args.repeats_seed8,
+        "repeats": len(runs),
         "search_only": args.search_only,
         "process_isolation": not args.in_process,
     }
     print(json.dumps({"environment": environment}, sort_keys=True,
                      default=_json_default), flush=True)
-    if not args.in_process and args._single_run_seed is None:
+    if not args.in_process and args._single_run_repeat < 0:
         rows = []
-        for index, (seed, repeat) in enumerate(runs):
+        for index, repeat in enumerate(runs):
             command = [sys.executable, str(Path(__file__).resolve()),
-                       "--config", args.config, "--repeats-seed8", "0",
-                       "--seeds", str(seed), "--_single-run-seed", str(seed),
-                       "--_single-run-repeat", str(-1 if repeat is None else repeat)]
+                       "--config", args.config, "--repeats", "1",
+                       "--_single-run-repeat", str(repeat)]
             if args.search_only:
                 command.append("--search-only")
             wall_started = time.perf_counter()
@@ -150,7 +137,7 @@ def main():
                     row = decoded
             if row is None:
                 row = {
-                    "seed": seed, "repeat": repeat, "success": False,
+                    "repeat": repeat, "success": False,
                     "function_success": False if not args.search_only else None,
                     "rrt_success": False,
                     "failure": completed.stderr[-2000:] or
@@ -195,10 +182,8 @@ def main():
     measured_rrt = []
     rrt_successes = 0
     function_successes = 0
-    for index, (seed, repeat) in enumerate(runs):
+    for index, repeat in enumerate(runs):
         trial = dict(config)
-        effective_seed = seed
-        trial["seed"] = effective_seed
         simulation = MujocoSimulation(trial["scene"], record_actual_trajectory=False)
         diagnostics = {}
         started = time.perf_counter()
@@ -233,9 +218,7 @@ def main():
             function_successes += int(passed and not args.search_only)
             row = {
                 "run": index,
-                "seed": seed,
                 "repeat": repeat,
-                "effective_seed": effective_seed,
                 "success": passed,
                 "function_success": None if args.search_only else passed,
                 "rrt_success": rrt_success,
@@ -274,9 +257,7 @@ def main():
                 rrt_successes += int(rrt_success)
             row = {
                 "run": index,
-                "seed": seed,
                 "repeat": repeat,
-                "effective_seed": effective_seed,
                 "success": False,
                 "function_success": False if not args.search_only else None,
                 "rrt_success": rrt_success,

@@ -76,11 +76,14 @@ def load_config(path: str | Path = DEFAULT_CONFIG) -> dict:
     path = Path(path).resolve()
     with path.open(encoding="utf-8") as stream:
         config = yaml.load(stream, Loader=_UniqueLoader)
-    _only(config, {
+    flight_options = {
         "task", "scene", "planner", "controller", "speed", "control_dt", "wind",
-        "visualize", "follow_camera", "seed", "duration", "rl", "cascaded", "bmtp", "gcopter",
+        "visualize", "follow_camera", "duration", "rl", "cascaded", "bmtp", "gcopter",
         "gcs", "mpc", "wind_options", "pick_place", "aerial_manipulator_minco",
-    }, "flight")
+    }
+    if config.get("task", "trajectory_tracking") != "aerial_pick_place":
+        flight_options.add("seed")
+    _only(config, flight_options, "flight")
     for required in ("scene", "planner", "controller"):
         if required not in config:
             raise ValueError(f"flight.{required} is required")
@@ -127,15 +130,16 @@ def load_config(path: str | Path = DEFAULT_CONFIG) -> dict:
     config.setdefault("wind", "none")
     config.setdefault("visualize", False)
     config.setdefault("follow_camera", config["task"] == "gate_racing")
-    config.setdefault("seed", 7)
     _positive(config["speed"], "speed")
     if not isinstance(config["visualize"], bool):
         raise ValueError("visualize must be true or false")
     if not isinstance(config["follow_camera"], bool):
         raise ValueError("follow_camera must be true or false")
-    if (isinstance(config["seed"], bool) or not isinstance(config["seed"], int)
-            or config["seed"] < 0):
-        raise ValueError("seed must be a nonnegative integer")
+    if config["task"] != "aerial_pick_place":
+        config.setdefault("seed", 7)
+        if (isinstance(config["seed"], bool) or not isinstance(config["seed"], int)
+                or config["seed"] < 0):
+            raise ValueError("seed must be a nonnegative integer")
     if config["wind"] not in {"none", "fixed_gust"}:
         raise ValueError("wind must be none or fixed_gust")
 

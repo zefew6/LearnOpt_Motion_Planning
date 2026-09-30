@@ -16,8 +16,6 @@ def test_ompl_rrt_connect_returns_exact_valid_8d_route_around_wall():
     start, goal = np.zeros(8), np.zeros(8)
     start[:3] = [-.8, -.6, 0.]
     goal[:3] = [.8, -.6, 0.]
-    rng = np.random.default_rng(23)
-
     def valid(state):
         x, y, z = state[:3]
         return not (-.15 < x < .15 and -1. < y < .2 and -.8 < z < .8)
@@ -45,7 +43,7 @@ def test_ompl_rrt_connect_returns_exact_valid_8d_route_around_wall():
             {"name": "global", "lower": lower[:3],
              "upper": upper[:3], "fraction": .75},
         ],
-        seed=23, range_size=.25, timeout_s=3.)
+        range_size=.25, timeout_s=3.)
     assert path.shape[1] == 8
     np.testing.assert_array_equal(path[0], start)
     np.testing.assert_array_equal(path[-1], goal)
@@ -102,7 +100,7 @@ def test_ompl_callback_timeout_preserves_search_diagnostics():
         plan_rrt_connect(
             np.zeros(8), np.r_[.8, np.zeros(7)], lower, upper, scales,
             state_valid=valid, edge_valid=lambda *_: True,
-            seed=27, range_size=.2, timeout_s=1.)
+            range_size=.2, timeout_s=1.)
     assert caught.value.metrics["rrt_nodes"] >= 2
     assert caught.value.metrics["rrt_sampling_stage_seconds"]
 

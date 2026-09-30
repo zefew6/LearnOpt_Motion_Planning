@@ -5,10 +5,8 @@ from uav_ac import main
 from uav_ac.main import load_config, run
 
 
-@pytest.mark.parametrize("seed", (0, 7, 9))
-def test_aerial_manipulator_task_plans_and_executes_headless(seed):
+def test_aerial_manipulator_task_plans_and_executes_headless():
     config = load_config("configs/aerial_manipulator_workcell.yaml")
-    config["seed"] = seed
     config["visualize"] = False
     config["pick_place"]["record_joint_trace"] = True
     result = run(config)
@@ -78,7 +76,6 @@ def test_xml_only_scene_layout_runs_same_headless_pipeline(tmp_path, primitives)
     scene_path.write_text(xml, encoding="utf-8")
     config = load_config("configs/aerial_manipulator_workcell.yaml")
     config["scene"] = str(scene_path)
-    config["seed"] = 8
     config["visualize"] = False
     result = run(config)
 

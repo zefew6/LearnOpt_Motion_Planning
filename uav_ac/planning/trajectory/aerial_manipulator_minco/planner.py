@@ -23,7 +23,7 @@ class AerialManipulatorMINCO:
         self.last_metrics = {}
 
     def plan(self, start_state, goal_state, *, robot, esdf, quad, workspace_bounds,
-             gripper_opening, carry_payload=False, rng=None, deadline=None,
+             gripper_opening, carry_payload=False, deadline=None,
              occupancy=None, search_only=False):
         started = time.perf_counter()
         deadline = (started+self.config.planning_budget_s
@@ -44,7 +44,6 @@ class AerialManipulatorMINCO:
         evaluator = AerialManipulatorTrajectoryEvaluator(
             robot, esdf, quad, cfg, bounds, gripper_opening, carry_payload,
             deadline, occupancy=occupancy)
-        rng = np.random.default_rng() if rng is None else rng
         metric_scale = np.r_[np.full(3, cfg.position_scale), cfg.yaw_scale,
                              np.asarray(cfg.joint_scales)]
         guide = None
@@ -211,12 +210,11 @@ class AerialManipulatorMINCO:
         try:
             if not state_valid(start) or not state_valid(goal):
                 raise ValueError("OMPL RRT start and goal must be valid states")
-            ompl_seed = int(rng.integers(0, 2**31-1))
             regions = sampling_regions()
             path, search_metrics = plan_rrt_connect(
                 start, goal, lower, upper, metric_scale,
                 state_valid=state_valid, edge_valid=edge_valid,
-                seed=ompl_seed, range_size=cfg.rrt_step_size,
+                range_size=cfg.rrt_step_size,
                 sampling_regions=regions,
                 simplify_attempts=cfg.rrt_simplify_attempts,
                 simplify_budget_s=cfg.rrt_simplify_budget_s,
@@ -224,7 +222,7 @@ class AerialManipulatorMINCO:
         except (RuntimeError, ValueError, TimeoutError) as error:
             search_error = error
             search_metrics = getattr(error, "metrics", {})
-        # Preserve search diagnostics on later optimization failures and retries.
+        # Preserve search diagnostics on later optimization failures.
         rrt_seconds = time.perf_counter()-phase
         self.last_metrics = {
             **search_metrics,

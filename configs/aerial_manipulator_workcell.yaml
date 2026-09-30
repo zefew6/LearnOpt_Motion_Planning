@@ -3,7 +3,6 @@ scene: aerial_manipulator_workcell
 planner: aerial_manipulator_minco
 controller: cascaded
 control_dt: 0.01
-seed: 10
 visualize: true
 wind: none
 
