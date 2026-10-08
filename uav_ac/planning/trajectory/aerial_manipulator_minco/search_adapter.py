@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import time
 
 import numpy as np
@@ -20,15 +20,67 @@ class AStarGuide:
     metrics: dict
 
 
+@dataclass(frozen=True)
+class AStarSearchGrid:
+    occupancy: GridMap
+    traversal_cost: np.ndarray
+
+
+@dataclass(frozen=True)
+class AerialAStarMaps:
+    """Static collision grids and clearance costs prepared once for a flight."""
+
+    grid_map: GridMap
+    esdf: object
+    proxy_radius: float
+    margin: float
+    grid_resolution: float = .08
+    fallback_resolution: float = .04
+    clearance_weight_m: float = .10
+    clearance_offset_m: float = .05
+    clearance_error_m: float = 0.
+    grids: tuple[AStarSearchGrid, ...] = field(init=False)
+
+    def __post_init__(self):
+        if not isinstance(self.grid_map, GridMap):
+            raise TypeError("grid_map must be a GridMap")
+        positive = (self.grid_resolution, self.fallback_resolution, self.clearance_offset_m)
+        nonnegative = (self.proxy_radius, self.margin, self.clearance_weight_m,
+                       self.clearance_error_m)
+        if (any(not np.isfinite(value) or value <= 0. for value in positive)
+                or any(not np.isfinite(value) or value < 0. for value in nonnegative)):
+            raise ValueError("A* resolutions, collision values, and clearance settings are invalid")
+        resolutions = [float(self.grid_resolution)]
+        if self.fallback_resolution < self.grid_resolution:
+            resolutions.append(float(self.fallback_resolution))
+        grids = []
+        for resolution in resolutions:
+            source = self.grid_map
+            shape = tuple(int(value) for value in np.floor(
+                (source.upper-source.origin)/resolution+1e-9).astype(int)+1)
+            matrix = source.to_pathfinding3d_matrix(
+                source.origin, shape, resolution, radius=self.proxy_radius,
+                margin=self.margin)
+            occupancy = GridMap(matrix == 0, source.origin, resolution)
+            cost = _clearance_weighted_matrix(
+                matrix, source.origin, resolution, self.esdf, self.proxy_radius,
+                self.margin, self.clearance_error_m, self.clearance_weight_m,
+                self.clearance_offset_m)
+            cost.setflags(write=False)
+            grids.append(AStarSearchGrid(occupancy, cost))
+        object.__setattr__(self, "grids", tuple(grids))
+
+
 def plan_aerial_astar_guide(
-        grid_map, start, goal, esdf, *, proxy_radius, margin,
-        grid_resolution=.08, fallback_resolution=.04,
-        clearance_weight_m=.10, clearance_offset_m=.05,
-        sample_spacing_m=.10, clearance_error_m=0., heuristic_weight=2.):
-    """Build an aerial guide by adapting a scene ``GridMap`` to generic A*."""
+        maps: AerialAStarMaps, start, goal, *, sample_spacing_m=.10, heuristic_weight=2.):
+    """Search initialized maps without rebuilding occupancy or clearance costs."""
     started = time.perf_counter()
-    if not isinstance(grid_map, GridMap):
-        raise TypeError("grid_map must be a GridMap")
+    if not isinstance(maps, AerialAStarMaps):
+        raise TypeError("maps must be initialized AerialAStarMaps")
+    grid_map, esdf = maps.grid_map, maps.esdf
+    proxy_radius, margin = maps.proxy_radius, maps.margin
+    grid_resolution = maps.grid_resolution
+    clearance_error_m = maps.clearance_error_m
     start, goal = _point(start), _point(goal)
     metrics = {
         "astar_seconds": 0.0,
@@ -47,25 +99,15 @@ def plan_aerial_astar_guide(
         metrics["astar_seconds"] = time.perf_counter()-started
         return None, metrics
     if (not np.isfinite(heuristic_weight) or heuristic_weight < 1.
-            or not np.isfinite(grid_resolution) or grid_resolution <= 0.
-            or not np.isfinite(fallback_resolution) or fallback_resolution <= 0.
-            or not np.isfinite(proxy_radius) or proxy_radius < 0.
-            or not np.isfinite(margin) or margin < 0.
-            or not np.isfinite(clearance_weight_m) or clearance_weight_m < 0.
-            or not np.isfinite(clearance_offset_m) or clearance_offset_m <= 0.
-            or not np.isfinite(sample_spacing_m) or sample_spacing_m <= 0.
-            or not np.isfinite(clearance_error_m) or clearance_error_m < 0.):
-        raise ValueError("A* resolutions, collision values, and clearance settings are invalid")
+            or not np.isfinite(sample_spacing_m) or sample_spacing_m <= 0.):
+        raise ValueError("A* heuristic weight and sample spacing are invalid")
 
-    resolutions = [float(grid_resolution)]
-    while resolutions:
-        resolution = resolutions.pop(0)
+    for index, search_grid in enumerate(maps.grids):
+        resolution = search_grid.occupancy.resolution
         metrics["astar_grid_resolution"] = resolution
+        metrics["astar_fallback_used"] = index > 0
         try:
-            route, expansions = _search_grid(
-                start, goal, grid_map, esdf, proxy_radius, margin,
-                resolution, clearance_weight_m, clearance_offset_m,
-                clearance_error_m, heuristic_weight)
+            route, expansions = _search_grid(start, goal, maps, search_grid, heuristic_weight)
             metrics["astar_expansions"] += expansions
             if route is not None:
                 route = _simplify(route, grid_map, proxy_radius, margin,
@@ -88,33 +130,20 @@ def plan_aerial_astar_guide(
             break
 
         metrics["astar_failure_reason"] = "no_proxy_route"
-        if (resolution == float(grid_resolution)
-                and fallback_resolution < grid_resolution):
-            metrics["astar_fallback_used"] = True
-            resolutions.insert(0, float(fallback_resolution))
-
     metrics["astar_seconds"] = time.perf_counter()-started
     return None, metrics
 
 
-def _search_grid(start, goal, grid_map, esdf, proxy_radius, margin,
-                 resolution, clearance_weight, clearance_offset,
-                 clearance_error, heuristic_weight):
-    shape = np.floor((grid_map.upper-grid_map.origin)/resolution+1e-9).astype(int)+1
-    shape = tuple(int(value) for value in shape)
-    matrix = grid_map.to_pathfinding3d_matrix(
-        grid_map.origin, shape, resolution, radius=proxy_radius, margin=margin)
-    inflated_map = GridMap(matrix == 0, grid_map.origin, resolution)
+def _search_grid(start, goal, maps, search_grid, heuristic_weight):
+    grid_map = maps.grid_map
+    proxy_radius, margin = maps.proxy_radius, maps.margin
     prepared = _prepare_endpoint_map(
-        inflated_map, grid_map, (start, goal), proxy_radius, margin)
+        search_grid.occupancy, grid_map, (start, goal), proxy_radius, margin)
     if prepared is None:
         return None, 0
     inflated_map, search_start, search_goal = prepared
-    cost = _clearance_weighted_matrix(
-        matrix, grid_map.origin, resolution, esdf, proxy_radius, margin,
-        clearance_error, clearance_weight, clearance_offset)
     result = astar_search(
-        inflated_map, search_start, search_goal, traversal_cost=cost,
+        inflated_map, search_start, search_goal, traversal_cost=search_grid.traversal_cost,
         heuristic_weight=heuristic_weight)
     if not result.found or result.path is None:
         return None, result.expansions
@@ -128,7 +157,7 @@ def _search_grid(start, goal, grid_map, esdf, proxy_radius, margin,
 def _prepare_endpoint_map(inflated_map, source_map, endpoints, radius, margin):
     """Choose coarse free cells that conservatively connect to exact endpoints."""
     points = np.asarray(endpoints, dtype=float)
-    occupied = inflated_map.occupied.copy()
+    occupied = inflated_map.occupied
     search_points = []
     shape = np.asarray(inflated_map.shape)
     offsets = np.asarray([
@@ -153,8 +182,7 @@ def _prepare_endpoint_map(inflated_map, source_map, endpoints, radius, margin):
             return None
         _, index_tuple, world = min(candidates, key=lambda item: item[0])
         search_points.append(world)
-    return (GridMap(occupied, inflated_map.origin, inflated_map.resolution),
-            search_points[0], search_points[1])
+    return inflated_map, search_points[0], search_points[1]
 
 
 def _clearance_weighted_matrix(matrix, lower, resolution, esdf, proxy_radius,
@@ -322,6 +350,7 @@ class AerialManipulatorStateSpaceAdapter:
 
 __all__ = [
     "AStarGuide",
+    "AerialAStarMaps",
     "AerialManipulatorStateSpaceAdapter",
     "plan_aerial_astar_guide",
 ]

@@ -28,7 +28,7 @@ class AerialManipulatorMINCO:
 
     def plan(self, start_state, goal_state, *, robot, esdf, quad, workspace_bounds,
              gripper_opening, carry_payload=False,
-             occupancy=None, search_only=False,
+             occupancy=None, astar_maps=None, search_only=False,
              on_rrt_path: Callable[[np.ndarray], None] | None = None):
         started = time.perf_counter()
         cfg = self.config
@@ -46,18 +46,11 @@ class AerialManipulatorMINCO:
                              np.asarray(cfg.joint_scales)]
         state_space_adapter = AerialManipulatorStateSpaceAdapter()
         guide = None
-        if cfg.astar_guidance_enabled and occupancy is not None:
+        if cfg.astar_guidance_enabled and astar_maps is not None:
             try:
                 guide, astar_metrics = plan_aerial_astar_guide(
-                    occupancy, start[:3], goal[:3], esdf,
-                    proxy_radius=robot.base_inscribed_collision_radius(),
-                    margin=cfg.rrt_obstacle_margin,
-                    grid_resolution=cfg.astar_grid_resolution,
-                    fallback_resolution=cfg.astar_fallback_grid_resolution,
-                    clearance_weight_m=cfg.astar_clearance_weight_m,
-                    clearance_offset_m=cfg.astar_clearance_offset_m,
+                    astar_maps, start[:3], goal[:3],
                     sample_spacing_m=cfg.astar_guide_sample_spacing_m,
-                    clearance_error_m=cfg.esdf_discretization_margin,
                     heuristic_weight=cfg.astar_heuristic_weight)
             except (ValueError, RuntimeError, IndexError, FloatingPointError) as error:
                 astar_metrics = {
@@ -78,7 +71,7 @@ class AerialManipulatorMINCO:
                 "astar_minimum_clearance_m": None,
                 "astar_fallback_used": False,
                 "astar_failure_reason": "disabled" if not cfg.astar_guidance_enabled
-                else "shared_occupancy_unavailable",
+                else "shared_astar_maps_unavailable",
             }
         validity_cache = {}
         edge_cache = {}
@@ -235,6 +228,8 @@ class AerialManipulatorMINCO:
             "rrt_exact_candidate_states": evaluator.rrt_exact_candidate_states,
             "rrt_exact_candidate_seconds": evaluator.rrt_exact_candidate_seconds,
             "rrt_batch_fk_seconds": evaluator.rrt_batch_fk_seconds,
+            "rrt_broadphase_backend": "native" if evaluator._broadphase.native else "numpy",
+            "rrt_broadphase_seconds": evaluator.rrt_broadphase_seconds,
             "rrt_occupancy_check_seconds": evaluator.rrt_occupancy_check_seconds,
             "rrt_sphere_pair_check_seconds": evaluator.rrt_sphere_pair_check_seconds,
             "rrt_world_pair_filter_seconds": evaluator.rrt_world_pair_filter_seconds,

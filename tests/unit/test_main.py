@@ -6,6 +6,8 @@ import numpy as np
 import pytest
 
 from uav_ac import main
+from uav_ac.runners import config as flight_config
+from uav_ac.control import factory
 
 
 def write_config(tmp_path, text):
@@ -70,7 +72,7 @@ def test_aerial_pick_place_accepts_new_xml_scenario_without_target_yaml(tmp_path
     xml = source.read_text(encoding="utf-8")
     include = (main.MODEL_DIRECTORY.parent / "model" / "aerial_manipulator.xml").resolve()
     xml = xml.replace("../model/aerial_manipulator.xml", str(include))
-    monkeypatch.setattr(main, "MODEL_DIRECTORY", tmp_path)
+    monkeypatch.setattr(flight_config, "MODEL_DIRECTORY", tmp_path)
     (tmp_path / "scenario_green.xml").write_text(xml, encoding="utf-8")
     config = main.load_config(write_config(
         tmp_path,
@@ -136,7 +138,7 @@ def test_rl_requires_explicit_zip_checkpoint(tmp_path):
 
 def test_cascaded_controller_uses_selected_period():
     simulation = SimpleNamespace(quad=SimpleNamespace(g=9.81, dt=0.001))
-    controller, dt = main.build_controller({
+    controller, dt = factory.build_controller({
         "controller": "cascaded", "control_dt": 0.02, "mpc": {}}, simulation)
     assert dt == 0.02
     assert controller.dt == 0.02
@@ -145,9 +147,9 @@ def test_cascaded_controller_uses_selected_period():
 def test_rl_controller_owns_control_period(monkeypatch):
     loaded = SimpleNamespace(control_dt=0.025)
     loader = Mock(return_value=loaded)
-    monkeypatch.setattr(main.RLController, "from_checkpoint", loader)
+    monkeypatch.setattr(factory.RLController, "from_checkpoint", loader)
     simulation = SimpleNamespace(quad=object())
-    controller, dt = main.build_controller({
+    controller, dt = factory.build_controller({
         "controller": "rl", "rl": {"checkpoint": "model.zip", "device": "cuda"}}, simulation)
     assert controller is loaded
     assert dt == 0.025
@@ -155,6 +157,8 @@ def test_rl_controller_owns_control_period(monkeypatch):
 
 
 def test_run_does_not_require_or_write_an_output_directory(monkeypatch):
+    from uav_ac.runners import trajectory_tracking as runner
+
     trajectory = np.zeros((2, 10))
     trajectory[1, 0] = 1.0
     tracker = Mock()
@@ -164,13 +168,31 @@ def test_run_does_not_require_or_write_an_output_directory(monkeypatch):
         set_trajectory_visualization=Mock(), run_interactive=Mock(),
         set_external_force_world=Mock(),
     )
-    monkeypatch.setattr(main, "MujocoSimulation", Mock(return_value=simulation))
-    monkeypatch.setattr(main, "build_controller", Mock(return_value=(object(), 0.01)))
-    monkeypatch.setattr(main, "plan_trajectory", Mock(return_value=trajectory))
-    monkeypatch.setattr(main, "TrajectoryController", Mock(return_value=tracker))
+    monkeypatch.setattr(runner, "MujocoSimulation", Mock(return_value=simulation))
+    monkeypatch.setattr(runner, "build_controller", Mock(return_value=(object(), 0.01)))
+    monkeypatch.setattr(runner, "plan_trajectory", Mock(return_value=trajectory))
+    monkeypatch.setattr(runner, "TrajectoryController", Mock(return_value=tracker))
     config = {"scene": str(main.MODEL_DIRECTORY / "lab_course.xml"),
               "planner": "gcopter", "controller": "cascaded", "visualize": False,
               "wind": "none", "wind_options": {}}
-    assert main.run(config) is trajectory
+    assert runner.run_trajectory_tracking(config) is trajectory
     simulation.run_interactive.assert_called_once_with(
         ANY, ANY, chase_camera=False)
+
+
+@pytest.mark.parametrize("task", [None, "trajectory_tracking", "legacy_unknown"])
+def test_run_preserves_trajectory_tracking_default(monkeypatch, task):
+    from uav_ac.runners import trajectory_tracking
+
+    config = {} if task is None else {"task": task}
+    trajectory = np.zeros((2, 10))
+    monkeypatch.setattr(trajectory_tracking, "run_trajectory_tracking", lambda _: trajectory)
+    assert main.run(config) is trajectory
+
+
+def test_run_dispatches_aerial_pick_place(monkeypatch):
+    from uav_ac.runners import aerial_pick_place
+
+    result = {"success": True, "state": "DONE"}
+    monkeypatch.setattr(aerial_pick_place, "run_aerial_pick_place", lambda _: result)
+    assert main.run({"task": "aerial_pick_place"}) is result

@@ -25,7 +25,7 @@ from uav_ac.planning.trajectory.aerial_manipulator_minco import (
     AerialManipulatorMINCOConfig,
 )
 from uav_ac.simulation.mujoco_sim import MujocoSimulation
-from uav_ac.tasks.aerial_pick_place import plan_pick_place
+from uav_ac.planning.pipeline.aerial_pick_place import PickPlacePlanner
 
 
 def _json_default(value):
@@ -186,8 +186,9 @@ def main():
         diagnostics = {}
         started = time.perf_counter()
         try:
-            result = plan_pick_place(
-                simulation, trial, diagnostics=diagnostics,
+            planner = PickPlacePlanner(simulation, trial)
+            result = planner.plan(
+                diagnostics=diagnostics,
                 search_only=args.search_only)
             duration = time.perf_counter()-started
             if args.search_only:

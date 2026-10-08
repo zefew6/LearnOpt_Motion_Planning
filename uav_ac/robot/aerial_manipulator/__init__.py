@@ -86,28 +86,36 @@ class AerialManipulator:
             configuration, body_names, local_points, check_limits=check_limits)
 
     def point_positions_and_pose_jacobians(
-            self, configuration, body_names, local_points, *, check_limits=True):
+            self, configuration, body_names, local_points, *, check_limits=True, prepared=None):
         return self._model.point_positions_and_pose_jacobians(
-            configuration, body_names, local_points, check_limits=check_limits)
+            configuration, body_names, local_points, check_limits=check_limits, prepared=prepared)
 
-    def point_positions(self, configuration, body_names, local_points, *, check_limits=True):
+    def point_positions(self, configuration, body_names, local_points, *, check_limits=True, prepared=None):
         return self._model.point_positions(
-            configuration, body_names, local_points, check_limits=check_limits)
+            configuration, body_names, local_points, check_limits=check_limits, prepared=prepared)
 
     def point_positions_batch(self, configurations, body_names, local_points,
                               *, check_limits=True):
         return self._model.point_positions_batch(
             configurations, body_names, local_points, check_limits=check_limits)
 
+    def prepare_kinematics(self, configuration=None, *, check_limits=True):
+        return self._model.prepare_kinematics(configuration, check_limits=check_limits)
+
+    def compile_collision_pairs(self, pairs=None, *, payload_attached=False):
+        return self._model.compile_collision_pairs(pairs, payload_attached=payload_attached)
+
     def exact_collision_distances(
             self, configuration=None, pairs=None, *, payload_attached=False,
             with_jacobians=False, with_pose_jacobians=False,
-            jacobian_distance_thresholds=None, check_limits=True):
+            jacobian_distance_thresholds=None, check_limits=True,
+            pair_indices=None, prepared=None, with_points=True):
         return self._model.exact_collision_distances(
             configuration, pairs, payload_attached=payload_attached,
             with_jacobians=with_jacobians, with_pose_jacobians=with_pose_jacobians,
             jacobian_distance_thresholds=jacobian_distance_thresholds,
-            check_limits=check_limits)
+            check_limits=check_limits, pair_indices=pair_indices, prepared=prepared,
+            with_points=with_points)
 
     def collision_pairs(self, kind="self"):
         return self._model.collision_pairs(kind)

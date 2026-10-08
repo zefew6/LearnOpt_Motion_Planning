@@ -71,7 +71,8 @@ MINCO knots are sampled by equivalent 8-D arc length (0.25 m by default), with
 all RRT corners retained; the segment count follows the sampled path. One
 positive total-time variable is shared equally across the segments.
 
-Scene boxes and ground are voxelized once. The shared occupancy grid feeds RRT
+At flight initialization, `PickPlacePlanner` voxelizes scene primitives and
+ground once and constructs the ESDF. The shared occupancy grid feeds RRT
 collision checks and the `edt` package generates the signed Euclidean distance
 field; SciPy's first-order `NdBSpline` provides distance queries and analytic
 gradients. The RRT searches nominal horizontal body geometry, while MINCO and
@@ -79,8 +80,22 @@ dense validation use the full roll/pitch/yaw recovered from flatness. Their
 collision costs differentiate through acceleration and yaw, and exact MuJoCo
 distances confirm close geometry contacts.
 
+RRT occupancy, self/payload sphere tests and world AABB candidate selection share
+an optional Cython broad-phase kernel. Normal package builds include the extension;
+for local source edits, rebuild with `.venv/bin/python setup.py build_ext --inplace`.
+There is no query-time compilation. Without the extension, a NumPy reference path
+remains available. `rrt_broadphase_backend` identifies the active implementation;
+`rrt_broadphase_seconds` reports the fused work rather than attributing it to the
+older separate occupancy/sphere/AABB timers. Exact MuJoCo distance checks remain
+unchanged. Batch candidates reuse their coarse results during exact refinement.
+
 A three-dimensional, base-center grid A* route is computed from that same
-occupancy grid and used only to shape the early OMPL position region. Yaw stays
+occupancy grid and used only to shape the early OMPL position region. Its primary
+and fallback search grids, inflation and clearance costs are prepared once in
+`AerialAStarMaps`. Both legs and repeated `.plan()` calls reuse them; endpoint
+selection and search do not construct maps. Execution reset reuses the planned
+trajectories and maps. A changed scene or planner configuration requires a new
+`PickPlacePlanner`, with no global cache. Yaw stays
 free; arm-joint bounds start around the endpoint configurations, widen for the
 A*-guided stage, and then expand to the full limits on one continuing
 `RRTConnect` tree. The OMPL 2.0.1 Python bindings do not expose the C++

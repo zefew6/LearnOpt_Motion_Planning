@@ -380,3 +380,141 @@ def test_exact_collision_distance_supports_full_pose_tangent_jacobian():
                      for state in (plus, minus)]
         numerical[column] = (distances[0]-distances[1])/(2.*epsilon)
     np.testing.assert_allclose(analytic, numerical, rtol=3e-4, atol=3e-5)
+
+
+def test_compiled_collision_pairs_preserve_order_distances_and_gradients():
+    sim = MujocoSimulation('tests/fixtures/aerial_manipulator_gradient.xml',
+                           record_actual_trajectory=False)
+    robot = sim.robot
+    pairs = (('arm_0', 'obstacle_wall_1_left'), ('arm_1', 'ground'))
+    compiled = robot.compile_collision_pairs(pairs)
+    q = robot.configuration.copy()
+    q[:3] = [.8, -.1, -1.15]
+    q[7:11] = [.35, -.4, .2, -.25]
+    baseline = robot.exact_collision_distances(q, pairs=pairs, with_jacobians=True,
+                                              with_pose_jacobians=True)
+    actual = robot.exact_collision_distances(q, pairs=compiled, with_jacobians=True,
+                                            with_pose_jacobians=True)
+    assert actual['pairs'] == baseline['pairs']
+    for key in ('distances', 'points_ned', 'jacobians'):
+        np.testing.assert_allclose(actual[key], baseline[key], atol=1e-12)
+    subset = robot.exact_collision_distances(q, pairs=compiled, pair_indices=[1, 0, 1])
+    np.testing.assert_array_equal(subset['distances'], baseline['distances'][[1, 0, 1]])
+    assert subset['pairs'] == tuple(baseline['pairs'][i] for i in (1, 0, 1))
+    with pytest.raises(ValueError, match='indices'):
+        robot.exact_collision_distances(q, pairs=compiled, pair_indices=[2])
+
+
+def test_query_local_kinematics_shared_and_stale_context_rejected(monkeypatch):
+    sim = MujocoSimulation(MODEL, record_actual_trajectory=False)
+    robot = sim.robot
+    q = robot.configuration.copy()
+    pairs = robot.compile_collision_pairs(robot.collision_pairs('world')[:3])
+    original = mujoco.mj_kinematics
+    calls = []
+
+    def kinematics(model, data):
+        calls.append(data)
+        return original(model, data)
+
+    monkeypatch.setattr(mujoco, 'mj_kinematics', kinematics)
+    prepared = robot.prepare_kinematics(q)
+    robot.point_positions(q, ('quadrotor',), np.zeros((1, 3)), prepared=prepared)
+    robot.exact_collision_distances(q, pairs=pairs, prepared=prepared)
+    assert len(calls) == 1
+    shifted = q.copy()
+    shifted[0] += .1
+    with pytest.raises(ValueError, match='configuration'):
+        robot.exact_collision_distances(shifted, pairs=pairs, prepared=prepared)
+    robot.point_positions(shifted, ('quadrotor',), np.zeros((1, 3)))
+    with pytest.raises(ValueError, match='stale'):
+        robot.exact_collision_distances(q, pairs=pairs, prepared=prepared)
+
+
+def test_compiled_pairs_and_pose_context_cannot_cross_model_rebind():
+    sim = MujocoSimulation(MODEL, record_actual_trajectory=False)
+    robot = sim.robot
+    q = robot.configuration.copy()
+    compiled = robot.compile_collision_pairs(robot.collision_pairs('world')[:1])
+    prepared = robot.prepare_kinematics(q)
+    robot.rebind(sim.model, lambda: sim.data)
+    with pytest.raises(ValueError, match='model'):
+        robot.exact_collision_distances(q, pairs=compiled)
+    with pytest.raises(ValueError, match='model'):
+        robot.exact_collision_distances(q, prepared=prepared)
+
+
+def test_distance_only_query_omits_unused_witnesses_and_preserves_distances(monkeypatch):
+    sim = MujocoSimulation('tests/fixtures/aerial_manipulator_gradient.xml',
+                           record_actual_trajectory=False)
+    robot = sim.robot
+    q = robot.configuration.copy()
+    compiled = robot.compile_collision_pairs(robot.collision_pairs('world')[:8])
+    expected = robot.exact_collision_distances(q, pairs=compiled)
+    original = mujoco.mj_geomDistance
+    witnesses = []
+
+    def distance(model, data, first, second, cutoff, witness):
+        witnesses.append(witness)
+        return original(model, data, first, second, cutoff, witness)
+
+    monkeypatch.setattr(mujoco, 'mj_geomDistance', distance)
+    actual = robot.exact_collision_distances(q, pairs=compiled, with_points=False)
+    np.testing.assert_array_equal(actual['distances'], expected['distances'])
+    assert actual['pairs'] == expected['pairs']
+    assert 'points_ned' not in actual
+    assert len(witnesses) == len(compiled.ids) and all(w is None for w in witnesses)
+
+
+@pytest.mark.parametrize('payload_attached', [False, True])
+def test_compiled_queries_match_native_distances_in_mixed_geometry_scene(tmp_path, payload_attached):
+    from pathlib import Path
+
+    source = Path('uav_ac/simulation/models/aerial_manipulator_workcell.xml')
+    include = (source.parent.parent / 'model/aerial_manipulator.xml').resolve()
+    xml = source.read_text().replace('../model/aerial_manipulator.xml', str(include))
+    primitives = '''<geom name="obstacle_random_box" type="box" pos="2.4 0.4 1.2"
+        quat="0.9393727 0 0 0.3428978" size="0.17 0.31 0.23"/>
+        <geom name="obstacle_random_sphere" type="sphere" pos="3.1 -0.5 1.1" size="0.19"/>
+        <geom name="obstacle_random_cylinder" type="cylinder" pos="4.0 0.7 1.3"
+        quat="0.9800666 0.1986693 0 0" size="0.13 0.28"/>'''
+    xml = xml.replace('</worldbody>', primitives+'</worldbody>', 1)
+    path = tmp_path / 'mixed_geometry.xml'
+    path.write_text(xml)
+    sim = MujocoSimulation(path, record_actual_trajectory=False)
+    robot = sim.robot
+    compiled = robot.compile_collision_pairs(payload_attached=payload_attached)
+    rng = np.random.default_rng(91)
+    live_qpos, live_mocap = sim.data.qpos.copy(), sim.data.mocap_pos.copy()
+    for _ in range(24):
+        q = robot.configuration.copy()
+        q[:3] = rng.uniform([0., -2., -1.8], [5., 2., -.6])
+        q[7:11] = rng.uniform(robot.limits.joint_lower, robot.limits.joint_upper)
+        q[3:7] = Rotation.random(random_state=rng).as_quat()[[3, 0, 1, 2]]
+        result = robot.exact_collision_distances(
+            q, pairs=compiled, payload_attached=payload_attached, with_points=False)
+        expected = [mujoco.mj_geomDistance(sim.model, robot._model._scratch,
+                                         first, second, 1e6, None)
+                    for first, second in compiled.ids]
+        np.testing.assert_array_equal(result['distances'], expected)
+    np.testing.assert_array_equal(sim.data.qpos, live_qpos)
+    np.testing.assert_array_equal(sim.data.mocap_pos, live_mocap)
+
+
+def test_compiled_pair_subset_preserves_empty_and_nonpayload_queries():
+    sim = MujocoSimulation('tests/fixtures/aerial_manipulator_gradient.xml',
+                           record_actual_trajectory=False)
+    robot = sim.robot
+    world = robot.collision_pairs('world')[:1]
+    payload = (('payload_marker_geom', 'body'),)
+    compiled = robot.compile_collision_pairs(world+payload, payload_attached=True)
+    q = robot.configuration.copy()
+    expected = robot.exact_collision_distances(q, pairs=world)
+    subset = robot.exact_collision_distances(q, pairs=compiled, pair_indices=[0])
+    np.testing.assert_array_equal(subset['distances'], expected['distances'])
+    empty = robot.exact_collision_distances(q, pairs=compiled, pair_indices=[])
+    assert empty['pairs'] == ()
+    assert empty['distances'].shape == (0,)
+    assert empty['points_ned'].shape == (0, 2, 3)
+    with pytest.raises(ValueError, match='payload'):
+        robot.exact_collision_distances(q, pairs=compiled, pair_indices=[1])

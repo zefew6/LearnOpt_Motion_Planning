@@ -12,6 +12,25 @@ NQ_PUBLIC = 12
 
 
 @dataclass(frozen=True)
+class CompiledCollisionPairs:
+    """Model-bound, validated geometry indices for repeated distance queries."""
+    owner: object
+    ids: tuple[tuple[int, int], ...]
+    names: tuple[tuple[str, str], ...]
+    keys: tuple[frozenset, ...]
+    requires_payload: bool
+
+
+@dataclass(frozen=True)
+class PreparedKinematics:
+    """One query-local snapshot; another scratch preparation invalidates it."""
+    owner: object
+    generation: int
+    configuration: np.ndarray
+    limits_checked: bool
+
+
+@dataclass(frozen=True)
 class ConfigurationLimits:
     joint_lower: np.ndarray
     joint_upper: np.ndarray
@@ -65,6 +84,7 @@ class AerialManipulatorModel:
             model.actuator_ctrlrange[self.arm_actuators, 0].copy(),
             model.actuator_ctrlrange[self.arm_actuators, 1].copy())
         self._scratch = mujoco.MjData(model)
+        self._scratch_generation = 0
         self._descendant_bodies = self._find_descendants()
         self._robot_geoms = [g for g in range(model.ngeom)
                              if model.geom_bodyid[g] in self._descendant_bodies
@@ -183,6 +203,7 @@ class AerialManipulatorModel:
                                       config[11], velocity[10], float(left-right))
 
     def _prepare(self, configuration=None, velocity=None, *, check_limits=True):
+        self._scratch_generation += 1
         live = self._live_data()
         d = self._scratch
         d.qpos[:] = live.qpos
@@ -211,6 +232,7 @@ class AerialManipulatorModel:
         Keeping this path separate avoids mutating live simulation data and
         skips work that cannot affect forward kinematics.
         """
+        self._scratch_generation += 1
         live = self._live_data()
         d = self._scratch
         d.qpos[:] = live.qpos
@@ -224,6 +246,55 @@ class AerialManipulatorModel:
         d.qpos[self.grip_qpos] = (q[11]-GAP_MIN)*.5
         mujoco.mj_kinematics(self.model, d)
         return d, q
+
+    def prepare_kinematics(self, configuration=None, *, check_limits=True):
+        """Prepare one pose for point and distance queries on the same snapshot."""
+        _, q = self._prepare_kinematic(configuration, check_limits=check_limits)
+        q.setflags(write=False)
+        return PreparedKinematics(self, self._scratch_generation, q, check_limits)
+
+    def _kinematic_state(self, configuration, check_limits, prepared):
+        if prepared is None:
+            return self._prepare_kinematic(configuration, check_limits=check_limits)
+        if not isinstance(prepared, PreparedKinematics) or prepared.owner is not self:
+            raise ValueError("prepared kinematics belongs to another model")
+        if prepared.generation != self._scratch_generation:
+            raise ValueError("prepared kinematics is stale")
+        if configuration is None:
+            if check_limits and not prepared.limits_checked:
+                self._configuration(prepared.configuration, check_limits=True)
+            return self._scratch, prepared.configuration
+        q = self._configuration(
+            prepared.configuration if configuration is None else configuration,
+            check_limits=check_limits)
+        if not np.allclose(q, prepared.configuration, rtol=0., atol=1e-14):
+            raise ValueError("prepared kinematics has a different configuration")
+        return self._scratch, q
+
+    def compile_collision_pairs(self, pairs=None, *, payload_attached=False):
+        """Resolve names and collision masks once for this model lifetime."""
+        allowed = (self._allowed_collision_pairs_with_payload if payload_attached
+                   else self._allowed_collision_pairs)
+        if pairs is None:
+            selected = tuple(allowed)
+        else:
+            selected = []
+            for pair in pairs:
+                if len(pair) != 2:
+                    raise ValueError("collision pairs must contain two geom names")
+                if not all(isinstance(name, str) for name in pair):
+                    raise ValueError("collision pair names must be strings")
+                ids = tuple(sorted((self._geom_ids_by_name.get(pair[0], -1),
+                                    self._geom_ids_by_name.get(pair[1], -1))))
+                if -1 in ids or ids not in allowed:
+                    raise ValueError(f"collision pair is not an allowed configured pair: {pair}")
+                selected.append(ids)
+            selected = tuple(selected)
+        names = tuple((self._geom_names_by_id[first], self._geom_names_by_id[second])
+                      for first, second in selected)
+        return CompiledCollisionPairs(
+            self, selected, names, tuple(frozenset(pair) for pair in names),
+            any(pair not in self._allowed_collision_pairs for pair in selected))
 
     def integrate(self, configuration, tangent_delta):
         q = self._configuration(configuration)
@@ -321,7 +392,7 @@ class AerialManipulatorModel:
         return positions, jacobians
 
     def point_positions_and_pose_jacobians(
-            self, configuration, body_names, local_points, *, check_limits=True):
+            self, configuration, body_names, local_points, *, check_limits=True, prepared=None):
         """Return position Jacobians for translation, world rotation, and joints.
 
         Columns are ``[position(3), world-angle tangent(3), arm-joints(4)]``.
@@ -336,7 +407,7 @@ class AerialManipulatorModel:
             body_ids = np.asarray([self._body_ids[name] for name in names], dtype=int)
         except KeyError as error:
             raise ValueError(f"unknown body name: {error.args[0]}") from error
-        d, q = self._prepare_kinematic(configuration, check_limits=check_limits)
+        d, q = self._kinematic_state(configuration, check_limits, prepared)
         rotations = d.xmat[body_ids].reshape(-1, 3, 3)
         native_points = d.xpos[body_ids]+np.einsum("nij,nj->ni", rotations, points)
         positions = native_points @ S
@@ -351,7 +422,7 @@ class AerialManipulatorModel:
         jacobians[:, :, 6:10] = joint_columns.transpose(0, 2, 1)
         return positions, jacobians
 
-    def point_positions(self, configuration, body_names, local_points, *, check_limits=True):
+    def point_positions(self, configuration, body_names, local_points, *, check_limits=True, prepared=None):
         """Return NED positions for batches of body-local points without Jacobians."""
         names = tuple(body_names)
         points = np.asarray(local_points, dtype=float)
@@ -361,7 +432,7 @@ class AerialManipulatorModel:
             body_ids = np.asarray([self._body_ids[name] for name in names], dtype=int)
         except KeyError as error:
             raise ValueError(f"unknown body name: {error.args[0]}") from error
-        d, _ = self._prepare_kinematic(configuration, check_limits=check_limits)
+        d, _ = self._kinematic_state(configuration, check_limits, prepared)
         rotations = d.xmat[body_ids].reshape(-1, 3, 3)
         return (d.xpos[body_ids] + np.einsum("nij,nj->ni", rotations, points)) @ S
 
@@ -397,7 +468,8 @@ class AerialManipulatorModel:
     def exact_collision_distances(
             self, configuration=None, pairs=None, *, payload_attached=False,
             with_jacobians=False, with_pose_jacobians=False,
-            jacobian_distance_thresholds=None, check_limits=True):
+            jacobian_distance_thresholds=None, check_limits=True,
+            pair_indices=None, prepared=None, with_points=True):
         """Batch MuJoCo signed distances for configured robot geometry pairs.
 
         ``pairs`` contains public geom-name pairs.  By default all configured
@@ -412,7 +484,7 @@ class AerialManipulatorModel:
         """
         # ``mj_geomDistance`` needs current geometry transforms, not dynamics
         # products such as the mass matrix or constraint Jacobians.
-        d, q = self._prepare_kinematic(configuration, check_limits=check_limits)
+        d, q = self._kinematic_state(configuration, check_limits, prepared)
         payload_id = int(self._payload_geom)
         payload_enabled = payload_attached
         if payload_enabled:
@@ -423,29 +495,36 @@ class AerialManipulatorModel:
             payload_ned = S @ d.site_xpos[self.grasp_site]
             # The attached payload follows the grasp frame in the isolated
             # mocap state used by this distance query.
+            self._scratch_generation += 1
             d.mocap_pos[self._payload_mocap] = S @ payload_ned
             mujoco.mj_kinematics(self.model, d)
 
-        allowed = (self._allowed_collision_pairs_with_payload if payload_enabled
-                   else self._allowed_collision_pairs)
-
-        if pairs is None:
-            selected = list(allowed)
+        compiled = pairs if isinstance(pairs, CompiledCollisionPairs) else None
+        if compiled is None:
+            if pair_indices is not None:
+                raise ValueError("pair indices require compiled collision pairs")
+            compiled = self.compile_collision_pairs(pairs, payload_attached=payload_enabled)
+        elif compiled.owner is not self:
+            raise ValueError("compiled collision pairs belong to another model")
+        if pair_indices is None:
+            selected, pair_names, pair_keys = compiled.ids, compiled.names, compiled.keys
         else:
-            selected = []
-            for pair in pairs:
-                if len(pair) != 2:
-                    raise ValueError("collision pairs must contain two geom names")
-                if not all(isinstance(name, str) for name in pair):
-                    raise ValueError("collision pair names must be strings")
-                ids = tuple(sorted((self._geom_ids_by_name.get(pair[0], -1),
-                                    self._geom_ids_by_name.get(pair[1], -1))))
-                if -1 in ids or ids not in allowed:
-                    raise ValueError(f"collision pair is not an allowed configured pair: {pair}")
-                selected.append(ids)
+            indices = np.asarray(pair_indices)
+            if indices.ndim == 1 and not indices.size:
+                indices = indices.astype(int)
+            if (indices.ndim != 1 or indices.dtype.kind not in "iu"
+                    or np.any(indices < 0) or np.any(indices >= len(compiled.ids))):
+                raise ValueError("collision pair indices must be valid integers")
+            selected = tuple(compiled.ids[index] for index in indices)
+            pair_names = tuple(compiled.names[index] for index in indices)
+            pair_keys = tuple(compiled.keys[index] for index in indices)
+        if (compiled.requires_payload and not payload_enabled
+                and any(pair not in self._allowed_collision_pairs for pair in selected)):
+            raise ValueError("payload collision pairs require payload_attached")
 
         distances = np.empty(len(selected), dtype=float)
-        points = np.empty((len(selected), 2, 3), dtype=float)
+        points = (np.empty((len(selected), 2, 3), dtype=float)
+                  if with_points or with_jacobians else None)
         jacobian_width = 10 if with_pose_jacobians else 8
         jacobians = (np.zeros((len(selected), jacobian_width), dtype=float)
                      if with_jacobians and jacobian_distance_thresholds is not None else
@@ -494,17 +573,18 @@ class AerialManipulatorModel:
             grasp_native = d.xpos[body_id]+rotation@local
             grasp_jacobian = body_point_jacobian(body_id, grasp_native)
 
+        line = np.zeros(6) if points is not None else None
         for index, (first, second) in enumerate(selected):
-            line = np.zeros(6)
+            if line is not None:
+                line.fill(0.)
             distances[index] = float(mujoco.mj_geomDistance(
                 self.model, d, first, second, 1e6, line))
-            native_points = (line[:3].copy(), line[3:].copy())
-            points[index] = np.stack((S@native_points[0], S@native_points[1]))
+            if points is not None:
+                native_points = (line[:3], line[3:])
+                points[index] = line.reshape(2, 3) @ S
             if with_jacobians:
-                pair_names = frozenset((self._geom_names_by_id[first],
-                                        self._geom_names_by_id[second]))
                 threshold = (None if jacobian_distance_thresholds is None else
-                             jacobian_distance_thresholds.get(pair_names))
+                             jacobian_distance_thresholds.get(pair_keys[index]))
                 # Smooth collision penalties have zero derivative once the
                 # signed distance reaches the required clearance. Avoid
                 # building witness-point Jacobians for those inactive pairs.
@@ -526,12 +606,11 @@ class AerialManipulatorModel:
                 norm = max(float(np.linalg.norm(delta)), 1e-10)
                 jacobians[index] = (delta/norm) @ (gradients[0]-gradients[1])
         result = {
-            "pairs": tuple((self._geom_names_by_id[first],
-                             self._geom_names_by_id[second])
-                            for first, second in selected),
+            "pairs": pair_names,
             "distances": distances,
-            "points_ned": points,
         }
+        if with_points:
+            result["points_ned"] = points
         if jacobians is not None:
             result["jacobians"] = jacobians
         return result

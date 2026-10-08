@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 from typing import Literal
 
 import numpy as np
 
-from uav_ac.main import build_controller, plan_trajectory
+# Match interactive deployment's defaults before importing planning components.
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+
+from uav_ac.control.factory import build_controller
+from uav_ac.planning.pipeline.flight import plan_trajectory
 from uav_ac.control import TrajectoryController
 from uav_ac.planning.pipeline import build_mission_corridor
 from uav_ac.simulation.recording import default_camera, render_offscreen_frame, save_png

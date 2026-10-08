@@ -18,7 +18,7 @@ aerial_manipulator_minco:
   max_acceleration: 3.0
   obstacle_clearance: 0.05
   rrt_obstacle_margin: 0.05
-  obstacle_weight: 20000.0
+  obstacle_weight: 200000.0
   esdf_resolution: 0.02
   esdf_discretization_margin: 0.035
   minco_sample_spacing_m: 1.5

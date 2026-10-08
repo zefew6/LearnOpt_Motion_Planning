@@ -4,7 +4,7 @@ import pytest
 from uav_ac.planning.geometry.esdf import ESDF
 from uav_ac.planning.geometry.grid_map import GridMap
 from uav_ac.planning.trajectory.aerial_manipulator_minco.search_adapter import (
-    AerialManipulatorStateSpaceAdapter,
+    AerialAStarMaps, AerialManipulatorStateSpaceAdapter,
     plan_aerial_astar_guide,
 )
 
@@ -20,11 +20,11 @@ def _grid_with_wall_opening():
 
 def test_aerial_adapter_builds_guide_from_grid_map_and_esdf():
     grid_map, esdf = _grid_with_wall_opening()
+    maps = AerialAStarMaps(grid_map, esdf, proxy_radius=.02, margin=0.,
+                          grid_resolution=.1, fallback_resolution=.05)
 
     guide, metrics = plan_aerial_astar_guide(
-        grid_map, np.array([.2, .25, .25]), np.array([.8, .25, .25]), esdf,
-        proxy_radius=.02, margin=0., grid_resolution=.1,
-        fallback_resolution=.05, sample_spacing_m=.1)
+        maps, np.array([.2, .25, .25]), np.array([.8, .25, .25]), sample_spacing_m=.1)
 
     assert guide is not None, metrics
     assert guide.path.shape[1] == 3
@@ -44,18 +44,17 @@ def test_aerial_adapter_preserves_no_route_and_endpoint_diagnostics():
     occupied[4, :, :] = True
     grid_map = GridMap(occupied, np.zeros(3), .1)
     esdf = ESDF.from_occupancy(grid_map)
+    maps = AerialAStarMaps(grid_map, esdf, proxy_radius=.01, margin=0.,
+                          grid_resolution=.1, fallback_resolution=.05)
 
     guide, metrics = plan_aerial_astar_guide(
-        grid_map, np.array([.1, .2, .2]), np.array([.7, .2, .2]), esdf,
-        proxy_radius=.01, margin=0., grid_resolution=.1,
-        fallback_resolution=.05)
+        maps, np.array([.1, .2, .2]), np.array([.7, .2, .2]))
 
     assert guide is None
     assert metrics["astar_failure_reason"] == "no_proxy_route"
 
     guide, metrics = plan_aerial_astar_guide(
-        grid_map, np.array([-1., .2, .2]), np.array([.7, .2, .2]), esdf,
-        proxy_radius=.01, margin=0., grid_resolution=.1)
+        maps, np.array([-1., .2, .2]), np.array([.7, .2, .2]))
     assert guide is None
     assert metrics["astar_failure_reason"] == "endpoint_outside_workspace"
 

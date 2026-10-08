@@ -273,17 +273,18 @@ configs/
 ├── acmpc_trajectory.yaml     ACMPC training settings
 └── bmtp.yaml                 Standalone BMTP experiment settings
 uav_ac/
-├── main.py                   Scene, planner, controller, wind, and viewer entry
+├── main.py                   CLI and interactive task dispatch
+├── runners/                  Flight configuration and interactive task workflows
 ├── scenes/                   XML loading and scene metadata
-├── tasks/                    Task protocol and trajectory tracking
+├── tasks/                    Task rules, state machines, and execution semantics
 ├── envs/                     Generic MuJoCo Gym environment
 ├── planning/
 │   ├── geometry/             Convex geometry and collision utilities
 │   ├── search/               RRT* path search
 │   ├── corridor/firi/        Convex safe-corridor construction
 │   ├── trajectory/           GCOPTER, GCS, BMTP, and Minimum Snap
-│   └── pipeline/             Mission and trajectory conversion
-├── control/                  Cascaded/MPC control and tracking interfaces
+│   └── pipeline/             Mission composition and initialized planning contexts
+├── control/                  Controller factory, control laws, and tracking interfaces
 ├── rl/
 │   ├── training.py           Unified task-aware MLP/ACMPC training entry point
 │   ├── evaluate.py           Unified task-aware evaluation/viewer entry point

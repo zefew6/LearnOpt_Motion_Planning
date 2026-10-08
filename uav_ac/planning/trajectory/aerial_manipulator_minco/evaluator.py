@@ -6,6 +6,7 @@ import numpy as np
 from scipy.spatial.transform import Rotation
 
 from ...geometry.grid_map import GridMap
+from ...geometry.collision_broadphase import RRTBroadphase
 from ..gcopter.mappings import polynomial_basis_matrix, smoothed_l1_array
 from .types import _flatness_attitude, _flatness_attitude_tangent_jacobian
 
@@ -234,6 +235,54 @@ class AerialManipulatorTrajectoryEvaluator:
             self.sphere_radii = np.r_[self.sphere_radii, robot.payload_radius]
             self.sphere_geom_indices = np.r_[self.sphere_geom_indices, -1]
 
+        # Compile model identities and broad-phase-to-exact indices once.
+        query_names, query_kinds, query_lookup = [], [], {}
+
+        def register(pair, kind):
+            key = frozenset(pair)
+            if key not in query_lookup:
+                query_lookup[key] = len(query_names)
+                query_names.append(pair)
+                query_kinds.append(kind)
+            return query_lookup[key]
+
+        self._world_query_indices = np.asarray(
+            [register(pair, 1) for pair in self.world_geom_pairs], dtype=int)
+        geom_lookup = {name: index for index, name in enumerate(self.geom_names)}
+        self._world_query_geometry = np.asarray(
+            [geom_lookup[pair[0]] for pair in self.world_geom_pairs], dtype=int)
+        self._self_query_indices = np.asarray(
+            [register(pair, 2) for pair in self.self_pair_names], dtype=int)
+        self._payload_query_indices = np.asarray([
+            register(("payload_marker_geom", self.geom_names[self.sphere_geom_indices[first]]), 3)
+            for first, _ in self.payload_pairs], dtype=int)
+        self._query_pairs = robot.compile_collision_pairs(
+            query_names, payload_attached=self.carry_payload)
+        self._query_base_kinds = np.asarray(query_kinds, dtype=np.int8)
+        self._query_is_payload = np.asarray([
+            "payload_marker_geom" in pair for pair in query_names], dtype=bool)
+        self._query_is_world = np.zeros(len(query_names), dtype=bool)
+        self._query_is_world[self._world_query_indices] = True
+        self._query_is_world &= ~self._query_is_payload
+        self._world_query_table = np.full(
+            (len(self.geom_names), len(self.world_aabb_names)), -1, dtype=int)
+        for world_column, world_name in enumerate(self.world_aabb_names):
+            for geometry_index, geometry_name in enumerate(self.geom_names):
+                pair = (geometry_name, world_name)
+                if pair in self.world_pair_set:
+                    self._world_query_table[geometry_index, world_column] = query_lookup[frozenset(pair)]
+
+        self._broadphase = RRTBroadphase(
+            self.occupancy, radii=self.sphere_radii,
+            self_pairs=self.self_pairs, payload_pairs=self.payload_pairs,
+            self_query_indices=self._self_query_indices,
+            payload_query_indices=self._payload_query_indices,
+            sphere_geom_indices=self.sphere_geom_indices,
+            world_lower=self.world_aabb_lower, world_upper=self.world_aabb_upper,
+            world_query_table=self._world_query_table,
+            query_count=len(self._query_pairs.ids), self_clearance=self.config.self_clearance)
+        self.rrt_broadphase_seconds = 0.0
+
     def _configuration(self, sigma, acceleration=None):
         from .task_targets import yaw_quaternion
         quaternion = yaw_quaternion(sigma[3])
@@ -253,10 +302,13 @@ class AerialManipulatorTrajectoryEvaluator:
         geometry confirmation with the RRT clearance. MINCO uses the same
         envelope and its larger optimization clearance before exact checks.
         """
+        configuration = self._configuration(sigma)
+        prepared = None
         if sphere_positions is None:
+            prepared = self.robot.prepare_kinematics(configuration, check_limits=False)
             positions = self.robot.point_positions(
-                self._configuration(sigma), self.sphere_names, self.sphere_points,
-                check_limits=False)
+                None, self.sphere_names, self.sphere_points,
+                check_limits=False, prepared=prepared)
         else:
             positions = np.asarray(sphere_positions, dtype=float)
             if positions.shape != (len(self.sphere_names), 3) or not np.all(
@@ -269,129 +321,58 @@ class AerialManipulatorTrajectoryEvaluator:
                                  if exact_world_clearance is not None else
                                  self.config.obstacle_clearance)
         phase_started = time.perf_counter()
-        occupancy_hits, outside_mask = self.occupancy.collision_mask(
-            positions, self.sphere_radii, occupancy_margin)
-        self.rrt_occupancy_check_seconds += time.perf_counter()-phase_started
-        # Keep a scalar violation interface for RRT.  The exact magnitude is
-        # irrelevant to feasibility; positive means the inflated grid hit or
-        # the known map boundary was crossed.
-        violations = np.where(occupancy_hits, 1.0, -1.0)
-        violations[outside_mask] = 1.0
-        self_violation = -np.inf
-        payload_candidate_geom = set()
-        self_candidate_pairs = set()
-        phase_started = time.perf_counter()
-        if len(self.self_pairs):
-            first, second = self.self_pairs.T
-            pair_distance = np.linalg.norm(positions[first]-positions[second], axis=1)
-            pair_violation = (self.sphere_radii[first]+self.sphere_radii[second]
-                              +self.config.self_clearance-pair_distance)
-            self_violation = float(np.max(pair_violation, initial=-np.inf))
-            for first_index, second_index in self.self_pairs[pair_violation > 0.]:
-                self_candidate_pairs.add((
-                    self.geom_names[self.sphere_geom_indices[first_index]],
-                    self.geom_names[self.sphere_geom_indices[second_index]],
-                ))
-        if len(self.payload_pairs):
-            first, second = self.payload_pairs.T
-            pair_distance = np.linalg.norm(positions[first]-positions[second], axis=1)
-            payload_violation = (self.sphere_radii[first]+self.sphere_radii[second]
-                                 +self.config.self_clearance-pair_distance)
-            payload_candidate_geom = {
-                self.geom_names[self.sphere_geom_indices[index]]
-                for index in first[payload_violation > 0.]
-            }
-            payload_violation = float(np.max(payload_violation, initial=-np.inf))
-        else:
-            payload_violation = -np.inf
-        self.rrt_sphere_pair_check_seconds += time.perf_counter()-phase_started
-        environment_violation = float(np.max(violations, initial=-np.inf))
-        if narrow_phase and (environment_violation > 0.
-                             or max(self_violation, payload_violation) > 0.):
-            phase_started = time.perf_counter()
-            world_pairs = self._nearby_world_pairs(
-                positions, violations, exact_world_clearance)
-            self.rrt_world_pair_filter_seconds += time.perf_counter()-phase_started
-            self_pairs = tuple(self_candidate_pairs) if self_violation > 0. else ()
-            payload_names = ()
-            if payload_violation > 0. and self.carry_payload:
-                payload_names = tuple(
-                    ("payload_marker_geom", name)
-                    for name in payload_candidate_geom)
-            selected_pairs = tuple(dict.fromkeys(world_pairs+self_pairs+payload_names))
-            self.rrt_exact_pair_queries += len(selected_pairs)
-            exact_pairs = ()
-            world_pair_keys = {frozenset(pair) for pair in world_pairs}
-            phase_started = time.perf_counter()
-            exact = (self.robot.exact_collision_distances(
-                self._configuration(sigma), pairs=selected_pairs,
-                payload_attached=self.carry_payload,
-                with_jacobians=False, check_limits=False)
-                     if selected_pairs else {"pairs": (), "distances": np.empty(0)})
-            self.rrt_exact_geometry_seconds += time.perf_counter()-phase_started
-            if len(exact["distances"]):
-                exact_pairs = exact["pairs"]
-                world_distances = [distance for pair, distance in zip(
-                    exact_pairs, exact["distances"])
-                    if "payload_marker_geom" not in pair
-                    and frozenset(pair) in world_pair_keys]
-                if world_distances:
-                    environment_violation = exact_world_clearance-min(world_distances)
-            exact_self_distances = [distance for pair, distance in zip(
-                exact_pairs, exact["distances"])
-                if "payload_marker_geom" not in pair
-                and frozenset(pair) not in world_pair_keys]
-            payload_distances = [distance for pair, distance in zip(
-                exact_pairs, exact["distances"])
-                if "payload_marker_geom" in pair]
-            if exact_self_distances:
-                # Replace the conservative sphere result for this candidate
-                # state so a valid aperture is not rejected by its broad
-                # phase envelope.
-                self_violation = self.config.self_clearance-min(exact_self_distances)
-            if payload_distances:
-                payload_violation = self.config.self_clearance-min(payload_distances)
-            if environment_violation > 0. and not world_pairs and not np.any(outside_mask):
-                # This was a conservative occupancy hit with no nearby exact
-                # world geometry; reject only pairs that survive the AABB test.
-                environment_violation = -1.0
-            # An out-of-grid query is a hard map-boundary violation.  Exact
-            # narrow-phase distances can clear a conservative occupancy hit,
-            # but they must never turn an unknown/outside cell into free space.
-            if np.any(outside_mask):
-                environment_violation = max(environment_violation, 1.0)
-        return (environment_violation, max(self_violation, payload_violation))
+        broad = self._broadphase.query(
+            positions, occupancy_margin, exact_world_clearance, narrow_phase=narrow_phase)
+        self.rrt_broadphase_seconds += time.perf_counter()-phase_started
+        environment, self_collision, payload = (float(values[0]) for values in broad[:3])
+        if narrow_phase and max(environment, self_collision, payload) > 0.:
+            return self._refine_collision(
+                configuration, environment, self_collision, payload,
+                broad[3][0], int(broad[4][0]), bool(broad[5][0]),
+                exact_world_clearance, prepared=prepared)
+        return environment, max(self_collision, payload)
 
-    def _nearby_world_pairs(self, positions, broadphase_violations, clearance):
-        """Filter exact geom queries by the pair-specific world AABBs."""
-        sphere_indices = np.flatnonzero(
-            (broadphase_violations > 0.) & (self.sphere_geom_indices >= 0))
-        if not len(sphere_indices) or not len(self.world_aabb_names):
-            return ()
-        centers = positions[sphere_indices]
-        closest = np.minimum(
-            np.maximum(centers[:, None, :], self.world_aabb_lower[None, :, :]),
-            self.world_aabb_upper[None, :, :])
-        distance_squared = np.sum((centers[:, None, :]-closest)**2, axis=2)
-        limits = self.sphere_radii[sphere_indices]+float(clearance)
-        sphere_rows, world_columns = np.nonzero(
-            distance_squared <= limits[:, None]**2+1e-12)
-        pairs = set()
-        for sphere_row, world_column in zip(sphere_rows, world_columns, strict=True):
-            geometry_index = self.sphere_geom_indices[sphere_indices[sphere_row]]
-            pair = (self.geom_names[geometry_index],
-                    self.world_aabb_names[world_column])
-            if pair in self.world_pair_set:
-                pairs.add(pair)
-        return tuple(sorted(pairs))
+    def _refine_collision(self, configuration, environment_violation,
+                          self_violation, payload_violation, selected, world_count,
+                          outside, exact_world_clearance, *, prepared=None):
+        """Apply unchanged MuJoCo narrow-phase rules to a prepared broad phase."""
+        indices = np.flatnonzero(selected)
+        self.rrt_exact_pair_queries += len(indices)
+        phase_started = time.perf_counter()
+        exact = (self.robot.exact_collision_distances(
+            None if prepared is not None else configuration,
+            pairs=self._query_pairs, pair_indices=indices,
+            payload_attached=self.carry_payload, prepared=prepared,
+            with_jacobians=False, check_limits=False, with_points=False)
+                 if len(indices) else {"distances": np.empty(0)})
+        self.rrt_exact_geometry_seconds += time.perf_counter()-phase_started
+        if len(indices):
+            distances = exact["distances"]
+            world = self._query_is_world[indices]
+            payload = self._query_is_payload[indices]
+            self_collision = ~(world | payload)
+            world_distances = distances[world]
+            self_distances = distances[self_collision]
+            payload_distances = distances[payload]
+            if len(world_distances):
+                environment_violation = exact_world_clearance-float(np.min(world_distances))
+            if len(self_distances):
+                self_violation = self.config.self_clearance-float(np.min(self_distances))
+            if len(payload_distances):
+                payload_violation = self.config.self_clearance-float(np.min(payload_distances))
+        if environment_violation > 0. and not world_count and not outside:
+            # This was a conservative occupancy hit with no nearby exact
+            # world geometry; reject only pairs that survive the AABB test.
+            environment_violation = -1.0
+        # An out-of-grid query is a hard map-boundary violation.  Exact
+        # narrow-phase distances can clear a conservative occupancy hit,
+        # but they must never turn an unknown/outside cell into free space.
+        if outside:
+            environment_violation = max(environment_violation, 1.0)
+        return environment_violation, max(self_violation, payload_violation)
 
     def collision_feasible_batch(self, states, *, exact_candidates=True):
-        """Check a batch of 8-D RRT states with shared kinematics and occupancy.
-
-        Full sphere envelopes are used for every broad-phase test. States near
-        a possible obstacle/self/payload contact are confirmed with MuJoCo's
-        exact geometry distances before being accepted.
-        """
+        """Batch coarse checks once, then refine only their candidate states."""
         states = np.asarray(states, dtype=float)
         if states.ndim != 2 or states.shape[1] != 8 or not np.all(np.isfinite(states)):
             raise ValueError("states must be a finite (B, 8) array")
@@ -400,46 +381,27 @@ class AerialManipulatorTrajectoryEvaluator:
         phase_started = time.perf_counter()
         configurations = np.asarray([self._configuration(state) for state in states])
         points = self.robot.point_positions_batch(
-            configurations, self.sphere_names, self.sphere_points,
-            check_limits=False)
+            configurations, self.sphere_names, self.sphere_points, check_limits=False)
         self.rrt_batch_fk_seconds += time.perf_counter()-phase_started
-        batch_count, sphere_count = points.shape[:2]
         phase_started = time.perf_counter()
-        occupancy_hits, outside = self.occupancy.collision_mask(
-            points.reshape(-1, 3), np.tile(self.sphere_radii, batch_count),
-            self.config.rrt_obstacle_margin)
-        self.rrt_occupancy_check_seconds += time.perf_counter()-phase_started
-        environment_candidate = np.any(
-            (occupancy_hits | outside).reshape(batch_count, sphere_count), axis=1)
-        self_candidate = np.zeros(batch_count, dtype=bool)
-        phase_started = time.perf_counter()
-        if len(self.self_pairs):
-            first, second = self.self_pairs.T
-            distances = np.linalg.norm(points[:, first]-points[:, second], axis=2)
-            self_candidate = np.any(
-                distances < (self.sphere_radii[first]+self.sphere_radii[second]
-                             +self.config.self_clearance), axis=1)
-        payload_candidate = np.zeros(batch_count, dtype=bool)
-        if len(self.payload_pairs):
-            first, second = self.payload_pairs.T
-            distances = np.linalg.norm(points[:, first]-points[:, second], axis=2)
-            payload_candidate = np.any(
-                distances < (self.sphere_radii[first]+self.sphere_radii[second]
-                             +self.config.self_clearance), axis=1)
+        broad = self._broadphase.query(
+            points, self.config.rrt_obstacle_margin, self.config.rrt_obstacle_margin,
+            narrow_phase=exact_candidates)
+        self.rrt_broadphase_seconds += time.perf_counter()-phase_started
+        environment_candidate, self_candidate, payload_candidate = (
+            values > 0. for values in broad[:3])
         candidates = environment_candidate | self_candidate | payload_candidate
         valid = ~candidates
         self.rrt_environment_candidates += int(np.sum(environment_candidate))
         self.rrt_self_candidates += int(np.sum(self_candidate))
         self.rrt_payload_candidates += int(np.sum(payload_candidate))
-        self.rrt_sphere_pair_check_seconds += time.perf_counter()-phase_started
         if exact_candidates:
             exact_started = time.perf_counter()
             for index in np.flatnonzero(candidates):
-                environment, self_collision = self.collision_feasible(
-                    states[index], narrow_phase=True,
-                    occupancy_margin=self.config.rrt_obstacle_margin,
-                    exact_world_clearance=self.config.rrt_obstacle_margin,
-                    sphere_positions=points[index])
+                environment, self_collision = self._refine_collision(
+                    configurations[index], float(broad[0][index]), float(broad[1][index]),
+                    float(broad[2][index]), broad[3][index], int(broad[4][index]),
+                    bool(broad[5][index]), self.config.rrt_obstacle_margin)
                 valid[index] = environment <= 0. and self_collision <= 0.
             self.rrt_exact_rejected_states += int(np.sum(candidates & ~valid))
             self.rrt_exact_candidate_states += int(np.sum(candidates))
@@ -451,9 +413,10 @@ class AerialManipulatorTrajectoryEvaluator:
         rotation, attitude_jacobian = _flatness_attitude_tangent_jacobian(
             acceleration[:3], sigma[3], self.quad.g)
         configuration = self._configuration(sigma, acceleration)
+        prepared = self.robot.prepare_kinematics(configuration, check_limits=False)
         positions, pose_jacobians = self.robot.point_positions_and_pose_jacobians(
-            configuration, self.sphere_names, self.sphere_points,
-            check_limits=False)
+            None, self.sphere_names, self.sphere_points,
+            check_limits=False, prepared=prepared)
         state_jacobians = np.zeros((len(positions), 3, 8))
         acceleration_jacobians = np.zeros_like(state_jacobians)
         state_jacobians[:, :, :3] = pose_jacobians[:, :, :3]
@@ -463,14 +426,14 @@ class AerialManipulatorTrajectoryEvaluator:
         acceleration_jacobians[:, :, :3] = np.einsum(
             "sij,jk->sik", pose_jacobians[:, :, 3:6], attitude_jacobian[:, :3])
         return (positions, state_jacobians, acceleration_jacobians,
-                attitude_jacobian, configuration)
+                attitude_jacobian, configuration, prepared)
 
     def collision_cost_gradient(self, sigma, acceleration=None):
         acceleration = (np.zeros(8) if acceleration is None
                         else np.asarray(acceleration, dtype=float))
         if acceleration.shape != (8,) or not np.all(np.isfinite(acceleration)):
             raise ValueError("acceleration must be a finite 8-vector")
-        positions, jacobians, acceleration_jacobians, attitude_jacobian, configuration = \
+        positions, jacobians, acceleration_jacobians, attitude_jacobian, configuration, prepared = \
             self._full_pose_geometry(sigma, acceleration)
         radii = self.sphere_radii
         lower, upper = self.esdf.origin, self.esdf.upper
@@ -522,17 +485,10 @@ class AerialManipulatorTrajectoryEvaluator:
         minimum_clearance = float(np.min(
             broad_clearance[~world_suppressed], initial=np.inf))
 
-        world_names = {
-            self.geom_names[index] for index in np.flatnonzero(world_candidate_geom)
-        }
-        world_pairs = tuple(pair for pair in self.world_geom_pairs
-                            if pair[0] in world_names)
-        exact_pair_kinds = {}
-        exact_pair_names = {}
-        for pair in world_pairs:
-            key = frozenset(pair)
-            exact_pair_kinds[key] = "world"
-            exact_pair_names[key] = pair
+        selected = np.zeros(len(self._query_pairs.ids), dtype=bool)
+        selected[self._world_query_indices[
+            world_candidate_geom[self._world_query_geometry]]] = True
+        query_kinds = self._query_base_kinds.copy()
         self_violation = -np.inf
         payload_violation = -np.inf
         for pairs, kind in ((self.self_pairs, "self"), (self.payload_pairs, "payload")):
@@ -546,14 +502,10 @@ class AerialManipulatorTrajectoryEvaluator:
             pair_cost, pair_derivative = smoothed_l1_array(
                 pair_violations, self.config.smoothing_epsilon)
             candidate = pair_violations > 0.
-            if kind == "payload":
-                candidate_names = {
-                    ("payload_marker_geom", self.geom_names[self.sphere_geom_indices[first_i]])
-                    for first_i in first[candidate]
-                }
-            else:
-                candidate_names = {self.self_pair_names[index]
-                                   for index in np.flatnonzero(candidate)}
+            query_indices = (self._payload_query_indices if kind == "payload"
+                             else self._self_query_indices)[candidate]
+            selected[query_indices] = True
+            query_kinds[query_indices] = 3 if kind == "payload" else 2
             pair_cost[candidate] = 0.
             pair_derivative[candidate] = 0.
             directions = delta/pair_distances[:, None]
@@ -572,43 +524,35 @@ class AerialManipulatorTrajectoryEvaluator:
             noncandidate[candidate] = -np.inf
             if kind == "self":
                 self_violation = float(np.max(noncandidate, initial=-np.inf))
-                exact_pairs = tuple(candidate_names)
             else:
                 payload_violation = float(np.max(noncandidate, initial=-np.inf))
                 pair_clearance = pair_distances-radii[first]-radii[second]
                 pair_clearance[candidate] = np.inf
                 minimum_clearance = min(minimum_clearance,
                                         float(np.min(pair_clearance, initial=np.inf)))
-                exact_pairs = tuple(candidate_names)
-            for pair in exact_pairs:
-                key = frozenset(pair)
-                exact_pair_kinds[key] = kind
-                exact_pair_names[key] = pair
-
-        if exact_pair_kinds:
+        indices = np.flatnonzero(selected)
+        if len(indices):
             jacobian_thresholds = {
-                pair: (self.config.obstacle_clearance if kind == "world"
-                       else self.config.self_clearance)
-                for pair, kind in exact_pair_kinds.items()
+                self._query_pairs.keys[index]: (self.config.obstacle_clearance
+                    if query_kinds[index] == 1 else self.config.self_clearance)
+                for index in indices
             }
             exact = self.robot.exact_collision_distances(
-                configuration, pairs=tuple(exact_pair_names.values()),
+                None, pairs=self._query_pairs, pair_indices=indices, prepared=prepared,
                 payload_attached=self.carry_payload,
                 with_jacobians=True, with_pose_jacobians=True,
                 jacobian_distance_thresholds=jacobian_thresholds,
                 check_limits=False)
-            for pair, distance, pair_jacobian in zip(
-                    exact["pairs"], exact["distances"], exact["jacobians"], strict=True):
-                kind = exact_pair_kinds.get(frozenset(pair))
-                if kind is None:
-                    continue
+            for index, distance, pair_jacobian in zip(
+                    indices, exact["distances"], exact["jacobians"], strict=True):
+                kind = query_kinds[index]
                 margin = (self.config.obstacle_clearance
-                          if kind == "world" else self.config.self_clearance)
+                          if kind == 1 else self.config.self_clearance)
                 violation = margin-float(distance)
                 exact_cost, exact_derivative = smoothed_l1_array(
                     np.asarray([violation]), self.config.smoothing_epsilon)
                 weight = (self.config.obstacle_weight
-                          if kind == "world" else self.config.self_collision_weight)
+                          if kind == 1 else self.config.self_collision_weight)
                 derivative = weight*float(exact_derivative[0])
                 cost += weight*float(exact_cost[0])
                 state_gradient = np.r_[
@@ -620,9 +564,9 @@ class AerialManipulatorTrajectoryEvaluator:
                 acceleration_gradient[:3] = pair_jacobian[3:6]@attitude_jacobian[:, :3]
                 grad -= derivative*state_gradient
                 grad_acceleration -= derivative*acceleration_gradient
-                if kind == "world":
+                if kind == 1:
                     obstacle_violation = max(obstacle_violation, violation)
-                elif kind == "self":
+                elif kind == 2:
                     self_violation = max(self_violation, violation)
                 else:
                     payload_violation = max(payload_violation, violation)

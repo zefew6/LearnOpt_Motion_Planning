@@ -370,3 +370,25 @@ def test_collision_gradient_chains_full_pose_through_acceleration_and_yaw():
     np.testing.assert_allclose(gradient, numerical_state, rtol=2e-4, atol=3e-3)
     np.testing.assert_allclose(grad_acceleration, numerical_acceleration,
                                rtol=3e-4, atol=5e-3)
+
+
+def test_repeated_collision_queries_use_precompiled_geometry_pairs(monkeypatch):
+    simulation = MujocoSimulation('tests/fixtures/aerial_manipulator_gradient.xml',
+                                  record_actual_trajectory=False)
+    robot = simulation.robot
+    config = AerialManipulatorMINCOConfig(esdf_resolution=.2, esdf_discretization_margin=.35)
+    esdf = ESDF.from_axis_aligned_boxes(
+        np.empty((0, 6)), [-2., -3., -3.], [6., 3., 1.], .2, ground_height=0.)
+    evaluator = AerialManipulatorTrajectoryEvaluator(
+        robot, esdf, simulation.quad, config, simulation.space_limits, .06, False)
+    state = np.r_[.8, -.1, -.1, 0., [.2, -.3, .1, -.15]]
+    baseline = evaluator.collision_feasible(state)
+    assert max(baseline) > 0.
+
+    def unexpected(*args, **kwargs):
+        pytest.fail('collision query resolved geometry names again')
+
+    monkeypatch.setattr(robot._model, 'compile_collision_pairs', unexpected)
+    assert evaluator.collision_feasible(state) == pytest.approx(baseline)
+    cost, *_ = evaluator.collision_cost_gradient(state, np.zeros(8))
+    assert np.isfinite(cost)
