@@ -177,13 +177,13 @@ def load_config(path: str | Path = DEFAULT_CONFIG) -> dict:
     AerialManipulatorMINCOConfig.from_mapping(sections["aerial_manipulator_minco"])
     pick_place = config.setdefault("pick_place", {})
     _only(pick_place, {
-        "position_tolerance", "velocity_tolerance", "settle_time", "event_timeout",
+        "position_tolerance", "velocity_tolerance", "settle_time",
         "angular_velocity_tolerance", "record_joint_trace",
     }, "pick_place")
     if config["task"] == "aerial_pick_place":
         for name, default in (("position_tolerance", .02), ("velocity_tolerance", .05),
                               ("angular_velocity_tolerance", .2),
-                              ("settle_time", .30), ("event_timeout", 10.0)):
+                              ("settle_time", .30)):
             pick_place.setdefault(name, default)
             _positive(pick_place[name], f"pick_place.{name}")
         if not isinstance(pick_place.get("record_joint_trace", False), bool):

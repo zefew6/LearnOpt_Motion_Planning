@@ -56,7 +56,6 @@ class AerialManipulatorMINCOConfig:
     edge_joint_resolution: float = .08
     validation_dt: float = .025
     minimum_total_time: float = .15
-    planning_budget_s: float = 60.0
     initial_duration_scale: float = 1.2
 
     def __post_init__(self):
@@ -98,7 +97,7 @@ class AerialManipulatorMINCOConfig:
                     "edge_position_resolution", "edge_yaw_resolution",
                     "edge_joint_resolution",
                     "validation_dt", "minimum_total_time")
-        positive = positive + ("planning_budget_s", "initial_duration_scale")
+        positive = positive + ("initial_duration_scale",)
         if any(isinstance(getattr(self, name), bool)
                or not np.isfinite(getattr(self, name))
                or getattr(self, name) <= 0 for name in positive):

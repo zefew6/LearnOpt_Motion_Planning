@@ -647,12 +647,16 @@ class MujocoSimulation:
             reset_control: Callable[[], None] | None = None,
             camera_name: str | None = None,
             chase_camera: bool = False,
-    ) -> None:
+            *,
+            prepare: Callable[[Callable[[], None]], bool] | None = None,
+    ) -> bool:
         """
         Run the native MuJoCo viewer while the supplied controller drives the rotors.
 
         :param control_step: one inner-loop update of the existing flight controller
         :param reset_control: reset the controller when the viewer resets the simulation
+        :param prepare: optional work to run after the viewer opens and before flight
+        :return: false if preparation aborts or the viewer closes before flight starts
         """
         from mujoco import viewer
 
@@ -673,6 +677,15 @@ class MujocoSimulation:
                     viewer_handle.cam.distance = 8.0
                     viewer_handle.cam.elevation = -20.0
             viewer_handle.sync()
+
+            def sync_viewer() -> None:
+                if viewer_handle.is_running():
+                    viewer_handle.sync()
+
+            if prepare is not None and not prepare(sync_viewer):
+                return False
+            if not viewer_handle.is_running():
+                return False
 
             while viewer_handle.is_running():
                 step_start = time.perf_counter()
@@ -699,6 +712,7 @@ class MujocoSimulation:
                     time.perf_counter() - step_start)
                 if remaining_step_time > 0:
                     time.sleep(remaining_step_time)
+        return True
 
     def run_recorded(
             self,

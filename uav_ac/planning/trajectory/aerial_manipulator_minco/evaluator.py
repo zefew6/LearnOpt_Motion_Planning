@@ -117,9 +117,8 @@ def _add_penalty(values, jacobian, weight, epsilon):
 
 class AerialManipulatorTrajectoryEvaluator:
     def __init__(self, robot, esdf, quad, config, workspace_bounds,
-                 gripper_opening, carry_payload, deadline=None, occupancy=None):
+                 gripper_opening, carry_payload, occupancy=None):
         self.robot, self.esdf, self.quad, self.config = robot, esdf, quad, config
-        self.deadline = deadline
         self.objective_samples = 0
         self.validation_samples = 0
         self.mass = robot.mass
@@ -234,12 +233,6 @@ class AerialManipulatorTrajectoryEvaluator:
             self.sphere_points = np.vstack((self.sphere_points, self.payload_local))
             self.sphere_radii = np.r_[self.sphere_radii, robot.payload_radius]
             self.sphere_geom_indices = np.r_[self.sphere_geom_indices, -1]
-
-    def _check_deadline(self):
-        if self.deadline is not None:
-            import time
-            if time.perf_counter() >= self.deadline:
-                raise TimeoutError("aerial_manipulator_minco planning budget exceeded")
 
     def _configuration(self, sigma, acceleration=None):
         from .task_targets import yaw_quaternion
@@ -639,7 +632,6 @@ class AerialManipulatorTrajectoryEvaluator:
 
     def sample_cost_gradient(self, sigma, velocity, acceleration, jerk):
         """Return cost, gradients for orders 0..3, maximum raw violation and clearance."""
-        self._check_deadline()
         self.objective_samples += 1
         cfg, quad = self.config, self.quad
         gradients = [np.zeros(8) for _ in range(4)]
@@ -827,7 +819,6 @@ class AerialManipulatorTrajectoryEvaluator:
             accepted.extend(state for _, state, _ in refined)
             maximum_dt = max(maximum_dt, max((dt for _, _, dt in refined), default=0.))
             for sigma, velocity, acceleration, jerk in accepted:
-                self._check_deadline()
                 self.validation_samples += 1
                 gravity = float(self.quad.g)
                 force = np.array([-acceleration[0], -acceleration[1],

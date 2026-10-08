@@ -1,5 +1,6 @@
 """8-D RRT-Connect initialization and equal-duration MINCO/L-BFGS refinement."""
 
+from collections.abc import Callable
 import time
 
 import numpy as np
@@ -26,16 +27,10 @@ class AerialManipulatorMINCO:
         self.last_metrics = {}
 
     def plan(self, start_state, goal_state, *, robot, esdf, quad, workspace_bounds,
-             gripper_opening, carry_payload=False, deadline=None,
-             occupancy=None, search_only=False):
+             gripper_opening, carry_payload=False,
+             occupancy=None, search_only=False,
+             on_rrt_path: Callable[[np.ndarray], None] | None = None):
         started = time.perf_counter()
-        deadline = (started+self.config.planning_budget_s
-                    if deadline is None else float(deadline))
-
-        def check_deadline():
-            if time.perf_counter() >= deadline:
-                raise TimeoutError("aerial_manipulator_minco planning budget exceeded")
-
         cfg = self.config
         rrt_started = time.perf_counter()
         start, goal = _state(start_state), _state(goal_state)
@@ -46,7 +41,7 @@ class AerialManipulatorMINCO:
         upper = np.r_[bounds[1], np.pi, robot.limits.joint_upper]
         evaluator = AerialManipulatorTrajectoryEvaluator(
             robot, esdf, quad, cfg, bounds, gripper_opening, carry_payload,
-            deadline, occupancy=occupancy)
+            occupancy=occupancy)
         metric_scale = np.r_[np.full(3, cfg.position_scale), cfg.yaw_scale,
                              np.asarray(cfg.joint_scales)]
         state_space_adapter = AerialManipulatorStateSpaceAdapter()
@@ -113,7 +108,6 @@ class AerialManipulatorMINCO:
                     pending_keys.append(key)
                     pending_indices.append(index)
             for first in range(0, len(pending), 32):
-                check_deadline()
                 last = min(len(pending), first+32)
                 valid = evaluator.collision_feasible_batch(
                     np.asarray(pending[first:last]), exact_candidates=True)
@@ -125,12 +119,10 @@ class AerialManipulatorMINCO:
             return result
 
         def state_valid(state):
-            check_deadline()
             return bool(validate_states(np.asarray(state)[None, :])[0])
 
         def edge_valid(first, second):
             nonlocal rrt_edge_cache_hits
-            check_deadline()
             first, second = np.asarray(first, dtype=float), np.asarray(second, dtype=float)
             first_key = first.copy()
             second_key = second.copy()
@@ -220,8 +212,8 @@ class AerialManipulatorMINCO:
                 sampling_regions=regions,
                 simplify_attempts=cfg.rrt_simplify_attempts,
                 simplify_budget_s=cfg.rrt_simplify_budget_s,
-                timeout_s=max(.001, deadline-time.perf_counter()))
-        except (RuntimeError, ValueError, TimeoutError) as error:
+                timeout_s=None)
+        except (RuntimeError, ValueError) as error:
             search_error = error
             search_metrics = getattr(error, "metrics", {})
         # Preserve search diagnostics on later optimization failures.
@@ -259,6 +251,8 @@ class AerialManipulatorMINCO:
             self.last_metrics.update(
                 failure_reason=str(search_error), total_seconds=time.perf_counter()-started)
             raise search_error
+        if on_rrt_path is not None:
+            on_rrt_path(path.copy())
         if search_only:
             self.last_metrics["rrt_path_states"] = int(len(path))
             return AerialManipulatorSearchResult(path, self.last_metrics)
@@ -275,7 +269,7 @@ class AerialManipulatorMINCO:
             if attempt_index:
                 evaluator = AerialManipulatorTrajectoryEvaluator(
                     robot, esdf, quad, cfg, bounds, gripper_opening, carry_payload,
-                    deadline, occupancy=occupancy)
+                    occupancy=occupancy)
                 validity_cache.clear()
                 edge_cache.clear()
                 rrt_state_queries = rrt_state_cache_hits = 0
@@ -284,8 +278,8 @@ class AerialManipulatorMINCO:
             try:
                 trajectory = self._optimize_path(
                     path, knots, evaluator, robot, edge_valid, metric_scale,
-                    deadline, shortcut_attempts)
-            except (RuntimeError, TimeoutError, ValueError, np.linalg.LinAlgError) as error:
+                    shortcut_attempts)
+            except (RuntimeError, ValueError, np.linalg.LinAlgError) as error:
                 attempts.append(dict(self.last_metrics))
                 self.last_metrics = _combined_metrics(
                     search_diagnostics, attempts, time.perf_counter()-started)
@@ -312,12 +306,8 @@ class AerialManipulatorMINCO:
         return trajectory
 
     def _optimize_path(self, path, knots, evaluator, robot, edge_valid,
-                       metric_scale, deadline, shortcut_attempts):
+                       metric_scale, shortcut_attempts):
         cfg = self.config
-
-        def check_deadline():
-            if time.perf_counter() >= deadline:
-                raise TimeoutError("aerial_manipulator_minco planning budget exceeded")
 
         pieces = len(knots)-1
         time_proportions = _segment_time_proportions(knots, cfg)
@@ -370,7 +360,7 @@ class AerialManipulatorMINCO:
         ]
         objective_calls = 0
         # Publish the optimizer setup before its first objective evaluation so
-        # a shared planning deadline still leaves useful diagnostics behind.
+        # diagnostics are available if optimization fails.
         self.last_metrics.update({
             "minco_sample_spacing_m": float(cfg.minco_sample_spacing_m),
             "minco_initial_waypoints": int(len(knots)),
@@ -384,7 +374,6 @@ class AerialManipulatorMINCO:
 
         def objective(variables):
             nonlocal objective_calls
-            check_deadline()
             objective_calls += 1
             return self._objective(
                 variables, minco, pieces, evaluator,
@@ -409,12 +398,12 @@ class AerialManipulatorMINCO:
                 is_feasible=lambda: evaluator.last_violation <= 0.0,
                 feasible_iteration_patience=10_000,
                 require_convergence=True)
-        except (RuntimeError, TimeoutError, ValueError, np.linalg.LinAlgError):
+        except (RuntimeError, ValueError, np.linalg.LinAlgError):
             self.last_metrics.update({
                 "objective_calls": int(objective_calls),
                 "objective_samples": int(evaluator.objective_samples),
                 "optimizer_seconds": time.perf_counter()-phase,
-                "optimizer_status": "failed_or_timed_out",
+                "optimizer_status": "failed",
                 "optimizer_last_violation": float(evaluator.last_violation),
             })
             raise
@@ -443,7 +432,6 @@ class AerialManipulatorMINCO:
         provisional = AerialManipulatorTrajectory(
             durations, coefficients, path, result.cost, result.iterations,
             result.converged, result.message)
-        check_deadline()
         phase = time.perf_counter()
         valid, clearance, violation, sample_dt = evaluator.dense_validate(provisional)
         validation_seconds = time.perf_counter()-phase

@@ -65,7 +65,8 @@ def plan_rrt_connect(
         timeout_s=60.0,
 ):
     """Find a route through an adapter-owned OMPL state space."""
-    if (not np.isfinite(timeout_s) or timeout_s <= 0.0
+    if ((timeout_s is not None and
+         (not np.isfinite(timeout_s) or timeout_s <= 0.0))
             or isinstance(simplify_attempts, bool) or int(simplify_attempts) < 0
             or not np.isfinite(simplify_budget_s) or simplify_budget_s < 0.0
             or not np.isfinite(range_size) or range_size <= 0.0):
@@ -115,34 +116,58 @@ def plan_rrt_connect(
     total_fraction = sum(float(region["fraction"]) for region in regions)
     stage_seconds = {}
     search_started = time.perf_counter()
-    for region in regions:
-        elapsed = time.perf_counter()-search_started
-        remaining = float(timeout_s)-elapsed
-        if remaining <= 0.0:
-            break
-        region_lower, region_upper = _region_bounds(region, start.shape)
-        adapter.set_sampling_bounds(region_lower, region_upper)
-        stage_started = time.perf_counter()
-        allotted = min(
-            remaining, float(timeout_s)*float(region["fraction"])/total_fraction)
-        name = str(region["name"])
-        try:
-            log_level = ou.getLogLevel()
-            ou.setLogLevel(ou.LOG_WARN)
+    if timeout_s is None:
+        while not pdef.hasExactSolution():
+            for region in regions:
+                if pdef.hasExactSolution():
+                    break
+                region_lower, region_upper = _region_bounds(region, start.shape)
+                adapter.set_sampling_bounds(region_lower, region_upper)
+                name = str(region["name"])
+                stage_started = time.perf_counter()
+                try:
+                    log_level = ou.getLogLevel()
+                    ou.setLogLevel(ou.LOG_WARN)
+                    try:
+                        planner.solve(1.0)
+                    finally:
+                        ou.setLogLevel(log_level)
+                except TimeoutError:
+                    # The one-second solve is a resumable work slice, not a search deadline.
+                    pass
+                stage_seconds[name] = (
+                    stage_seconds.get(name, 0.0)+time.perf_counter()-stage_started)
+    else:
+        for region in regions:
+            elapsed = time.perf_counter()-search_started
+            remaining = float(timeout_s)-elapsed
+            if remaining <= 0.0:
+                break
+            region_lower, region_upper = _region_bounds(region, start.shape)
+            adapter.set_sampling_bounds(region_lower, region_upper)
+            stage_started = time.perf_counter()
+            allotted = min(
+                remaining, float(timeout_s)*float(region["fraction"])/total_fraction)
+            name = str(region["name"])
             try:
-                status = planner.solve(max(.001, allotted))
-            finally:
-                ou.setLogLevel(log_level)
-        except TimeoutError as error:
-            stage_seconds[name] = stage_seconds.get(name, 0.0)+time.perf_counter()-stage_started
-            metrics = _metrics(
-                started, setup_seconds, search_started, stage_seconds,
-                motion_validator, planner, si, path_states=0,
-                simplification_seconds=0.0, first_solution=None)
-            raise RRTConnectPlanningError(str(error), metrics) from error
-        stage_seconds[name] = stage_seconds.get(name, 0.0)+time.perf_counter()-stage_started
-        if pdef.hasExactSolution():
-            break
+                log_level = ou.getLogLevel()
+                ou.setLogLevel(ou.LOG_WARN)
+                try:
+                    planner.solve(max(.001, allotted))
+                finally:
+                    ou.setLogLevel(log_level)
+            except TimeoutError as error:
+                stage_seconds[name] = (
+                    stage_seconds.get(name, 0.0)+time.perf_counter()-stage_started)
+                metrics = _metrics(
+                    started, setup_seconds, search_started, stage_seconds,
+                    motion_validator, planner, si, path_states=0,
+                    simplification_seconds=0.0, first_solution=None)
+                raise RRTConnectPlanningError(str(error), metrics) from error
+            stage_seconds[name] = (
+                stage_seconds.get(name, 0.0)+time.perf_counter()-stage_started)
+            if pdef.hasExactSolution():
+                break
 
     search_seconds = time.perf_counter()-search_started
     if not pdef.hasExactSolution():

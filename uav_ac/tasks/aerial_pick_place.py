@@ -1,5 +1,6 @@
 """Aerial-manipulator pick, carry and place simulation."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum, auto
 import time
@@ -11,7 +12,8 @@ from uav_ac.control.aerial_manipulator_controller import AerialManipulatorContro
 from uav_ac.planning.geometry.esdf import ESDF
 from uav_ac.planning.geometry.grid_map import GridMap
 from uav_ac.planning.trajectory.aerial_manipulator_minco import (
-    AerialManipulatorMINCO, AerialManipulatorMINCOConfig, make_terminal_state,
+    AerialManipulatorMINCO, AerialManipulatorMINCOConfig,
+    AerialManipulatorTrajectory, make_terminal_state,
 )
 from uav_ac.planning.trajectory.aerial_manipulator_minco.task_targets import quaternion_yaw
 from uav_ac.simulation.mujoco_sim import MujocoSimulation
@@ -63,54 +65,109 @@ class _PlanBundle:
 
 def run_aerial_pick_place(config):
     """Plan both legs before moving, then execute both with the baseline controller."""
-    simulation = MujocoSimulation(config["scene"], record_actual_trajectory=False)
+    simulation = MujocoSimulation(
+        config["scene"], record_actual_trajectory=False,
+        planning_path_capacity=2 if config["visualize"] else 0)
     settings = _task_settings(simulation, config)
     planner_config = AerialManipulatorMINCOConfig.from_mapping(
         config["aerial_manipulator_minco"])
-    machine, diagnostics, planning_started = _new_pick_place_machine(), {}, time.perf_counter()
-    try:
-        planned = plan_pick_place(simulation, config,
-            deadline=planning_started+planner_config.planning_budget_s,
-            diagnostics=diagnostics, settings=settings, planner_config=planner_config)
-        bundle = _PlanBundle.from_mapping(planned)
-        _transition(machine, PickPlaceState.MOVE_TO_PICK)
-    except (ValueError, RuntimeError, np.linalg.LinAlgError, TimeoutError) as error:
-        diagnostics.setdefault("planning_seconds", time.perf_counter()-planning_started)
-        if machine.state is not PickPlaceState.FAILED:
-            _transition(machine, PickPlaceState.FAILED, str(error))
-        result = _result(machine, diagnostics.get("plans", {}), simulation, None,
-                         planning_metrics=_public_metrics(diagnostics))
+    machine, diagnostics = _new_pick_place_machine(), {}
+    runtime = {"bundle": None, "controller": None, "execution": None}
+    rrt_paths, minco_paths = {}, {}
+
+    for marker, position in (("pick_target_marker", settings["pick_position_ned"]),
+                             ("place_target_marker", settings["place_position_ned"]),
+                             ("payload_marker", settings["pick_position_ned"])):
+        simulation.set_mocap_position_ned(marker, position)
+
+    def joined_path(paths):
+        segments = [paths[name] for name in ("pick", "place") if name in paths]
+        if not segments:
+            return None
+        return np.vstack([segments[0], *(segment[1:] for segment in segments[1:])])
+
+    def prepare(sync_viewer):
+        def refresh_paths():
+            paths, colors, dashed = [], [], []
+            for points, color, is_dashed in (
+                    (joined_path(rrt_paths), (0.0, 0.55, 0.85, 0.95), True),
+                    (joined_path(minco_paths), (0.1, 0.8, 0.25, 0.95), False)):
+                if points is not None:
+                    paths.append(points)
+                    colors.append(color)
+            simulation.set_planning_paths(paths, colors)
+            sync_viewer()
+
+        def on_rrt_path(leg, states):
+            rrt_paths[leg] = np.asarray(states, dtype=float)[:, :3].copy()
+            refresh_paths()
+
+        def on_minco_trajectory(leg, trajectory):
+            sample_count = max(2, int(np.ceil(trajectory.total_time / .05)) + 1)
+            times = np.linspace(0.0, trajectory.total_time, sample_count)
+            minco_paths[leg] = trajectory.evaluate(times)[:, :3]
+            refresh_paths()
+
+        planning_started = time.perf_counter()
+        try:
+            planned = plan_pick_place(
+                simulation, config,
+                diagnostics=diagnostics, settings=settings,
+                planner_config=planner_config,
+                on_rrt_path=on_rrt_path if config["visualize"] else None,
+                on_minco_trajectory=on_minco_trajectory if config["visualize"] else None)
+            bundle = _PlanBundle.from_mapping(planned)
+            _transition(machine, PickPlaceState.MOVE_TO_PICK)
+        except (ValueError, RuntimeError, np.linalg.LinAlgError) as error:
+            diagnostics.setdefault("planning_seconds", time.perf_counter()-planning_started)
+            if machine.state is not PickPlaceState.FAILED:
+                _transition(machine, PickPlaceState.FAILED, str(error))
+            return False
+
+        control_dt = float(config["control_dt"])
+        stride = int(round(control_dt/simulation.quad.dt))
+        if stride < 1 or not np.isclose(stride*simulation.quad.dt, control_dt):
+            raise ValueError("control_dt must be an integer multiple of the XML timestep")
+        cascaded = config.get("cascaded", {})
+        if cascaded:
+            CascadedConfig(**cascaded).apply_to(simulation.quad)
+        flight = CascadedController(simulation.quad.g, control_dt)
+        controller = AerialManipulatorController(flight, simulation.robot, simulation.quad)
+        execution = _Execution(simulation, controller, bundle, machine, stride,
+                               bool(settings.get("record_joint_trace", False)))
+        runtime.update(bundle=bundle, controller=controller, execution=execution)
+        return True
+
+    def step():
+        if runtime["execution"] is not None:
+            runtime["execution"].step()
+
+    def reset():
+        if runtime["execution"] is not None:
+            runtime["execution"].reset()
+
+    if config["visualize"]:
+        prepared = simulation.run_interactive(
+            step, reset, chase_camera=config["follow_camera"], prepare=prepare)
+    else:
+        prepared = prepare(lambda: None)
+
+    if not prepared:
+        bundle = runtime["bundle"]
+        result = _result(
+            machine, bundle.plans if bundle is not None else diagnostics.get("plans", {}),
+            simulation, runtime["controller"], runtime["execution"],
+            planning_metrics=_public_metrics(diagnostics))
         _print_result(result)
         return result
 
-    for marker, position in (("pick_target_marker", bundle.pick),
-                             ("place_target_marker", bundle.place),
-                             ("payload_marker", bundle.pick)):
-        simulation.set_mocap_position_ned(marker, position)
-    control_dt = float(config["control_dt"])
-    stride = int(round(control_dt/simulation.quad.dt))
-    if stride < 1 or not np.isclose(stride*simulation.quad.dt, control_dt):
-        raise ValueError("control_dt must be an integer multiple of the XML timestep")
-    cascaded = config.get("cascaded", {})
-    if cascaded:
-        CascadedConfig(**cascaded).apply_to(simulation.quad)
-    flight = CascadedController(simulation.quad.g, control_dt)
-    controller = AerialManipulatorController(flight, simulation.robot, simulation.quad)
-    execution = _Execution(simulation, controller, bundle, machine, stride,
-                           bool(settings.get("record_joint_trace", False)))
-    if config["visualize"]:
-        simulation.run_interactive(execution.step, execution.reset,
-                                   chase_camera=config["follow_camera"])
-    else:
-        duration = (bundle.plans["pick"].total_time+bundle.plans["place"].total_time
-                    + 2*float(settings["event_timeout"])+2*float(settings["settle_time"])+2.)
-        for _ in range(int(np.ceil(duration/simulation.quad.dt))):
+    bundle = runtime["bundle"]
+    controller = runtime["controller"]
+    execution = runtime["execution"]
+    if not config["visualize"]:
+        while not execution.done:
             execution.step()
             simulation.step()
-            if execution.done:
-                break
-    if not execution.done:
-        _transition(machine, PickPlaceState.FAILED, "execution_timeout")
     result = _result(machine, bundle.plans, simulation, controller, execution,
                      _public_metrics(diagnostics))
     _print_result(result)
@@ -161,22 +218,22 @@ def _leg_metrics(plan, planner, result, search_only):
     return metrics
 
 
-def plan_pick_place(simulation, config, *, deadline=None, diagnostics=None,
-                    search_only=False, settings=None, planner_config=None):
+def plan_pick_place(simulation, config, *, diagnostics=None,
+                    search_only=False, settings=None, planner_config=None,
+                    on_rrt_path: Callable[[str, np.ndarray], None] | None = None,
+                    on_minco_trajectory: Callable[
+                        [str, AerialManipulatorTrajectory], None] | None = None):
     """Plan and validate both pick/place legs through the production path."""
     diagnostics = {} if diagnostics is None else diagnostics
     started = time.perf_counter()
     planner_config = (AerialManipulatorMINCOConfig.from_mapping(
         config["aerial_manipulator_minco"]) if planner_config is None else planner_config)
-    deadline = started+planner_config.planning_budget_s if deadline is None else deadline
     settings = _task_settings(simulation, config) if settings is None else settings
     robot, bounds = simulation.robot, simulation.space_limits
     pick, place = (np.asarray(settings[key], dtype=float)
                    for key in ("pick_position_ned", "place_position_ned"))
     gap_open, gap_closed = float(settings["gripper_open"]), float(settings["gripper_closed"])
     occupancy, esdf = _planning_maps(simulation, planner_config, diagnostics)
-    if time.perf_counter() >= deadline:
-        raise TimeoutError("aerial_manipulator_minco planning budget exceeded during ESDF build")
     start_q = robot.configuration.copy()
     start = np.r_[start_q[:3], quaternion_yaw(start_q[3:7]), start_q[7:11]]
     pick_state, place_state = (make_terminal_state(
@@ -189,15 +246,16 @@ def plan_pick_place(simulation, config, *, deadline=None, diagnostics=None,
     requests = (("pick", start, pick_state, gap_open, False),
                 ("place", pick_state, place_state, gap_closed, True))
     for name, leg_start, goal, opening, carry in requests:
-        if not search_only and time.perf_counter() >= deadline:
-            raise TimeoutError("aerial_manipulator_minco planning budget exceeded")
-        leg_deadline = (time.perf_counter()+planner_config.planning_budget_s
-                        if search_only else deadline)
+        rrt_callback = (None if on_rrt_path is None else
+                        lambda states, leg_name=name: on_rrt_path(leg_name, states))
         try:
             result = planner.plan(leg_start, goal, robot=robot, esdf=esdf, quad=simulation.quad,
                 workspace_bounds=bounds, gripper_opening=opening, carry_payload=carry,
-                deadline=leg_deadline, occupancy=occupancy, search_only=search_only)
-        except (ValueError, RuntimeError, TimeoutError, np.linalg.LinAlgError) as error:
+                occupancy=occupancy, search_only=search_only,
+                on_rrt_path=rrt_callback)
+            if not search_only and on_minco_trajectory is not None:
+                on_minco_trajectory(name, result)
+        except (ValueError, RuntimeError, np.linalg.LinAlgError) as error:
             legs[name] = {**planner.last_metrics, "failure_reason": str(error)}
             diagnostics.update(plans=plans, searches=searches)
             if not search_only:
@@ -218,12 +276,6 @@ def plan_pick_place(simulation, config, *, deadline=None, diagnostics=None,
         legs[name] = _leg_metrics(result, planner, result, search_only)
         if not search_only:
             diagnostics.update(plans=plans, legs=legs)
-            if not result.validation_passed:
-                diagnostics.update(
-                    minco_optimizer_seconds=optimizer_seconds,
-                    minco_optimizer_calls=optimizer_calls,
-                    planning_seconds=time.perf_counter()-started)
-                raise RuntimeError(f"{name} trajectory failed final validation")
     diagnostics.update(legs=legs, planning_seconds=time.perf_counter()-started)
     if search_only:
         diagnostics["searches"] = searches
@@ -339,8 +391,6 @@ class _Execution:
             self.movement_durations.append(min(elapsed, trajectory.total_time))
             _transition(self.machine, PickPlaceState.GRASP if is_pick else PickPlaceState.RELEASE)
             self.stage_start, self.stable_since = now, None
-        elif elapsed > trajectory.total_time+float(self.settings["event_timeout"]):
-            _transition(self.machine, PickPlaceState.FAILED, f"{name}_event_timeout")
         return reference
 
     def _gripper_reference(self, state, now):
@@ -365,9 +415,6 @@ class _Execution:
                 _transition(self.machine, PickPlaceState.FAILED, "release_position_error")
             else:
                 _transition(self.machine, PickPlaceState.DONE)
-        elif elapsed > float(self.settings["event_timeout"]):
-            reason = "gripper_close_timeout" if grasping else "gripper_open_timeout"
-            _transition(self.machine, PickPlaceState.FAILED, reason)
         return reference
 
     def _settled(self, target, now):

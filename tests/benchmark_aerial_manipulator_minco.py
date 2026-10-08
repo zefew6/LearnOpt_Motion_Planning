@@ -97,7 +97,6 @@ def main():
     config = load_config(args.config)
     planner_config = AerialManipulatorMINCOConfig.from_mapping(
         config["aerial_manipulator_minco"])
-    budget = float(planner_config.planning_budget_s)
     runs = ([args._single_run_repeat] if args._single_run_repeat >= 0 else
             list(range(args.repeats)))
     environment = {
@@ -108,7 +107,6 @@ def main():
         "machine": platform.machine(),
         "processor": _processor_name(),
         "logical_cpus": os.cpu_count(),
-        "budget_s": budget,
         "planner_config": asdict(planner_config),
         "repeats": len(runs),
         "search_only": args.search_only,
@@ -240,7 +238,7 @@ def main():
                                   {name: len(plan.rrt_path)
                                    for name, plan in result["plans"].items()}),
             }
-        except (ValueError, RuntimeError, TimeoutError, np.linalg.LinAlgError) as error:
+        except (ValueError, RuntimeError, np.linalg.LinAlgError) as error:
             failures += 1
             leg_data = diagnostics.get("legs", {})
             leg_rrt = [leg_data[name].get("rrt_seconds") for name in ("pick", "place")
