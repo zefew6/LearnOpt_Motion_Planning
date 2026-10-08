@@ -27,7 +27,8 @@ __pycache__/
 notes*
 
 # Build and runtime artifacts
-c_generated_code/
+/c_generated_code/*
+!/c_generated_code/README.md
 *_ocp.json
 quadrotor_wrench_nmpc_ocp.json
 cache/

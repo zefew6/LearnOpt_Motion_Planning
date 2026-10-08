@@ -280,6 +280,7 @@ uav_ac/
 ├── envs/                     Generic MuJoCo Gym environment
 ├── planning/
 │   ├── geometry/             Convex geometry and collision utilities
+│   ├── native/               Optional Cython kernels and build maintenance
 │   ├── search/               RRT* path search
 │   ├── corridor/firi/        Convex safe-corridor construction
 │   ├── trajectory/           GCOPTER, GCS, BMTP, and Minimum Snap

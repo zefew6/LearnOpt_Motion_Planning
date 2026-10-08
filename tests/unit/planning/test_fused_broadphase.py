@@ -23,7 +23,7 @@ def context(grid, backend='auto', empty_pairs=False):
 @pytest.mark.parametrize('empty_pairs', [False, True])
 @pytest.mark.parametrize('narrow_phase', [False, True])
 def test_native_broadphase_matches_reference_at_random_and_boundary_points(empty_pairs, narrow_phase):
-    pytest.importorskip('uav_ac.planning.geometry._collision_broadphase')
+    pytest.importorskip('uav_ac.planning.native._collision_broadphase')
     occupied=np.zeros((6, 6, 6), dtype=bool)
     occupied[2:4, 2, 3]=True
     grid=GridMap(occupied, np.full(3, -.5), .2)

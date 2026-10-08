@@ -8,7 +8,19 @@ from scipy.spatial.transform import Rotation
 from ...geometry.grid_map import GridMap
 from ...geometry.collision_broadphase import RRTBroadphase
 from ..gcopter.mappings import polynomial_basis_matrix, smoothed_l1_array
-from .types import _flatness_attitude, _flatness_attitude_tangent_jacobian
+from .types import _flatness_attitude, _flatness_attitude_tangent_jacobian as _flatness_attitude_tangent_jacobian_python
+
+try:
+    from ...native import _aerial_constraints as _native_aerial
+except ImportError:
+    _native_aerial = None
+
+
+def _flatness_attitude_tangent_jacobian(acceleration, yaw, gravity=9.81):
+    if _native_aerial is not None:
+        return _native_aerial.flatness_attitude_tangent_jacobian(
+            np.asarray(acceleration, dtype=float), yaw, gravity)
+    return _flatness_attitude_tangent_jacobian_python(acceleration, yaw, gravity)
 
 
 _FIXED_GRIPPER_GAP_PAIRS = frozenset({
@@ -18,7 +30,7 @@ _FIXED_GRIPPER_GAP_PAIRS = frozenset({
 })
 
 
-def _flatness_body_rate_squared(acceleration, jerk, yaw, yaw_rate, gravity):
+def _flatness_body_rate_squared_python(acceleration, jerk, yaw, yaw_rate, gravity):
     """Return full flatness body-rate norm and its analytic input gradient.
 
     Forward derivatives are propagated through the normalized thrust axis and
@@ -110,10 +122,50 @@ def _flatness_body_rate_squared(acceleration, jerk, yaw, yaw_rate, gravity):
     return float(result[0]), result[1]
 
 
+def _flatness_body_rate_squared(acceleration, jerk, yaw, yaw_rate, gravity):
+    if _native_aerial is not None:
+        return _native_aerial.flatness_body_rate_squared(
+            np.asarray(acceleration, dtype=float), np.asarray(jerk, dtype=float),
+            yaw, yaw_rate, gravity)
+    return _flatness_body_rate_squared_python(acceleration, jerk, yaw, yaw_rate, gravity)
+
+
 def _add_penalty(values, jacobian, weight, epsilon):
     costs, derivatives = smoothed_l1_array(np.asarray(values, dtype=float), epsilon)
     return (weight*float(np.sum(costs)),
             weight*derivatives[..., None]*np.asarray(jacobian, dtype=float))
+
+
+def _exact_collision_penalty_python(
+        cost, state_gradient, acceleration_gradient, distances, jacobians, kinds,
+        attitude_jacobian, world_margin, self_margin, world_weight, self_weight,
+        epsilon, obstacle_violation, self_violation, payload_violation, minimum_clearance):
+    """Reference exact-witness reduction; inputs remain owned by the caller."""
+    grad = np.asarray(state_gradient, dtype=float).copy()
+    grad_acceleration = np.asarray(acceleration_gradient, dtype=float).copy()
+    for kind, distance, pair_jacobian in zip(kinds, distances, jacobians, strict=True):
+        margin = world_margin if kind == 1 else self_margin
+        violation = margin-float(distance)
+        exact_cost, exact_derivative = smoothed_l1_array(np.asarray([violation]), epsilon)
+        weight = world_weight if kind == 1 else self_weight
+        derivative = weight*float(exact_derivative[0])
+        cost += weight*float(exact_cost[0])
+        state_gradient = np.r_[
+            pair_jacobian[:3], pair_jacobian[3:6]@attitude_jacobian[:, 3],
+            pair_jacobian[6:10]]
+        acceleration_gradient = np.zeros(8)
+        acceleration_gradient[:3] = pair_jacobian[3:6]@attitude_jacobian[:, :3]
+        grad -= derivative*state_gradient
+        grad_acceleration -= derivative*acceleration_gradient
+        if kind == 1:
+            obstacle_violation = max(obstacle_violation, violation)
+        elif kind == 2:
+            self_violation = max(self_violation, violation)
+        else:
+            payload_violation = max(payload_violation, violation)
+        minimum_clearance = min(minimum_clearance, float(distance-margin))
+    return (cost, grad, grad_acceleration, obstacle_violation,
+            minimum_clearance, self_violation, payload_violation)
 
 
 class AerialManipulatorTrajectoryEvaluator:
@@ -543,40 +595,22 @@ class AerialManipulatorTrajectoryEvaluator:
                 with_jacobians=True, with_pose_jacobians=True,
                 jacobian_distance_thresholds=jacobian_thresholds,
                 check_limits=False)
-            for index, distance, pair_jacobian in zip(
-                    indices, exact["distances"], exact["jacobians"], strict=True):
-                kind = query_kinds[index]
-                margin = (self.config.obstacle_clearance
-                          if kind == 1 else self.config.self_clearance)
-                violation = margin-float(distance)
-                exact_cost, exact_derivative = smoothed_l1_array(
-                    np.asarray([violation]), self.config.smoothing_epsilon)
-                weight = (self.config.obstacle_weight
-                          if kind == 1 else self.config.self_collision_weight)
-                derivative = weight*float(exact_derivative[0])
-                cost += weight*float(exact_cost[0])
-                state_gradient = np.r_[
-                    pair_jacobian[:3],
-                    pair_jacobian[3:6]@attitude_jacobian[:, 3],
-                    pair_jacobian[6:10],
-                ]
-                acceleration_gradient = np.zeros(8)
-                acceleration_gradient[:3] = pair_jacobian[3:6]@attitude_jacobian[:, :3]
-                grad -= derivative*state_gradient
-                grad_acceleration -= derivative*acceleration_gradient
-                if kind == 1:
-                    obstacle_violation = max(obstacle_violation, violation)
-                elif kind == 2:
-                    self_violation = max(self_violation, violation)
-                else:
-                    payload_violation = max(payload_violation, violation)
-                minimum_clearance = min(minimum_clearance, float(distance-margin))
+            accumulate_exact = (_exact_collision_penalty_python if _native_aerial is None
+                                else _native_aerial.exact_collision_penalty)
+            return accumulate_exact(
+                cost, grad, grad_acceleration,
+                np.asarray(exact["distances"], dtype=float),
+                np.asarray(exact["jacobians"], dtype=float),
+                np.asarray(query_kinds[indices], dtype=np.int8), attitude_jacobian,
+                self.config.obstacle_clearance, self.config.self_clearance,
+                self.config.obstacle_weight, self.config.self_collision_weight,
+                self.config.smoothing_epsilon, obstacle_violation, self_violation,
+                payload_violation, minimum_clearance)
         return (cost, grad, grad_acceleration, obstacle_violation,
                 minimum_clearance, self_violation, payload_violation)
 
-    def sample_cost_gradient(self, sigma, velocity, acceleration, jerk):
-        """Return cost, gradients for orders 0..3, maximum raw violation and clearance."""
-        self.objective_samples += 1
+    def _physical_cost_gradient_python(self, sigma, velocity, acceleration, jerk):
+        """Reference arithmetic for physical constraints without collision queries."""
         cfg, quad = self.config, self.quad
         gradients = [np.zeros(8) for _ in range(4)]
         cost = 0.0
@@ -630,7 +664,7 @@ class AerialManipulatorTrajectoryEvaluator:
         sin_tilt = max(float(np.sqrt(max(1-cos_tilt*cos_tilt, 0.))), 1e-8)
         tilt_grad = (np.array([0., 0., 1.])-cos_tilt*body_z)/(rho*sin_tilt)
         add([tilt-quad.max_tilt_angle], [np.r_[tilt_grad, np.zeros(5)]], 2)
-        body_rate2, body_rate_gradient = _flatness_body_rate_squared(
+        body_rate2, body_rate_gradient = _flatness_body_rate_squared_python(
             acceleration[:3], jerk[:3], sigma[3], velocity[3], gravity)
         body_rate_violation = body_rate2-cfg.max_body_rate**2
         body_rate_cost, body_rate_derivative = smoothed_l1_array(
@@ -651,6 +685,29 @@ class AerialManipulatorTrajectoryEvaluator:
         workspace_jac[3+np.arange(3), np.arange(3)] = 1.
         add(workspace_values, workspace_jac, 0)
 
+        return cost, gradients, max_violation
+
+    def _physical_cost_gradient(self, sigma, velocity, acceleration, jerk):
+        if _native_aerial is None:
+            return self._physical_cost_gradient_python(sigma, velocity, acceleration, jerk)
+        cfg, quad = self.config, self.quad
+        parameters = np.array([
+            cfg.constraint_weight, cfg.smoothing_epsilon, cfg.max_speed,
+            cfg.max_acceleration, cfg.max_yaw_rate, cfg.max_yaw_acceleration,
+            cfg.max_body_rate, quad.g, self.mass, quad.min_thrust,
+            quad.max_thrust, quad.max_tilt_angle], dtype=float)
+        return _native_aerial.physical_cost_gradient(
+            *(np.asarray(value, dtype=float) for value in (sigma, velocity, acceleration, jerk)),
+            np.asarray(self.robot.limits.joint_lower, dtype=float),
+            np.asarray(self.robot.limits.joint_upper, dtype=float), self.bounds,
+            parameters, np.asarray(cfg.joint_velocity_limits, dtype=float),
+            np.asarray(cfg.joint_acceleration_limits, dtype=float))
+
+    def sample_cost_gradient(self, sigma, velocity, acceleration, jerk):
+        """Return cost, gradients for orders 0..3, maximum raw violation and clearance."""
+        self.objective_samples += 1
+        cost, gradients, max_violation = self._physical_cost_gradient(
+            sigma, velocity, acceleration, jerk)
         collision_cost, collision_gradient, collision_acceleration_gradient, \
             collision_violation, clearance, self_violation, payload_violation = \
             self.collision_cost_gradient(sigma, acceleration)
@@ -663,6 +720,27 @@ class AerialManipulatorTrajectoryEvaluator:
         return cost, gradients, max_violation, clearance
 
     def integrated_penalty(self, durations, coefficients):
+        if _native_aerial is None:
+            return self._integrated_penalty_python(durations, coefficients)
+        floor = (self.config.integral_resolution_floor_loaded if self.carry_payload
+                 else self.config.integral_resolution_floor_unloaded)
+        resolution = max(self.config.integral_resolution, floor)
+        self.last_violation = -np.inf
+        self.minimum_clearance = np.inf
+
+        def sample(*values):
+            result = self.sample_cost_gradient(*values)
+            self.last_violation = max(self.last_violation, result[2])
+            self.minimum_clearance = min(self.minimum_clearance, result[3])
+            return result
+
+        result = _native_aerial.integrated_penalty(
+            np.asarray(durations, dtype=float), np.asarray(coefficients, dtype=float),
+            resolution, sample)
+        self.last_violation, self.minimum_clearance = result[3:]
+        return result[:3]
+
+    def _integrated_penalty_python(self, durations, coefficients):
         pieces = len(durations)
         # Preserve the narrow-passage defaults while allowing the wider
         # workcell scene to use fewer optimization quadrature points. Dense

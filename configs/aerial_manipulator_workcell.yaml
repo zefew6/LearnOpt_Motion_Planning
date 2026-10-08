@@ -21,7 +21,7 @@ aerial_manipulator_minco:
   obstacle_weight: 200000.0
   esdf_resolution: 0.02
   esdf_discretization_margin: 0.035
-  minco_sample_spacing_m: 1.5
+  minco_sample_spacing_m: 2.0
   # Coarse optimization quadrature is followed by dense full-geometry validation.
   integral_resolution: 2
   integral_resolution_floor_unloaded: 2

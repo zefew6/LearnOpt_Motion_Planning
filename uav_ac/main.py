@@ -16,8 +16,8 @@ os.environ.setdefault("OMP_NUM_THREADS", "1")
 from uav_ac.runners.config import (
     CONTROLLERS, DEFAULT_CONFIG, MODEL_DIRECTORY, PLANNERS, ROOT, TASKS, load_config,
 )
-from uav_ac.control.factory import build_controller
-from uav_ac.planning.pipeline.flight import plan_trajectory
+# from uav_ac.control.factory import build_controller
+# from uav_ac.planning.pipeline.flight import plan_trajectory
 
 
 def run(config: dict) -> np.ndarray | dict:

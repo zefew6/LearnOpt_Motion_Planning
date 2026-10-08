@@ -3,6 +3,11 @@
 import numpy as np
 from scipy.linalg.lapack import dgbtrf, dgbtrs
 
+try:
+    from uav_ac.planning.native import _trajectory_math as _native_math
+except ImportError:
+    _native_math = None
+
 
 class BandedPLU:
     """Pivoted LAPACK factorization reusable for a banded system and transpose."""
@@ -94,7 +99,7 @@ class MINCOQuintic:
             matrix[rows, columns] = storage[12 - offset, column:column + length]
         return matrix
 
-    def _band_storage(self, times: np.ndarray) -> np.ndarray:
+    def _band_storage_reference(self, times: np.ndarray) -> np.ndarray:
         count = self.pieces
         storage = np.zeros((19, 6 * count), dtype=float, order="F")
 
@@ -144,7 +149,7 @@ class MINCOQuintic:
         return storage
 
     @staticmethod
-    def jerk_energy(
+    def _jerk_energy_reference(
             coefficients: np.ndarray,
             times: np.ndarray,
             dimension_weights: np.ndarray | None = None,
@@ -176,7 +181,7 @@ class MINCOQuintic:
                       + 2880*dot54*t3 + 3600*dot55*t4)
         return float(energy), gradient.reshape(-1, 3), grad_times
 
-    def propagate_gradient(self, system: BandedPLU, coefficients: np.ndarray,
+    def _propagate_gradient_reference(self, system: BandedPLU, coefficients: np.ndarray,
                            times: np.ndarray, grad_coefficients: np.ndarray,
                            direct_grad_times: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         adjoint = system.solve(grad_coefficients, transpose=True)
@@ -203,6 +208,51 @@ class MINCOQuintic:
         grad_times[-1] += np.sum(-velocity[-1]*adjoint[-3]
                                  - acceleration[-1]*adjoint[-2] - jerk[-1]*adjoint[-1])
         return grad_points, grad_times
+
+    def _band_storage(self, times: np.ndarray) -> np.ndarray:
+        values = np.asarray(times, dtype=float)
+        if _native_math is None:
+            return self._band_storage_reference(values)
+        if values.shape != (self.pieces,):
+            raise ValueError("times must contain one duration per piece")
+        return _native_math.band_storage(np.ascontiguousarray(values))
+
+    @staticmethod
+    def jerk_energy(coefficients: np.ndarray, times: np.ndarray,
+                    dimension_weights: np.ndarray | None = None
+                    ) -> tuple[float, np.ndarray, np.ndarray]:
+        values = np.asarray(coefficients)
+        durations = np.asarray(times, dtype=float)
+        # The reference preserves zeros_like's coefficient dtype. Retain it for
+        # unusual dtypes rather than silently changing the public gradient.
+        if (_native_math is None or values.dtype != np.float64 or durations.ndim != 1
+                or len(durations) == 0):
+            return MINCOQuintic._jerk_energy_reference(coefficients, times, dimension_weights)
+        dimensions = values.shape[-1] if values.ndim == 3 else values.size // (6*len(durations))
+        blocks = values.reshape(len(durations), 6, dimensions)
+        weights = np.ones(dimensions) if dimension_weights is None else np.asarray(dimension_weights, dtype=float)
+        if weights.shape != (dimensions,) or np.any(weights < 0.0):
+            raise ValueError("dimension_weights must be non-negative with one value per dimension")
+        return _native_math.jerk_energy(np.ascontiguousarray(blocks),
+            np.ascontiguousarray(durations), np.ascontiguousarray(weights))
+
+    def propagate_gradient(self, system: BandedPLU, coefficients: np.ndarray,
+                           times: np.ndarray, grad_coefficients: np.ndarray,
+                           direct_grad_times: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        if _native_math is None or np.asarray(direct_grad_times).dtype != np.float64:
+            return self._propagate_gradient_reference(system, coefficients, times,
+                                                     grad_coefficients, direct_grad_times)
+        durations = np.asarray(times, dtype=float)
+        direct = np.asarray(direct_grad_times, dtype=float)
+        if durations.shape != (self.pieces,) or direct.shape != (self.pieces,):
+            raise ValueError("times and direct gradients must have one value per piece")
+        blocks = np.asarray(coefficients, dtype=float).reshape(self.pieces, 6, self.dimensions)
+        gradients = np.asarray(grad_coefficients, dtype=float)
+        if gradients.shape != (6*self.pieces, self.dimensions):
+            raise ValueError("coefficient gradients must match the solved coefficient shape")
+        adjoint = system.solve(gradients, transpose=True)
+        return _native_math.adjoint_gradients(np.ascontiguousarray(blocks),
+            np.ascontiguousarray(durations), np.ascontiguousarray(adjoint), np.ascontiguousarray(direct))
 
 
 __all__ = ["BandedPLU", "MINCOQuintic"]

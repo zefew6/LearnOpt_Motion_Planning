@@ -80,14 +80,31 @@ dense validation use the full roll/pitch/yaw recovered from flatness. Their
 collision costs differentiate through acceleration and yaw, and exact MuJoCo
 distances confirm close geometry contacts.
 
-RRT occupancy, self/payload sphere tests and world AABB candidate selection share
-an optional Cython broad-phase kernel. Normal package builds include the extension;
-for local source edits, rebuild with `.venv/bin/python setup.py build_ext --inplace`.
-There is no query-time compilation. Without the extension, a NumPy reference path
-remains available. `rrt_broadphase_backend` identifies the active implementation;
-`rrt_broadphase_seconds` reports the fused work rather than attributing it to the
-older separate occupancy/sphere/AABB timers. Exact MuJoCo distance checks remain
-unchanged. Batch candidates reuse their coarse results during exact refinement.
+Native planning source is grouped in `uav_ac/planning/native/`:
+
+- `_collision_broadphase.pyx`: fused RRT occupancy/self/payload/AABB candidates.
+- `_trajectory_math.pyx`: polynomial batches, quintic band assembly, jerk-energy
+  derivatives and adjoint assembly. LAPACK factorization/solves remain unchanged.
+- `_aerial_constraints.pyx`: physical constraints, flatness derivatives, sample
+  integration and exact-distance penalty/gradient accumulation. Exact MuJoCo
+  geometry queries remain unchanged.
+
+Generated C, objects and local libraries are classified under
+`c_generated_code/cython/{c,obj,lib}`; wheels use its `wheels/` directory.
+Existing acados MPC files remain at the legacy generated-code root. See
+`c_generated_code/README.md` for ownership. Maintain planning output with:
+
+```bash
+.venv/bin/python -m uav_ac.planning.native build
+.venv/bin/python -m uav_ac.planning.native status
+.venv/bin/python -m uav_ac.planning.native clean
+```
+
+`clean` removes only the Cython subtree, never MPC files. Rebuild/restart after
+editing native source. Compilation never occurs during a planning query; reference
+fallbacks remain available without extensions. `rrt_broadphase_backend` identifies
+its active implementation, and `rrt_broadphase_seconds` measures fused coarse work.
+Batch candidates reuse those results during exact refinement.
 
 A three-dimensional, base-center grid A* route is computed from that same
 occupancy grid and used only to shape the early OMPL position region. Its primary

@@ -7,7 +7,7 @@ controller: rl
 wind: none
 # Match the MLP replay: follow the vehicle from behind.
 follow_camera: true
-seed: 85
+seed: 8
 
 rl:
   checkpoint: ../runs/gate_racing/mlp_random_v3/best_model.zip

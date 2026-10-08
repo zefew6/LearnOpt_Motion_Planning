@@ -31,7 +31,7 @@ include = ["uav_ac*"]
 
 [tool.setuptools.package-data]
 uav_ac = [
-    "planning/geometry/*.pyx",
+    "planning/native/*.pyx",
     "simulation/models/*.xml",
     "simulation/model/*.xml",
     "rl/acmpc/vendor/LICENSE.mit",

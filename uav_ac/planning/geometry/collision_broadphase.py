@@ -7,7 +7,7 @@ import numpy as np
 from .grid_map import GridMap
 
 try:
-    from ._collision_broadphase import query as _native_query
+    from ..native._collision_broadphase import query as _native_query
 except ImportError:
     _native_query = None
 
