@@ -89,20 +89,11 @@ Native planning source is grouped in `uav_ac/planning/native/`:
   integration and exact-distance penalty/gradient accumulation. Exact MuJoCo
   geometry queries remain unchanged.
 
-Generated C, objects and local libraries are classified under
-`c_generated_code/cython/{c,obj,lib}`; wheels use its `wheels/` directory.
-Existing acados MPC files remain at the legacy generated-code root. See
-`c_generated_code/README.md` for ownership. Maintain planning output with:
-
-```bash
-.venv/bin/python -m uav_ac.planning.native build
-.venv/bin/python -m uav_ac.planning.native status
-.venv/bin/python -m uav_ac.planning.native clean
-```
-
-`clean` removes only the Cython subtree, never MPC files. Rebuild/restart after
-editing native source. Compilation never occurs during a planning query; reference
-fallbacks remain available without extensions. `rrt_broadphase_backend` identifies
+Installation and maintenance are described in the [native planning guide](native/README.md).
+Generated planning output stays under `c_generated_code/cython/`; existing acados
+MPC output keeps its original paths. Compilation never occurs during a planning
+query; reference fallbacks remain available without extensions.
+`rrt_broadphase_backend` identifies
 its active implementation, and `rrt_broadphase_seconds` measures fused coarse work.
 Batch candidates reuse those results during exact refinement.
 

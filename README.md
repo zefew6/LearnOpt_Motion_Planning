@@ -18,7 +18,7 @@ Built on [Mdhvince/UAV-Autonomous-control](https://github.com/Mdhvince/UAV-Auton
 - [x] Add an aerial manipulator platform for research on whole-body motion planning and control
 - [ ] Implement diffusion-based motion planning
 
-The flight CLI supports trajectory tracking; the RL training/evaluation entrypoints also support gate racing without a planner or trajectory bank. Implementation details and experiment workflows are documented in the [planning library guide](uav_ac/planning/README.md), [robot guide](uav_ac/robot/README.md), [RL workflow guide](uav_ac/rl/README.md), [gate racing guide](docs/gate_racing.md), and [contributor guide](AGENT.md).
+The flight CLI supports trajectory tracking; the RL training/evaluation entrypoints also support gate racing without a planner or trajectory bank. Implementation details and experiment workflows are documented in the [planning library guide](uav_ac/planning/README.md), [robot guide](uav_ac/robot/README.md), [RL workflow guide](uav_ac/rl/README.md), [gate racing guide](docs/gate_racing.md), and [contributor guide](AGENTS.md).
 
 ## Experiment videos
 
@@ -140,17 +140,25 @@ Each update is convex; the overall alternating method is local and depends on it
 
 ## Setup and running
 
-Python 3.13, [uv](https://docs.astral.sh/uv/), and a graphical desktop for MuJoCo are required.
+Install [uv](https://docs.astral.sh/uv/) and use a graphical desktop for the MuJoCo viewer. From the repository root:
 
 ```bash
 uv sync --python 3.13
+.venv/bin/python -m uav_ac.main --config configs/flight_quickstart.yaml
 ```
 
-Set `scene`, `planner`, and `controller` in `configs/flight.yaml`, then run:
+This first-run configuration uses the lab-course scene, minimum-snap planning,
+and cascaded control; it needs neither acados nor a trained checkpoint. The viewer
+opens with the planned trajectory and runs the simulation; close it to exit.
+`configs/flight.yaml` is the configurable MPC example and requires the
+[acados setup](#acados-mpc) below.
 
-```bash
-.venv/bin/python -m uav_ac.main --config configs/flight.yaml
-```
+Set `scene`, `planner`, and `controller` in `configs/flight.yaml`. Installation
+builds optional Cython planning extensions when a C compiler is available;
+Python/NumPy fallbacks are available otherwise. Generated files are local build
+products and do not need to be downloaded or committed. See the
+[native planning guide](uav_ac/planning/native/README.md) for verification and
+rebuilding, and [acados MPC setup](#acados-mpc) if using `controller: mpc`.
 
 ## Flight configuration
 
@@ -212,7 +220,7 @@ uv pip install -e "$ACADOS_SOURCE_DIR/interfaces/acados_template"
 .venv/bin/python -c "from acados_template import AcadosOcpSolver"
 ```
 
-Replace `/path/to/acados` with your installation path. Select the controller in `configs/flight.yaml`:
+Replace `/path/to/acados` with your installation path. The controller generates and compiles its solver on first use, then reuses matching cached output in `c_generated_code/`. These generated files are not shipped in Git and are independent of the planning Cython build. Select the controller in `configs/flight.yaml`:
 
 ```yaml
 controller: mpc
@@ -261,7 +269,7 @@ Checkpoint paths are relative to the YAML file. Keep `rl_config.json` beside the
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 .venv/bin/python -m pytest -o addopts='' -q
 ```
 
-See [AGENT.md](AGENT.md) for contributor guidance, module contracts, and coverage checks.
+See [AGENTS.md](AGENTS.md) for contributor guidance, module contracts, and coverage checks.
 
 ## Repository structure
 
@@ -305,7 +313,7 @@ docs/                         Figures and documentation media
 runs/                         Local trajectory banks and trained models
 ```
 
-For reusable APIs and extension points, see the [planning guide](uav_ac/planning/README.md) and [contributor guide](AGENT.md).
+For reusable APIs and extension points, see the [planning guide](uav_ac/planning/README.md) and [contributor guide](AGENTS.md).
 
 ## References
 

@@ -1,0 +1,9 @@
+# First viewer run: no acados installation or trained checkpoint required.
+scene: lab_course
+planner: mini_snap
+controller: cascaded
+speed: 2.0
+wind: none
+visualize: false
+follow_camera: true
+seed: 5
