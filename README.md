@@ -30,7 +30,7 @@ the FIRI figures below.
 
 ### Aerial Manipulator Whole Body Planning
 
-https://github.com/user-attachments/assets/b4f14005-0e7b-49bd-88d0-56cabdfcbd6a
+https://github.com/user-attachments/assets/accd3431-8674-4ed8-9d4f-f144f21c9bfa
 
 **Planner:** MINCO-like  
 **Controller:** PID
