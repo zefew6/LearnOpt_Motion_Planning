@@ -37,3 +37,26 @@ uav_ac = [
     "rl/acmpc/vendor/LICENSE.mit",
     "rl/acmpc/vendor/SOURCE.md",
 ]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "--cov=uav_ac --cov-config=pyproject.toml --cov-fail-under=80"
+
+[tool.coverage.run]
+omit = [
+    "*/__init__.py",
+    "*/main.py",
+    "*/control/mpc_controller.py",
+    "*/record_experiments.py",
+    "*/simulation/recording.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]

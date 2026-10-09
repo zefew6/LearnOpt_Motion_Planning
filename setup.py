@@ -39,6 +39,10 @@ extensions = [Extension(
     for name in KERNELS]
 
 setup(cmdclass={'build': PlanningBuild, 'build_ext': PlanningBuildExt},
+      command_options={
+          'bdist_wheel': {'dist_dir': ('setup.py', str(NATIVE_BUILD / 'wheels'))},
+          'sdist': {'dist_dir': ('setup.py', str(NATIVE_BUILD / 'distributions'))},
+      },
       ext_modules=cythonize(
           extensions, build_dir=str(NATIVE_BUILD / 'c'),
           compiler_directives={'language_level': 3, 'boundscheck': False,

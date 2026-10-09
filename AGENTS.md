@@ -160,6 +160,10 @@ request. Do not claim successful flight from successful planning alone.
 
 ## Verification when changing code
 
+Test discovery, coverage exclusions, and the 80% coverage threshold are configured
+in `pyproject.toml` (`tool.pytest` and `tool.coverage`). Build output defaults
+for wheel/sdist live in `setup.py`.
+
 Run focused tests first, then the full relevant suite:
 
 ```bash

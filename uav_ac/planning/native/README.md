@@ -49,6 +49,7 @@ Generated artifacts are machine-specific and ignored by Git:
 | `c_generated_code/cython/obj/` | Compiler objects grouped by platform/Python |
 | `c_generated_code/cython/lib/` | Local binaries and package build output |
 | `c_generated_code/cython/wheels/` | Built wheels |
+| `c_generated_code/cython/distributions/` | Source distributions |
 | `c_generated_code/cython/archive/` | Retired local build artifacts |
 
 Source checkouts load extensions from the local `lib/` directory; installed
