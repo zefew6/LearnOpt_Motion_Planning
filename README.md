@@ -27,19 +27,20 @@ orange curve is the planned trajectory and the blue curve is the actual flight
 path. Convex regions are not drawn in the videos; they are shown separately in
 the FIRI figures below.
 
+
+### Aerial Manipulator Whole Body Planning
+
+https://github.com/user-attachments/assets/b4f14005-0e7b-49bd-88d0-56cabdfcbd6a
+
+**Planner:** MINCO-like  
+**Controller:** PID
+
 ### GCOPTER + MPC
 
 https://github.com/user-attachments/assets/b8622729-85a3-48b4-996e-c6940f82b589
 
 **Planner:** FIRI + GCOPTER  
 **Controller:** MPC
-
-### Minimum Snap + Cascaded
-
-https://github.com/user-attachments/assets/21c21263-08e6-4232-9e44-911eec212278
-
-**Planner:** Minimum Snap baseline  
-**Controller:** Cascaded
 
 ### GCS + MPC
 
