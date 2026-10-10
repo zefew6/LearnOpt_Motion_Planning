@@ -1,4 +1,4 @@
-"""Analytic sampled penalties for whole-body 8-D quintic trajectories."""
+"""Whole-body collision contexts shared by search and optimization."""
 
 import time
 
@@ -8,7 +8,7 @@ from scipy.spatial.transform import Rotation
 from ...geometry.grid_map import GridMap
 from ...geometry.collision_broadphase import RRTBroadphase
 from ..gcopter.mappings import polynomial_basis_matrix, smoothed_l1_array
-from .types import _flatness_attitude, _flatness_attitude_tangent_jacobian as _flatness_attitude_tangent_jacobian_python
+from .flatness import _flatness_attitude, _flatness_attitude_tangent_jacobian as _flatness_attitude_tangent_jacobian_python
 
 try:
     from ...native import _aerial_constraints as _native_aerial
@@ -28,112 +28,6 @@ _FIXED_GRIPPER_GAP_PAIRS = frozenset({
     frozenset(("gripper_finger_left", "gripper_pad_right")),
     frozenset(("gripper_pad_left", "gripper_finger_right")),
 })
-
-
-def _flatness_body_rate_squared_python(acceleration, jerk, yaw, yaw_rate, gravity):
-    """Return full flatness body-rate norm and its analytic input gradient.
-
-    Forward derivatives are propagated through the normalized thrust axis and
-    heading construction; the input order is acceleration, jerk, yaw, yaw rate.
-    """
-    dimensions = 8
-
-    def vector(values, offset):
-        values = np.asarray(values, dtype=float)
-        gradient = np.zeros((3, dimensions))
-        gradient[np.arange(3), offset+np.arange(3)] = 1.
-        return values, gradient
-
-    def constant_vector(values):
-        return np.asarray(values, dtype=float), np.zeros((3, dimensions))
-
-    def scalar(value, index=None):
-        gradient = np.zeros(dimensions)
-        if index is not None:
-            gradient[index] = 1.
-        return float(value), gradient
-
-    def vscale(value, factor):
-        return (value[0]*factor[0],
-                value[1]*factor[0]+value[0][:, None]*factor[1])
-
-    def vadd(first, second):
-        return first[0]+second[0], first[1]+second[1]
-
-    def vsub(first, second):
-        return first[0]-second[0], first[1]-second[1]
-
-    def dot(first, second):
-        return (float(np.dot(first[0], second[0])),
-                first[1].T@second[0]+second[1].T@first[0])
-
-    def cross(first, second):
-        derivative = (np.cross(first[1].T, np.broadcast_to(second[0], (dimensions, 3)))
-                      +np.cross(np.broadcast_to(first[0], (dimensions, 3)),
-                                second[1].T))
-        return np.cross(first[0], second[0]), derivative.T
-
-    def sqrt(value):
-        root = np.sqrt(max(value[0], 1e-16))
-        return float(root), value[1]/(2*root)
-
-    def multiply(first, second):
-        return first[0]*second[0], first[1]*second[0]+second[1]*first[0]
-
-    def divide(first, second):
-        return first[0]/second[0], (first[1]*second[0]
-                                     -second[1]*first[0])/(second[0]**2)
-
-    acceleration = vector(acceleration, 0)
-    jerk = vector(jerk, 3)
-    yaw = scalar(yaw, 6)
-    yaw_rate = scalar(yaw_rate, 7)
-    force = vscale(acceleration, scalar(-1.))
-    force = (force[0]+np.array([0., 0., gravity]), force[1])
-    force_rate = vscale(jerk, scalar(-1.))
-    magnitude = sqrt(dot(force, force))
-    body_z = vscale(force, divide(scalar(1.), magnitude))
-    force_along_body = dot(body_z, force_rate)
-    body_z_rate = vscale(
-        vsub(force_rate, vscale(body_z, force_along_body)),
-        divide(scalar(1.), magnitude))
-
-    cosine = (np.cos(yaw[0]), -np.sin(yaw[0])*yaw[1])
-    sine = (np.sin(yaw[0]), np.cos(yaw[0])*yaw[1])
-    heading = (np.array([cosine[0], sine[0], 0.]),
-               np.stack((cosine[1], sine[1], np.zeros(dimensions))))
-    cross_axis = cross(body_z, heading)
-    cross_norm = sqrt(dot(cross_axis, cross_axis))
-    cross_norm = (max(cross_norm[0], 1e-8), cross_norm[1])
-    body_y = vscale(cross_axis, divide(scalar(1.), cross_norm))
-    alignment = dot(body_z, heading)
-    yaw_component = divide(
-        vsub(scalar(0.), multiply(dot(body_y, body_z_rate), alignment)),
-        cross_norm)
-    heading_yaw_component = divide(
-        multiply((float(body_z[0][2]), body_z[1][2]), yaw_rate),
-        multiply(cross_norm, cross_norm))
-    axial_rate = (yaw_component[0]+heading_yaw_component[0],
-                  yaw_component[1]+heading_yaw_component[1])
-    transverse_rate_squared = dot(body_z_rate, body_z_rate)
-    axial_rate_squared = multiply(axial_rate, axial_rate)
-    result = (transverse_rate_squared[0]+axial_rate_squared[0],
-              transverse_rate_squared[1]+axial_rate_squared[1])
-    return float(result[0]), result[1]
-
-
-def _flatness_body_rate_squared(acceleration, jerk, yaw, yaw_rate, gravity):
-    if _native_aerial is not None:
-        return _native_aerial.flatness_body_rate_squared(
-            np.asarray(acceleration, dtype=float), np.asarray(jerk, dtype=float),
-            yaw, yaw_rate, gravity)
-    return _flatness_body_rate_squared_python(acceleration, jerk, yaw, yaw_rate, gravity)
-
-
-def _add_penalty(values, jacobian, weight, epsilon):
-    costs, derivatives = smoothed_l1_array(np.asarray(values, dtype=float), epsilon)
-    return (weight*float(np.sum(costs)),
-            weight*derivatives[..., None]*np.asarray(jacobian, dtype=float))
 
 
 def _exact_collision_penalty_python(
@@ -168,10 +62,11 @@ def _exact_collision_penalty_python(
             minimum_clearance, self_violation, payload_violation)
 
 
-class AerialManipulatorTrajectoryEvaluator:
+class WholeBodyCollision:
     def __init__(self, robot, esdf, quad, config, workspace_bounds,
                  gripper_opening, carry_payload, occupancy=None):
         self.robot, self.esdf, self.quad, self.config = robot, esdf, quad, config
+        self.use_exact_world_penalty = True
         self.objective_samples = 0
         self.validation_samples = 0
         self.mass = robot.mass
@@ -199,6 +94,11 @@ class AerialManipulatorTrajectoryEvaluator:
         self.rrt_self_candidates = 0
         self.rrt_payload_candidates = 0
         self.rrt_exact_rejected_states = 0
+        spheres = getattr(robot, 'planning_collision_spheres', lambda: ())()
+        self.manual_spheres = bool(spheres)
+        if self.manual_spheres:
+            self._initialize_manual_spheres(spheres)
+            return
         geometry_spheres = []
         geoms = robot.collision_geometries()
         for geom_index, geom in enumerate(geoms):
@@ -335,8 +235,140 @@ class AerialManipulatorTrajectoryEvaluator:
             query_count=len(self._query_pairs.ids), self_clearance=self.config.self_clearance)
         self.rrt_broadphase_seconds = 0.0
 
+    def _initialize_manual_spheres(self, spheres):
+        """Immutable metadata for the authored robot; pair omissions are explicit."""
+        expected = tuple(f'planning_sphere_{i:02d}' for i in range(1, 22))
+        if tuple(s['name'] for s in spheres) != expected:
+            raise ValueError('manual aerial collision model requires planning_sphere_01..21')
+        self.geometry = [(s['body'], s['center'], s['radius'], i)
+                         for i, s in enumerate(spheres)]
+        self.sphere_names = tuple(s['body'] for s in spheres)
+        self.sphere_points = np.array([s['center'] for s in spheres])
+        self.sphere_radii = np.array([s['radius'] for s in spheres])
+        self.geom_names = expected
+        # One-based site identities from the reviewed mechanical layout.
+        mount = {(1, 6), (1, 7), (1, 8)}
+        connection = {(6, 8), (7, 8), (10, 11), (12, 14), (13, 14),
+                      (17, 18), (17, 20), (10, 12)}
+        pairs, omissions = [], {}
+        welded = {'arm_link_3_body', 'gripper_palm_body'}
+        self.rrt_fixed_clearance_self_pairs_skipped = 0
+        for i, a in enumerate(spheres):
+            for j in range(i+1, len(spheres)):
+                b = spheres[j]
+                reason = None
+                if a['body'] == b['body'] or {a['body'], b['body']} == welded:
+                    reason = 'rigid_assembly'
+                elif (i+1, j+1) in mount:
+                    reason = 'fixed_mount'
+                elif (i+1, j+1) in connection:
+                    reason = 'joint_connection'
+                elif ({a['body'], b['body']} == {'gripper_left_body', 'gripper_right_body'}
+                      and self.config.self_clearance <= .02):
+                    reason = 'opposing_fingers_minimum_gap'
+                    self.rrt_fixed_clearance_self_pairs_skipped += 1
+                if reason:
+                    omissions[(i, j)] = reason
+                else:
+                    pairs.append((i, j))
+        self.self_pairs = np.array(pairs, dtype=int).reshape(-1, 2)
+        self.excluded_self_pairs = omissions
+        self.self_pair_names = tuple((expected[i], expected[j]) for i, j in pairs)
+        self.self_geom_pairs = self.self_pair_names
+        gripper = {'gripper_palm_body', 'gripper_left_body', 'gripper_right_body'}
+        self.payload_body, self.payload_local = self.robot.frame_point('grasp')
+        self.payload_pairs = np.array([(i, len(spheres)) for i, s in enumerate(spheres)
+            if self.carry_payload and s['body'] not in gripper], dtype=int).reshape(-1, 2)
+        if self.carry_payload:
+            self.sphere_names += (self.payload_body,)
+            self.sphere_points = np.vstack((self.sphere_points, self.payload_local))
+            self.sphere_radii = np.r_[self.sphere_radii, self.robot.payload_radius]
+        self.sphere_geom_indices = np.full(len(self.sphere_radii), -1, dtype=int)
+        for array in (self.sphere_points, self.sphere_radii, self.self_pairs, self.payload_pairs):
+            array.setflags(write=False)
+        self.rrt_broadphase_seconds = 0.
+
+    def _manual_feasibility_batch(self, positions, margin):
+        """Sphere/ESDF feasibility, avoiding cube occupancy false positives."""
+        positions = np.asarray(positions, dtype=float)
+        clipped = np.clip(positions, self.esdf.origin, self.esdf.upper)
+        distances = self.esdf.distance(clipped.reshape(-1, 3)).reshape(positions.shape[:2])
+        outside = np.linalg.norm(positions-clipped, axis=2)
+        environment = np.max(self.sphere_radii+margin+self.esdf_discretization_margin
+                             -distances+outside, axis=1)
+        # No extrapolation into unknown space, including sphere extents.
+        boundary = np.max(np.maximum(self.esdf.origin+self.sphere_radii[None,:,None]-positions,
+                         positions-(self.esdf.upper-self.sphere_radii[None,:,None])), axis=(1,2))
+        environment = np.maximum(environment, boundary)
+        values = []
+        for pairs in (self.self_pairs, self.payload_pairs):
+            if not len(pairs):
+                values.append(np.full(len(positions), -np.inf))
+                continue
+            first, second = pairs.T
+            length = np.linalg.norm(positions[:,first]-positions[:,second], axis=2)
+            values.append(np.max(self.sphere_radii[first]+self.sphere_radii[second]
+                                 +self.config.self_clearance-length, axis=1))
+        return environment, values[0], values[1]
+
+    def _manual_collision_cost_gradient(self, sigma, acceleration):
+        positions, jacobians, acceleration_jacobians, _, _, _ = self._full_pose_geometry(sigma, acceleration)
+        clipped = np.clip(positions, self.esdf.origin, self.esdf.upper)
+        distances, gradients = self.esdf.distance_and_gradient(clipped)
+        outside_delta = positions-clipped
+        outside_norm = np.linalg.norm(outside_delta, axis=1)
+        outside = outside_norm > 0.
+        signed_gradient = gradients.copy()
+        signed_gradient[(positions < self.esdf.origin) | (positions > self.esdf.upper)] = 0.
+        signed_gradient[outside] -= outside_delta[outside]/outside_norm[outside, None]
+        signed = distances-outside_norm
+        violations = self.sphere_radii+self.config.obstacle_clearance+self.esdf_discretization_margin-signed
+        boundary = self.config.obstacle_clearance+self.esdf_discretization_margin+outside_norm
+        active = outside & (boundary > violations)
+        violations[outside] = np.maximum(violations[outside], boundary[outside])
+        normals = -signed_gradient
+        normals[active] = outside_delta[active]/outside_norm[active, None]
+        lower_face = self.esdf.origin+self.sphere_radii[:,None]-positions
+        upper_face = positions-(self.esdf.upper-self.sphere_radii[:,None])
+        faces = np.maximum(lower_face, upper_face)
+        axis = np.argmax(faces, axis=1)
+        face_violation = faces[np.arange(len(positions)), axis]
+        face_active = face_violation > violations
+        violations = np.maximum(violations, face_violation)
+        normals[face_active] = 0.
+        ids = np.flatnonzero(face_active)
+        normals[ids, axis[ids]] = np.where(
+            lower_face[ids,axis[ids]] > upper_face[ids,axis[ids]], -1., 1.)
+        costs, derivatives = smoothed_l1_array(violations, self.config.smoothing_epsilon)
+        weights = self.config.obstacle_weight*derivatives
+        cost = self.config.obstacle_weight*float(costs.sum())
+        gradient = np.einsum('n,nci,nc->i', weights, jacobians, normals)
+        gradient_acceleration = np.einsum('n,nci,nc->i', weights, acceleration_jacobians, normals)
+        clearance = min(float(np.min(signed-self.sphere_radii, initial=np.inf)),
+                        -float(np.max(face_violation)))
+        pair_violations = []
+        for pairs in (self.self_pairs, self.payload_pairs):
+            if not len(pairs):
+                pair_violations.append(-np.inf)
+                continue
+            first, second = pairs.T
+            delta = positions[first]-positions[second]
+            length = np.maximum(np.linalg.norm(delta, axis=1), 1e-10)
+            violation = self.sphere_radii[first]+self.sphere_radii[second]+self.config.self_clearance-length
+            values, derivative = smoothed_l1_array(violation, self.config.smoothing_epsilon)
+            cost += self.config.self_collision_weight*float(values.sum())
+            weight = -self.config.self_collision_weight*derivative
+            direction = delta/length[:, None]
+            gradient += np.einsum('n,nci,nc->i', weight, jacobians[first]-jacobians[second], direction)
+            gradient_acceleration += np.einsum('n,nci,nc->i', weight,
+                acceleration_jacobians[first]-acceleration_jacobians[second], direction)
+            pair_violations.append(float(np.max(violation, initial=-np.inf)))
+            clearance = min(clearance, float(np.min(length-self.sphere_radii[first]-self.sphere_radii[second])))
+        return (cost, gradient, gradient_acceleration,
+                float(np.max(violations, initial=-np.inf)), clearance, *pair_violations)
+
     def _configuration(self, sigma, acceleration=None):
-        from .task_targets import yaw_quaternion
+        from .flatness import yaw_quaternion
         quaternion = yaw_quaternion(sigma[3])
         if acceleration is not None:
             rotation, _ = _flatness_attitude(
@@ -372,6 +404,9 @@ class AerialManipulatorTrajectoryEvaluator:
         exact_world_clearance = (float(exact_world_clearance)
                                  if exact_world_clearance is not None else
                                  self.config.obstacle_clearance)
+        if self.manual_spheres:
+            broad = self._manual_feasibility_batch(positions[None,:], self.config.rrt_obstacle_margin)
+            return float(broad[0][0]), max(float(broad[1][0]), float(broad[2][0]))
         phase_started = time.perf_counter()
         broad = self._broadphase.query(
             positions, occupancy_margin, exact_world_clearance, narrow_phase=narrow_phase)
@@ -435,6 +470,11 @@ class AerialManipulatorTrajectoryEvaluator:
         points = self.robot.point_positions_batch(
             configurations, self.sphere_names, self.sphere_points, check_limits=False)
         self.rrt_batch_fk_seconds += time.perf_counter()-phase_started
+        if self.manual_spheres:
+            phase_started = time.perf_counter()
+            broad = self._manual_feasibility_batch(points, self.config.rrt_obstacle_margin)
+            self.rrt_broadphase_seconds += time.perf_counter()-phase_started
+            return (broad[0] <= 1e-10) & (broad[1] <= 1e-10) & (broad[2] <= 1e-10)
         phase_started = time.perf_counter()
         broad = self._broadphase.query(
             points, self.config.rrt_obstacle_margin, self.config.rrt_obstacle_margin,
@@ -464,7 +504,8 @@ class AerialManipulatorTrajectoryEvaluator:
         acceleration = np.asarray(acceleration, dtype=float)
         rotation, attitude_jacobian = _flatness_attitude_tangent_jacobian(
             acceleration[:3], sigma[3], self.quad.g)
-        configuration = self._configuration(sigma, acceleration)
+        xyzw = Rotation.from_matrix(rotation).as_quat()
+        configuration = np.r_[sigma[:3], xyzw[3], xyzw[:3], sigma[4:8], self.gripper_opening]
         prepared = self.robot.prepare_kinematics(configuration, check_limits=False)
         positions, pose_jacobians = self.robot.point_positions_and_pose_jacobians(
             None, self.sphere_names, self.sphere_points,
@@ -481,6 +522,11 @@ class AerialManipulatorTrajectoryEvaluator:
                 attitude_jacobian, configuration, prepared)
 
     def collision_cost_gradient(self, sigma, acceleration=None):
+        if self.manual_spheres:
+            acceleration = np.zeros(8) if acceleration is None else np.asarray(acceleration, dtype=float)
+            if acceleration.shape != (8,) or not np.all(np.isfinite(acceleration)):
+                raise ValueError('acceleration must be a finite 8-vector')
+            return self._manual_collision_cost_gradient(sigma, acceleration)
         acceleration = (np.zeros(8) if acceleration is None
                         else np.asarray(acceleration, dtype=float))
         if acceleration.shape != (8,) or not np.all(np.isfinite(acceleration)):
@@ -495,6 +541,7 @@ class AerialManipulatorTrajectoryEvaluator:
         outside_norm = np.linalg.norm(outside_delta, axis=1)
         outside = outside_norm > 0.0
         signed_gradient = gradients.copy()
+        signed_gradient[(positions < lower) | (positions > upper)] = 0.
         signed_gradient[outside] -= outside_delta[outside]/outside_norm[outside, None]
         signed = distances-outside_norm
         violations = (radii+self.config.obstacle_clearance
@@ -513,6 +560,24 @@ class AerialManipulatorTrajectoryEvaluator:
         world_suppressed[robot_sphere] = (
             world_candidate_geom[self.sphere_geom_indices[robot_sphere]]
             & ~outside[robot_sphere])
+        penetrating_query_indices = np.empty(0, dtype=int)
+        if self.use_exact_world_penalty:
+            candidates = np.flatnonzero(world_candidate_geom[self._world_query_geometry])
+            if len(candidates):
+                # In deep capsule/box overlap MuJoCo may return a flat -radius
+                # distance while its witness normal remains nonzero. The ESDF
+                # envelope provides an actual descent loss for those samples.
+                queried = self._world_query_indices[candidates]
+                distances_exact = self.robot.exact_collision_distances(
+                    None, pairs=self._query_pairs, pair_indices=queried, prepared=prepared,
+                    payload_attached=False, check_limits=False, with_points=False)['distances']
+                penetrating = distances_exact < 0.
+                penetrating_geoms = self._world_query_geometry[candidates[penetrating]]
+                penetrating_query_indices = queried[penetrating]
+                unsuppress = np.isin(self.sphere_geom_indices, penetrating_geoms)
+                world_suppressed[unsuppress] = False
+        if not self.use_exact_world_penalty:
+            world_suppressed[:] = False
         costs, derivatives = smoothed_l1_array(violations, self.config.smoothing_epsilon)
         costs[world_suppressed] = 0.
         derivatives[world_suppressed] = 0.
@@ -540,6 +605,7 @@ class AerialManipulatorTrajectoryEvaluator:
         selected = np.zeros(len(self._query_pairs.ids), dtype=bool)
         selected[self._world_query_indices[
             world_candidate_geom[self._world_query_geometry]]] = True
+        selected[penetrating_query_indices] = False
         query_kinds = self._query_base_kinds.copy()
         self_violation = -np.inf
         payload_violation = -np.inf
@@ -582,6 +648,8 @@ class AerialManipulatorTrajectoryEvaluator:
                 pair_clearance[candidate] = np.inf
                 minimum_clearance = min(minimum_clearance,
                                         float(np.min(pair_clearance, initial=np.inf)))
+        if not self.use_exact_world_penalty:
+            selected[query_kinds == 1] = False
         indices = np.flatnonzero(selected)
         if len(indices):
             jacobian_thresholds = {
@@ -608,325 +676,3 @@ class AerialManipulatorTrajectoryEvaluator:
                 payload_violation, minimum_clearance)
         return (cost, grad, grad_acceleration, obstacle_violation,
                 minimum_clearance, self_violation, payload_violation)
-
-    def _physical_cost_gradient_python(self, sigma, velocity, acceleration, jerk):
-        """Reference arithmetic for physical constraints without collision queries."""
-        cfg, quad = self.config, self.quad
-        gradients = [np.zeros(8) for _ in range(4)]
-        cost = 0.0
-        max_violation = -np.inf
-
-        def add(values, jac, derivative_order, weight=None):
-            nonlocal cost, max_violation
-            values = np.asarray(values, dtype=float)
-            jac = np.asarray(jac, dtype=float)
-            weight = cfg.constraint_weight if weight is None else weight
-            part, weighted_jac = _add_penalty(values, jac, weight, cfg.smoothing_epsilon)
-            cost += part
-            gradients[derivative_order] += np.sum(weighted_jac, axis=tuple(range(values.ndim)))
-            max_violation = max(max_violation, float(np.max(values, initial=-np.inf)))
-
-        speed_violation = np.dot(velocity[:3], velocity[:3])-cfg.max_speed**2
-        speed_jac = np.zeros((1, 8)); speed_jac[0, :3] = 2*velocity[:3]
-        add([speed_violation], speed_jac, 1)
-        accel_violation = np.dot(acceleration[:3], acceleration[:3])-cfg.max_acceleration**2
-        accel_jac = np.zeros((1, 8)); accel_jac[0, :3] = 2*acceleration[:3]
-        add([accel_violation], accel_jac, 2)
-        add([velocity[3]**2-cfg.max_yaw_rate**2],
-            [np.eye(8)[3]*2*velocity[3]], 1)
-        add([acceleration[3]**2-cfg.max_yaw_acceleration**2],
-            [np.eye(8)[3]*2*acceleration[3]], 2)
-
-        lower, upper = self.robot.limits.joint_lower, self.robot.limits.joint_upper
-        for sign, bound in ((1., upper), (-1., lower)):
-            values = sign*sigma[4:8]-sign*bound
-            jac = np.zeros((4, 8)); jac[np.arange(4), 4+np.arange(4)] = sign
-            add(values, jac, 0)
-        joint_v = velocity[4:8]**2-np.asarray(cfg.joint_velocity_limits)**2
-        jac = np.zeros((4, 8)); jac[np.arange(4), 4+np.arange(4)] = 2*velocity[4:8]
-        add(joint_v, jac, 1)
-        joint_a = acceleration[4:8]**2-np.asarray(cfg.joint_acceleration_limits)**2
-        jac = np.zeros((4, 8)); jac[np.arange(4), 4+np.arange(4)] = 2*acceleration[4:8]
-        add(joint_a, jac, 2)
-
-        gravity = float(quad.g)
-        force_direction = np.array([-acceleration[0], -acceleration[1],
-                                    gravity-acceleration[2]])
-        rho = max(float(np.linalg.norm(force_direction)), 1e-8)
-        body_z = force_direction/rho
-        thrust = self.mass*rho
-        thrust_min, thrust_max = 4*quad.min_thrust, 4*quad.max_thrust
-        thrust_grad = -self.mass*body_z
-        add([thrust_min-thrust], [np.r_[-thrust_grad, np.zeros(5)]], 2)
-        add([thrust-thrust_max], [np.r_[thrust_grad, np.zeros(5)]], 2)
-        cos_tilt = float(np.clip(body_z[2], -1., 1.))
-        tilt = float(np.arccos(cos_tilt))
-        sin_tilt = max(float(np.sqrt(max(1-cos_tilt*cos_tilt, 0.))), 1e-8)
-        tilt_grad = (np.array([0., 0., 1.])-cos_tilt*body_z)/(rho*sin_tilt)
-        add([tilt-quad.max_tilt_angle], [np.r_[tilt_grad, np.zeros(5)]], 2)
-        body_rate2, body_rate_gradient = _flatness_body_rate_squared_python(
-            acceleration[:3], jerk[:3], sigma[3], velocity[3], gravity)
-        body_rate_violation = body_rate2-cfg.max_body_rate**2
-        body_rate_cost, body_rate_derivative = smoothed_l1_array(
-            np.array([body_rate_violation]), cfg.smoothing_epsilon)
-        cost += cfg.constraint_weight*float(body_rate_cost[0])
-        body_rate_gradient *= cfg.constraint_weight*float(body_rate_derivative[0])
-        gradients[0][3] += body_rate_gradient[6]
-        gradients[1][3] += body_rate_gradient[7]
-        gradients[2][:3] += body_rate_gradient[:3]
-        gradients[3][:3] += body_rate_gradient[3:6]
-        max_violation = max(max_violation, float(body_rate_violation))
-
-        outside_low = self.bounds[0]-sigma[:3]
-        outside_high = sigma[:3]-self.bounds[1]
-        workspace_values = np.r_[outside_low, outside_high]
-        workspace_jac = np.zeros((6, 8))
-        workspace_jac[np.arange(3), np.arange(3)] = -1.
-        workspace_jac[3+np.arange(3), np.arange(3)] = 1.
-        add(workspace_values, workspace_jac, 0)
-
-        return cost, gradients, max_violation
-
-    def _physical_cost_gradient(self, sigma, velocity, acceleration, jerk):
-        if _native_aerial is None:
-            return self._physical_cost_gradient_python(sigma, velocity, acceleration, jerk)
-        cfg, quad = self.config, self.quad
-        parameters = np.array([
-            cfg.constraint_weight, cfg.smoothing_epsilon, cfg.max_speed,
-            cfg.max_acceleration, cfg.max_yaw_rate, cfg.max_yaw_acceleration,
-            cfg.max_body_rate, quad.g, self.mass, quad.min_thrust,
-            quad.max_thrust, quad.max_tilt_angle], dtype=float)
-        return _native_aerial.physical_cost_gradient(
-            *(np.asarray(value, dtype=float) for value in (sigma, velocity, acceleration, jerk)),
-            np.asarray(self.robot.limits.joint_lower, dtype=float),
-            np.asarray(self.robot.limits.joint_upper, dtype=float), self.bounds,
-            parameters, np.asarray(cfg.joint_velocity_limits, dtype=float),
-            np.asarray(cfg.joint_acceleration_limits, dtype=float))
-
-    def sample_cost_gradient(self, sigma, velocity, acceleration, jerk):
-        """Return cost, gradients for orders 0..3, maximum raw violation and clearance."""
-        self.objective_samples += 1
-        cost, gradients, max_violation = self._physical_cost_gradient(
-            sigma, velocity, acceleration, jerk)
-        collision_cost, collision_gradient, collision_acceleration_gradient, \
-            collision_violation, clearance, self_violation, payload_violation = \
-            self.collision_cost_gradient(sigma, acceleration)
-        cost += collision_cost
-        gradients[0] += collision_gradient
-        gradients[2] += collision_acceleration_gradient
-        max_violation = max(max_violation, collision_violation)
-        max_violation = max(max_violation, self_violation)
-        max_violation = max(max_violation, payload_violation)
-        return cost, gradients, max_violation, clearance
-
-    def integrated_penalty(self, durations, coefficients):
-        if _native_aerial is None:
-            return self._integrated_penalty_python(durations, coefficients)
-        floor = (self.config.integral_resolution_floor_loaded if self.carry_payload
-                 else self.config.integral_resolution_floor_unloaded)
-        resolution = max(self.config.integral_resolution, floor)
-        self.last_violation = -np.inf
-        self.minimum_clearance = np.inf
-
-        def sample(*values):
-            result = self.sample_cost_gradient(*values)
-            self.last_violation = max(self.last_violation, result[2])
-            self.minimum_clearance = min(self.minimum_clearance, result[3])
-            return result
-
-        result = _native_aerial.integrated_penalty(
-            np.asarray(durations, dtype=float), np.asarray(coefficients, dtype=float),
-            resolution, sample)
-        self.last_violation, self.minimum_clearance = result[3:]
-        return result[:3]
-
-    def _integrated_penalty_python(self, durations, coefficients):
-        pieces = len(durations)
-        # Preserve the narrow-passage defaults while allowing the wider
-        # workcell scene to use fewer optimization quadrature points. Dense
-        # full-geometry validation remains independent of these floors.
-        floor = (self.config.integral_resolution_floor_loaded if self.carry_payload
-                 else self.config.integral_resolution_floor_unloaded)
-        resolution = max(self.config.integral_resolution, floor)
-        alpha = np.linspace(0., 1., resolution+1)
-        quadrature = np.ones(resolution+1); quadrature[[0, -1]] = .5
-        grad_coefficients = np.zeros_like(coefficients)
-        grad_times = np.zeros(pieces)
-        total_cost = 0.0
-        self.last_violation = -np.inf
-        self.minimum_clearance = np.inf
-        for piece, duration in enumerate(durations):
-            local_times = alpha*duration
-            bases = [polynomial_basis_matrix(local_times, derivative)
-                     for derivative in range(5)]
-            values = [basis@coefficients[piece] for basis in bases]
-            scale = duration/resolution*quadrature
-            for sample in range(resolution+1):
-                cost, grads, violation, clearance = self.sample_cost_gradient(
-                    *(value[sample] for value in values[:4]))
-                total_cost += scale[sample]*cost
-                for order in range(4):
-                    grad_coefficients[piece] += (
-                        scale[sample]*np.outer(bases[order][sample], grads[order]))
-                derivative_cost_time = (np.dot(grads[0], values[1][sample])
-                                        + np.dot(grads[1], values[2][sample])
-                                        + np.dot(grads[2], values[3][sample])
-                                        + np.dot(grads[3], values[4][sample]))
-                grad_times[piece] += (
-                    scale[sample]*alpha[sample]*derivative_cost_time
-                    + quadrature[sample]/resolution*cost)
-                self.last_violation = max(self.last_violation, violation)
-                self.minimum_clearance = min(self.minimum_clearance, clearance)
-        return total_cost, grad_coefficients, grad_times
-
-    def dense_validate(self, trajectory):
-        max_violation = -np.inf
-        minimum_clearance = np.inf
-        collision = False
-        map_inside = True
-        maximum_dt = 0.0
-        maximum_kind = "none"
-        maximum_piece = -1
-        minimum_world_distance = np.inf
-        minimum_self_distance = np.inf
-        for piece, duration in enumerate(trajectory.durations):
-            coefficient = trajectory.coefficients[piece]
-
-            # Bound internal extrema explicitly.  A diffeomorphic waypoint map
-            # constrains only the knots; a quintic can still overshoot between
-            # them even when every sampled knot is legal.
-            lower, upper = self.robot.limits.joint_lower, self.robot.limits.joint_upper
-            for joint in range(4):
-                derivative = coefficient[1:, 4+joint]*np.arange(1, 6)
-                roots = np.polynomial.polynomial.polyroots(derivative)
-                local = np.r_[0., duration, roots.real[
-                    (np.abs(roots.imag) <= 1e-9)
-                    & (roots.real > 0.) & (roots.real < duration)]]
-                values = polynomial_basis_matrix(local, 0)@coefficient[:, 4+joint]
-                candidates = ((float(np.max(values-upper[joint])), "joint_upper_extremum"),
-                              (float(np.max(lower[joint]-values)), "joint_lower_extremum"))
-                for violation, kind in candidates:
-                    if violation > max_violation:
-                        max_violation, maximum_kind = violation, kind
-
-            def evaluate(local):
-                basis = [polynomial_basis_matrix(np.array([local]), order)[0]
-                         for order in range(4)]
-                return [row@coefficient for row in basis]
-
-            count = max(2, int(np.ceil(duration/self.config.validation_dt)))
-            coarse = np.linspace(0., duration, count+1)
-            states = [evaluate(local) for local in coarse]
-            accepted = [states[0]]
-            intervals = [(coarse[i], coarse[i+1], states[i], states[i+1], 0)
-                         for i in range(count)]
-            refined = []
-            while intervals:
-                left, right, state_left, state_right, depth = intervals.pop()
-                middle = .5*(left+right)
-                state_middle = evaluate(middle)
-                halves = ((state_left[0], state_middle[0]),
-                          (state_middle[0], state_right[0]))
-                position_change = max(np.linalg.norm(b[:3]-a[:3]) for a, b in halves)
-                yaw_change = max(abs(float(b[3]-a[3])) for a, b in halves)
-                joint_change = max(float(np.max(np.abs(b[4:8]-a[4:8])))
-                                   for a, b in halves)
-                if (depth < 8 and (position_change > .04 or yaw_change > .08
-                                   or joint_change > .08)):
-                    intervals.append((middle, right, state_middle, state_right, depth+1))
-                    intervals.append((left, middle, state_left, state_middle, depth+1))
-                else:
-                    refined.append((right, state_right, right-left))
-            refined.sort(key=lambda item: item[0])
-            accepted.extend(state for _, state, _ in refined)
-            maximum_dt = max(maximum_dt, max((dt for _, _, dt in refined), default=0.))
-            for sigma, velocity, acceleration, jerk in accepted:
-                self.validation_samples += 1
-                gravity = float(self.quad.g)
-                force = np.array([-acceleration[0], -acceleration[1],
-                                  gravity-acceleration[2]])
-                rho = max(float(np.linalg.norm(force)), 1e-8)
-                body_rate = _flatness_attitude(
-                    acceleration[:3], jerk[:3], sigma[3], velocity[3], gravity)[1]
-                lower, upper = self.robot.limits.joint_lower, self.robot.limits.joint_upper
-                constraint_names = [
-                    "linear_speed", "linear_acceleration", "yaw_rate",
-                    "yaw_acceleration", "joint_upper", "joint_lower",
-                    "joint_velocity", "joint_acceleration", "maximum_thrust",
-                    "minimum_thrust", "tilt", "body_rate", "workspace_lower",
-                    "workspace_upper",
-                ]
-                constraints = [
-                    np.dot(velocity[:3], velocity[:3])-self.config.max_speed**2,
-                    np.dot(acceleration[:3], acceleration[:3])-self.config.max_acceleration**2,
-                    velocity[3]**2-self.config.max_yaw_rate**2,
-                    acceleration[3]**2-self.config.max_yaw_acceleration**2,
-                    float(np.max(sigma[4:8]-upper)),
-                    float(np.max(lower-sigma[4:8])),
-                    float(np.max(velocity[4:8]**2-
-                                 np.asarray(self.config.joint_velocity_limits)**2)),
-                    float(np.max(acceleration[4:8]**2-
-                                 np.asarray(self.config.joint_acceleration_limits)**2)),
-                    self.mass*rho-4*self.quad.max_thrust,
-                    4*self.quad.min_thrust-self.mass*rho,
-                    float(np.arccos(np.clip(force[2]/rho, -1., 1.))
-                          -self.quad.max_tilt_angle),
-                    float(np.dot(body_rate, body_rate)-self.config.max_body_rate**2),
-                    float(np.max(self.bounds[0]-sigma[:3])),
-                    float(np.max(sigma[:3]-self.bounds[1])),
-                ]
-                configuration = self._configuration(sigma, acceleration)
-                try:
-                    positions = self.robot.point_positions(
-                        configuration, self.sphere_names, self.sphere_points)
-                    outside = np.maximum(self.esdf.origin-positions, 0.)+np.maximum(
-                        positions-self.esdf.upper, 0.)
-                    outside_distance = float(np.max(np.linalg.norm(outside, axis=1), initial=0.))
-                    map_inside &= outside_distance <= 1e-12
-                    constraint_names.append("esdf_bounds")
-                    constraints.append(outside_distance)
-                    exact = self.robot.check_collision(
-                        configuration, clearance=self.config.obstacle_clearance,
-                        self_clearance=self.config.self_clearance,
-                        payload_attached=self.carry_payload)
-                    world_clearance = exact["minimum_world_distance"]
-                    self_clearance = exact["minimum_self_distance"]
-                    minimum_world_distance = min(minimum_world_distance, world_clearance)
-                    minimum_self_distance = min(minimum_self_distance, self_clearance)
-                    if np.isfinite(world_clearance):
-                        constraint_names.append("world_clearance")
-                        constraints.append(self.config.obstacle_clearance-world_clearance)
-                    if np.isfinite(self_clearance):
-                        constraint_names.append("self_clearance")
-                        constraints.append(self.config.self_clearance-self_clearance)
-                    # ``exact['collision']`` is physical contact. Clearance-margin
-                    # violations stay in ``max_violation`` and are judged against
-                    # the dense validator's small numeric tolerance below.
-                    collision |= bool(exact["collision"])
-                    clearances = [value for value in (world_clearance, self_clearance)
-                                  if np.isfinite(value)]
-                    if clearances:
-                        minimum_clearance = min(minimum_clearance, min(clearances))
-                except ValueError:
-                    collision = True
-                    constraint_names.append("exact_collision_query")
-                    constraints.append(np.inf)
-                local_max = max(constraints)
-                if local_max > max_violation:
-                    max_violation = local_max
-                    maximum_kind = constraint_names[int(np.argmax(constraints))]
-                    maximum_piece = int(piece)
-        passed = (not collision and map_inside and np.isfinite(max_violation)
-                  and max_violation <= 3e-3 and np.isfinite(minimum_clearance))
-        self.last_validation_metrics = {
-            "maximum_violation_kind": maximum_kind,
-            "maximum_violation_piece": maximum_piece,
-            "minimum_world_distance": float(minimum_world_distance),
-            "minimum_self_distance": float(minimum_self_distance),
-            "collision_detected": bool(collision),
-            "map_inside": bool(map_inside),
-        }
-        return passed, float(minimum_clearance), float(max_violation), float(maximum_dt)
-
-
-__all__ = ["AerialManipulatorTrajectoryEvaluator"]

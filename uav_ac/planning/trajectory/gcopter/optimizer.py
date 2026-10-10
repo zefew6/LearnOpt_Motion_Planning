@@ -8,6 +8,45 @@ from scipy.optimize import minimize
 
 
 @dataclass(frozen=True)
+class EqualityResult:
+    x: np.ndarray
+    residual: np.ndarray
+    feasible: bool
+    iterations: int
+    message: str
+
+
+def solve_equalities(objective, initial, equality, *, tolerance=1e-4,
+                     max_outer_iterations=12, max_iterations=100):
+    """Augmented-Lagrangian equality driver; equality returns residual/Jacobian.
+
+    Residuals should be normalized by their physical scales before this call.
+    Infeasible targets are returned with their residuals, never altered.
+    """
+    x = np.array(initial, dtype=float)
+    residual, _ = equality(x)
+    multiplier = np.zeros_like(residual)
+    penalty, iterations = 10., 0
+    for _ in range(max_outer_iterations):
+        def augmented(z):
+            cost, gradient = objective(z)
+            residual, jacobian = equality(z)
+            return (cost + multiplier @ residual + .5 * penalty * (residual @ residual),
+                    gradient + jacobian.T @ (multiplier + penalty * residual))
+
+        inner = scipy_lbfgs(augmented, x, max_iterations=max_iterations,
+            memory=12, gradient_tolerance=1e-9, relative_cost_tolerance=1e-12)
+        x = inner.x
+        iterations += inner.iterations
+        residual, _ = equality(x)
+        if np.all(np.isfinite(residual)) and np.max(np.abs(residual), initial=0.) <= tolerance:
+            return EqualityResult(x, residual, True, iterations, 'task equalities satisfied')
+        multiplier += penalty * residual
+        penalty *= 10.
+    return EqualityResult(x, residual, False, iterations, 'task equality tolerance not reached')
+
+
+@dataclass(frozen=True)
 class LBFGSResult:
     x: np.ndarray
     cost: float

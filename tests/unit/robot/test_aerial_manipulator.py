@@ -10,6 +10,43 @@ from uav_ac.simulation.mujoco_sim import DEFAULT_SCENE_PATH, ENU_TO_NED, MujocoS
 MODEL = "tests/fixtures/aerial_manipulator_robot.xml"
 
 
+@pytest.mark.parametrize('height', [-.5263157894736843, -.7])
+@pytest.mark.parametrize('pose', [False, True])
+def test_signed_collision_gradient_matches_penetrating_and_separated_witnesses(height, pose):
+    robot = MujocoSimulation('tests/fixtures/aerial_manipulator_gradient.xml').robot
+    q = robot.configuration.copy(); q[2] = height
+    pair = ('ground', 'gripper_finger_left')
+    result = robot.exact_collision_distances(q, pairs=[pair], with_jacobians=True,
+        with_pose_jacobians=pose, check_limits=False)
+    epsilon = 1e-6
+    plus, minus = q.copy(), q.copy()
+    plus[2] += epsilon; minus[2] -= epsilon
+    numeric = (robot.exact_collision_distances(plus, pairs=[pair], check_limits=False)['distances'][0]
+               -robot.exact_collision_distances(minus, pairs=[pair], check_limits=False)['distances'][0])/(2*epsilon)
+    assert (result['distances'][0] < 0.) == (height > -.6)
+    np.testing.assert_allclose(result['jacobians'][0, 2], numeric, atol=1e-7)
+
+
+def test_capsule_box_penetration_plateau_reports_zero_scalar_distance_gradient():
+    from uav_ac.planning.trajectory.aerial_manipulator_minco.flatness import recover_state
+    robot = MujocoSimulation('uav_ac/simulation/models/aerial_manipulator_workcell.xml').robot
+    y = np.array([4.029294202154599, .4123031683863034, -1.9053766999459676,
+                  1.5778458157563202, .2787360339266117, -.09931383869968922,
+                  .21620550616971212, -.3673103316216305])
+    a = np.r_[3.6874073811360226, -3.5825827951730274, -.48476099572162046, np.zeros(5)]
+    q, _ = recover_state(np.stack([y, np.zeros(8), a, np.zeros(8)]), .025)
+    pair = ('obstacle_transfer_conveyor', 'arm_0')
+    result = robot.exact_collision_distances(q, pairs=[pair], with_jacobians=True,
+                                            with_pose_jacobians=True, check_limits=False)
+    assert result['distances'][0] == pytest.approx(-.008)
+    numeric = []
+    for column in range(3):
+        plus, minus = q.copy(), q.copy(); plus[column] += 1e-6; minus[column] -= 1e-6
+        numeric.append((robot.exact_collision_distances(plus, pairs=[pair], check_limits=False)['distances'][0]
+            -robot.exact_collision_distances(minus, pairs=[pair], check_limits=False)['distances'][0])/2e-6)
+    np.testing.assert_allclose(result['jacobians'][0, :3], numeric, atol=1e-7)
+
+
 def test_aerial_manipulator_physics_step_matches_quadrotor():
     quadrotor = MujocoSimulation(DEFAULT_SCENE_PATH)
     manipulator = MujocoSimulation(MODEL)
@@ -518,3 +555,17 @@ def test_compiled_pair_subset_preserves_empty_and_nonpayload_queries():
     assert empty['points_ned'].shape == (0, 2, 3)
     with pytest.raises(ValueError, match='payload'):
         robot.exact_collision_distances(q, pairs=compiled, pair_indices=[1])
+
+def test_dynamics_accepts_small_soft_joint_stop_overshoot_without_mutating_live_state():
+    sim = MujocoSimulation(MODEL, record_actual_trajectory=False)
+    q = sim.robot.configuration.copy()
+    q[9] = sim.robot.limits.joint_upper[2] + .0002
+    before = sim.data.qpos.copy(), sim.data.qvel.copy(), sim.time
+    result = sim.robot.dynamics(q, np.zeros(11))
+    assert np.all(np.isfinite(result['mass_matrix']))
+    assert np.all(np.isfinite(result['bias_forces']))
+    np.testing.assert_array_equal(sim.data.qpos, before[0])
+    np.testing.assert_array_equal(sim.data.qvel, before[1])
+    assert sim.time == before[2]
+    with pytest.raises(ValueError, match='joint limit'):
+        sim.robot.forward_kinematics(q)

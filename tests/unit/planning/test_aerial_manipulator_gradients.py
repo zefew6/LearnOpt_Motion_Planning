@@ -7,7 +7,7 @@ from uav_ac.planning.geometry.esdf import ESDF
 from uav_ac.planning.trajectory.aerial_manipulator_minco.config import (
     AerialManipulatorMINCOConfig,
 )
-from uav_ac.planning.trajectory.aerial_manipulator_minco.evaluator import (
+from uav_ac.planning.trajectory.aerial_manipulator_minco.constraints import (
     AerialManipulatorTrajectoryEvaluator,
     _flatness_body_rate_squared,
 )
@@ -17,7 +17,7 @@ from uav_ac.planning.trajectory.aerial_manipulator_minco.planner import (
     _initial_duration,
     _time_stretch,
 )
-from uav_ac.planning.trajectory.aerial_manipulator_minco.types import (
+from uav_ac.planning.trajectory.aerial_manipulator_minco.trajectory import (
     AerialManipulatorTrajectory,
 )
 from uav_ac.planning.trajectory.gcopter.mappings import inverse_time
@@ -131,7 +131,7 @@ def test_analytic_whole_body_sample_gradient_matches_finite_difference():
         .06, carry_payload=True)
     assert len(evaluator.self_pairs)
     assert len(evaluator.payload_pairs)
-    assert evaluator.rrt_fixed_clearance_self_pairs_skipped == 3
+    assert evaluator.rrt_fixed_clearance_self_pairs_skipped == 4
     skipped_gripper_pairs = {
         frozenset(("gripper_pad_left", "gripper_pad_right")),
         frozenset(("gripper_finger_left", "gripper_pad_right")),
@@ -185,7 +185,7 @@ def test_complete_shared_total_time_and_minco_adjoint_gradient():
         robot, esdf, simulation.quad, config, simulation.space_limits,
         .06, carry_payload=False)
     start_q = robot.configuration
-    from uav_ac.planning.trajectory.aerial_manipulator_minco.task_targets import quaternion_yaw
+    from uav_ac.planning.trajectory.aerial_manipulator_minco.flatness import quaternion_yaw
     start = np.r_[start_q[:3], quaternion_yaw(start_q[3:7]), start_q[7:11]]
     goal = start.copy(); goal[0] += .12; goal[3] += .03
     boundary = np.zeros((3, 8)); boundary[0] = start
@@ -325,7 +325,8 @@ def test_dense_validation_checks_collision_with_flatness_recovered_attitude():
     assert any(np.linalg.norm(quaternion[1:3]) > 1e-3 for quaternion in seen)
 
 
-def test_collision_gradient_chains_full_pose_through_acceleration_and_yaw():
+@pytest.mark.parametrize('base_x', [.2, -2.5])
+def test_collision_gradient_chains_full_pose_through_acceleration_and_yaw(base_x):
     simulation = MujocoSimulation(
         "tests/fixtures/aerial_manipulator_gradient.xml",
         record_actual_trajectory=False)
@@ -347,7 +348,7 @@ def test_collision_gradient_chains_full_pose_through_acceleration_and_yaw():
     evaluator.self_pairs = np.empty((0, 2), dtype=int)
     evaluator.payload_pairs = np.empty((0, 2), dtype=int)
     evaluator.world_geom_pairs = ()
-    sigma = np.r_[.2, -.1, -1., .25, .2, -.3, .1, -.15]
+    sigma = np.r_[base_x, -.1, -1., .25, .2, -.3, .1, -.15]
     acceleration = np.array([.7, -.4, .5, 0., 0., 0., 0., 0.])
     value, gradient, grad_acceleration = evaluator.collision_cost_gradient(
         sigma, acceleration)[:3]

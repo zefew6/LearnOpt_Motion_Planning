@@ -96,6 +96,7 @@ class AerialManipulatorModel:
             _name(model, mujoco.mjtObj.mjOBJ_BODY, body): body
             for body in range(model.nbody)
         }
+        self._point_body_cache = {}
         self._body_joint_ancestors = np.zeros((model.nbody, len(self.arm_joints)), dtype=bool)
         for body in range(model.nbody):
             for joint_index, joint in enumerate(self.arm_joints):
@@ -372,7 +373,11 @@ class AerialManipulatorModel:
         if points.shape != (len(names), 3) or not np.all(np.isfinite(points)):
             raise ValueError("local_points must be a finite (len(body_names), 3) array")
         try:
-            body_ids = np.asarray([self._body_ids[name] for name in names], dtype=int)
+            body_ids = self._point_body_cache.get(names)
+            if body_ids is None:
+                body_ids = np.asarray([self._body_ids[name] for name in names], dtype=int)
+                body_ids.setflags(write=False)
+                self._point_body_cache[names] = body_ids
         except KeyError as error:
             raise ValueError(f"unknown body name: {error.args[0]}") from error
         d, q = self._prepare_kinematic(configuration, check_limits=check_limits)
@@ -404,7 +409,11 @@ class AerialManipulatorModel:
         if points.shape != (len(names), 3) or not np.all(np.isfinite(points)):
             raise ValueError("local_points must be a finite (len(body_names), 3) array")
         try:
-            body_ids = np.asarray([self._body_ids[name] for name in names], dtype=int)
+            body_ids = self._point_body_cache.get(names)
+            if body_ids is None:
+                body_ids = np.asarray([self._body_ids[name] for name in names], dtype=int)
+                body_ids.setflags(write=False)
+                self._point_body_cache[names] = body_ids
         except KeyError as error:
             raise ValueError(f"unknown body name: {error.args[0]}") from error
         d, q = self._kinematic_state(configuration, check_limits, prepared)
@@ -414,7 +423,12 @@ class AerialManipulatorModel:
         jacobians = np.zeros((len(points), 3, 10))
         jacobians[:, :, :3] = np.eye(3)
         relative = positions-q[:3]
-        jacobians[:, :, 3:6] = np.asarray([-_skew(value) for value in relative])
+        jacobians[:, 0, 4] = relative[:, 2]
+        jacobians[:, 0, 5] = -relative[:, 1]
+        jacobians[:, 1, 3] = -relative[:, 2]
+        jacobians[:, 1, 5] = relative[:, 0]
+        jacobians[:, 2, 3] = relative[:, 1]
+        jacobians[:, 2, 4] = -relative[:, 0]
         axes, anchors = d.xaxis[self.arm_joints], d.xanchor[self.arm_joints]
         joint_columns = _cross3(
             axes[None, :, :], native_points[:, None, :]-anchors[None, :, :]) @ S
@@ -429,7 +443,11 @@ class AerialManipulatorModel:
         if points.shape != (len(names), 3) or not np.all(np.isfinite(points)):
             raise ValueError("local_points must be a finite (len(body_names), 3) array")
         try:
-            body_ids = np.asarray([self._body_ids[name] for name in names], dtype=int)
+            body_ids = self._point_body_cache.get(names)
+            if body_ids is None:
+                body_ids = np.asarray([self._body_ids[name] for name in names], dtype=int)
+                body_ids.setflags(write=False)
+                self._point_body_cache[names] = body_ids
         except KeyError as error:
             raise ValueError(f"unknown body name: {error.args[0]}") from error
         d, _ = self._kinematic_state(configuration, check_limits, prepared)
@@ -453,7 +471,11 @@ class AerialManipulatorModel:
         if points.shape != (len(names), 3) or not np.all(np.isfinite(points)):
             raise ValueError("local_points must be a finite (len(body_names), 3) array")
         try:
-            body_ids = np.asarray([self._body_ids[name] for name in names], dtype=int)
+            body_ids = self._point_body_cache.get(names)
+            if body_ids is None:
+                body_ids = np.asarray([self._body_ids[name] for name in names], dtype=int)
+                body_ids.setflags(write=False)
+                self._point_body_cache[names] = body_ids
         except KeyError as error:
             raise ValueError(f"unknown body name: {error.args[0]}") from error
         result = np.empty((len(configurations), len(names), 3), dtype=float)
@@ -591,6 +613,16 @@ class AerialManipulatorModel:
                 if (threshold is not None
                         and distances[index] >= float(threshold)):
                     continue
+                types = (self.model.geom_type[first], self.model.geom_type[second])
+                if (mujoco.mjtGeom.mjGEOM_CAPSULE in types
+                        and mujoco.mjtGeom.mjGEOM_BOX in types):
+                    capsule = first if types[0] == mujoco.mjtGeom.mjGEOM_CAPSULE else second
+                    if abs(distances[index]+self.model.geom_size[capsule, 0]) < 1e-10:
+                        # mj_geomDistance saturates at -radius when the capsule
+                        # axis enters a box. Its scalar value is locally flat;
+                        # the witness normal is then not its derivative.
+                        jacobians[index] = 0.
+                        continue
                 gradients = []
                 for geom_id, native_point in zip((first, second), native_points):
                     if geom_id == payload_id:
@@ -604,7 +636,10 @@ class AerialManipulatorModel:
                         gradients.append(np.zeros((3, jacobian_width)))
                 delta = points[index, 0]-points[index, 1]
                 norm = max(float(np.linalg.norm(delta)), 1e-10)
-                jacobians[index] = (delta/norm) @ (gradients[0]-gradients[1])
+                # Witness separation has magnitude abs(distance). Penetrating
+                # witnesses point opposite the signed-distance normal.
+                sign = -1. if distances[index] < 0. else 1.
+                jacobians[index] = (sign*delta/norm) @ (gradients[0]-gradients[1])
         result = {
             "pairs": pair_names,
             "distances": distances,
@@ -682,6 +717,27 @@ class AerialManipulatorModel:
                 return True
             body_id = int(self.model.body_parentid[body_id])
         return False
+
+    def planning_collision_spheres(self):
+        """Return XML-authored, body-local planning spheres; no live-data access."""
+        result = []
+        for site in range(self.model.nsite):
+            name = _name(self.model, mujoco.mjtObj.mjOBJ_SITE, site)
+            if not name or not name.startswith("planning_sphere_"):
+                continue
+            if self.model.site_type[site] != mujoco.mjtGeom.mjGEOM_SPHERE:
+                raise ValueError(f"planning site must be spherical: {name}")
+            body = int(self.model.site_bodyid[site])
+            if body not in self._descendant_bodies:
+                raise ValueError(f"planning sphere outside robot: {name}")
+            center = self.model.site_pos[site].copy()
+            center.setflags(write=False)
+            radius = float(self.model.site_size[site, 0])
+            if not np.isfinite(radius) or radius <= 0:
+                raise ValueError(f"invalid planning sphere radius: {name}")
+            result.append(dict(name=name, body=_name(self.model, mujoco.mjtObj.mjOBJ_BODY, body),
+                               center=center, radius=radius))
+        return tuple(sorted(result, key=lambda item: item['name']))
 
     def collision_geometries(self):
         """Describe active robot collision geoms using public names and local poses."""
@@ -761,7 +817,10 @@ class AerialManipulatorModel:
         contact constraint forces are not part of this output. The two physical
         gripper sliders are reduced to one ideal symmetric gap coordinate.
         """
-        d, _, _ = self._prepare(configuration, velocity)
+        # MuJoCo joint stops are soft: measured configurations can transiently
+        # cross a limit. Dynamics remain well-defined there; FK/planning queries
+        # still enforce limits by default.
+        d, _, _ = self._prepare(configuration, velocity, check_limits=False)
         # Lift reduced tangent velocities into the native 12-DOF model.
         lift = np.zeros((self.model.nv, NV_PUBLIC))
         lift[self.base_dof:self.base_dof+3, :3] = S

@@ -1,4 +1,4 @@
-"""Initialized static maps and two-leg planning for an aerial pick/place flight."""
+"""Initialized static maps and joint whole-body task planning for an aerial pick/place flight."""
 
 from collections.abc import Callable
 import time
@@ -11,8 +11,10 @@ from uav_ac.planning.trajectory.aerial_manipulator_minco import (
     AerialManipulatorMINCO, AerialManipulatorMINCOConfig,
     AerialManipulatorTrajectory, make_terminal_state,
 )
-from uav_ac.planning.trajectory.aerial_manipulator_minco.search_adapter import AerialAStarMaps
-from uav_ac.planning.trajectory.aerial_manipulator_minco.task_targets import quaternion_yaw
+from uav_ac.planning.trajectory.aerial_manipulator_minco.search import AerialAStarMaps
+from uav_ac.planning.trajectory.aerial_manipulator_minco.flatness import quaternion_yaw
+from uav_ac.planning.trajectory.aerial_manipulator_minco.constraints import TaskWaypoint
+from uav_ac.planning.trajectory.aerial_manipulator_minco.trajectory import JointTaskTrajectory
 
 
 def pick_place_settings(simulation, config):
@@ -35,7 +37,8 @@ def _leg_metrics(plan, planner, result, search_only):
         return {**result.metrics, "exact_solution": result.exact_solution,
                 "path_states": int(len(result.path))}
     metrics = dict(planner.last_metrics)
-    metrics.update(validation_passed=bool(plan.validation_passed),
+    metrics.update(validation_passed=plan.validation_passed,
+                   validation_performed=getattr(plan, "validation_performed", plan.validation_passed is not None),
                    optimizer_converged=bool(plan.optimizer_converged),
                    optimizer_iterations=int(plan.iterations),
                    maximum_violation=float(plan.maximum_violation),
@@ -95,7 +98,7 @@ class PickPlacePlanner:
              on_rrt_path: Callable[[str, np.ndarray], None] | None = None,
              on_minco_trajectory: Callable[
                  [str, AerialManipulatorTrajectory], None] | None = None):
-        """Plan and validate both pick/place legs through the production path."""
+        """Solve the joint task, or inspect its search-only initialization."""
         simulation, config = self.simulation, self.config
         planner_config, settings = self.planner_config, self.settings
         diagnostics = {} if diagnostics is None else diagnostics
@@ -114,50 +117,45 @@ class PickPlacePlanner:
             gripper_opening=gap, workspace_bounds=bounds)
             for name, position, gap in (("pick", pick, gap_open), ("place", place, gap_closed)))
         planner = AerialManipulatorMINCO(planner_config)
-        plans, searches, legs, optimizer_seconds, optimizer_calls = {}, {}, {}, 0., 0
+        if not search_only:
+            targets = [TaskWaypoint(position, linear_velocity=np.zeros(3),
+                                    angular_velocity=np.zeros(3)) for position in (pick, place)]
+            plans, legs = planner.plan_task(start, targets, [pick_state, place_state],
+                robot=robot, esdf=esdf, quad=simulation.quad, workspace_bounds=bounds,
+                gaps=[gap_open, gap_closed], occupancy=occupancy, astar_maps=self.astar_maps,
+                on_rrt_path=on_rrt_path, dwell_time=float(settings.get('settle_time', .3)))
+            joint_metrics = dict(planner.last_metrics)
+            for name, plan in plans.items():
+                planner.last_metrics = legs[name]
+                legs[name] = _leg_metrics(plan, planner, None, False)
+                if on_minco_trajectory is not None:
+                    on_minco_trajectory(name, plan)
+            diagnostics.update(joint_metrics, plans=plans, legs=legs,
+                minco_optimizer_seconds=joint_metrics['optimizer_seconds'],
+                minco_optimizer_calls=joint_metrics['joint_optimizer_calls'],
+                planning_seconds=time.perf_counter()-started+self.initialization_seconds)
+            trajectory = JointTaskTrajectory(plans['pick'], plans['place'], gap_open,
+                                              gap_closed, float(settings.get('settle_time', .3)))
+            diagnostics['planned_task_time_s'] = trajectory.total_time
+            return dict(plans=plans, pick=pick, place=place, gap_open=gap_open,
+                gap_closed=gap_closed, start_q=start_q, esdf=esdf, settings=settings,
+                trajectory=trajectory)
+        searches, legs = {}, {}
         requests = (("pick", start, pick_state, gap_open, False),
                     ("place", pick_state, place_state, gap_closed, True))
         for name, leg_start, goal, opening, carry in requests:
-            rrt_callback = (None if on_rrt_path is None else
-                            lambda states, leg_name=name: on_rrt_path(leg_name, states))
+            callback = None if on_rrt_path is None else lambda states, name=name: on_rrt_path(name, states)
             try:
                 result = planner.plan(leg_start, goal, robot=robot, esdf=esdf, quad=simulation.quad,
                     workspace_bounds=bounds, gripper_opening=opening, carry_payload=carry,
-                    occupancy=occupancy, astar_maps=self.astar_maps, search_only=search_only,
-                    on_rrt_path=rrt_callback)
-                if not search_only and on_minco_trajectory is not None:
-                    on_minco_trajectory(name, result)
+                    occupancy=occupancy, astar_maps=self.astar_maps, search_only=True,
+                    on_rrt_path=callback)
             except (ValueError, RuntimeError, np.linalg.LinAlgError) as error:
                 legs[name] = {**planner.last_metrics, "failure_reason": str(error)}
-                diagnostics.update(plans=plans, searches=searches)
-                if not search_only:
-                    optimizer_seconds += float(planner.last_metrics.get("optimizer_seconds", 0.))
-                    optimizer_calls += int(planner.last_metrics.get("objective_calls", 0))
-                    diagnostics.update(
-                        minco_optimizer_seconds=optimizer_seconds,
-                        minco_optimizer_calls=optimizer_calls, legs=legs,
-                        planning_seconds=time.perf_counter()-started+self.initialization_seconds)
-                    raise
                 continue
-            if search_only:
-                searches[name] = result
-            else:
-                plans[name] = result
-                optimizer_seconds += float(planner.last_metrics.get("optimizer_seconds", 0.))
-                optimizer_calls += int(planner.last_metrics.get("objective_calls", 0))
-            legs[name] = _leg_metrics(result, planner, result, search_only)
-            if not search_only:
-                diagnostics.update(plans=plans, legs=legs)
-        diagnostics.update(legs=legs, planning_seconds=time.perf_counter()-started+self.initialization_seconds)
-        if search_only:
-            diagnostics["searches"] = searches
-        else:
-            diagnostics.update(
-                plans=plans, minco_optimizer_seconds=optimizer_seconds,
-                minco_optimizer_calls=optimizer_calls)
-        return {
-            "searches" if search_only else "plans": searches if search_only else plans,
-            "pick": pick, "place": place, "gap_open": gap_open, "gap_closed": gap_closed,
-            "start_q": start_q, "esdf": esdf, "settings": settings,
-        }
-
+            searches[name] = result
+            legs[name] = _leg_metrics(result, planner, result, True)
+        diagnostics.update(searches=searches, legs=legs,
+            planning_seconds=time.perf_counter()-started+self.initialization_seconds)
+        return dict(searches=searches, pick=pick, place=place, gap_open=gap_open,
+                    gap_closed=gap_closed, start_q=start_q, esdf=esdf, settings=settings)

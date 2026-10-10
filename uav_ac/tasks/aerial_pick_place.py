@@ -5,13 +5,14 @@ from enum import Enum, auto
 
 import numpy as np
 
-from uav_ac.planning.trajectory.aerial_manipulator_minco.task_targets import quaternion_yaw
+from uav_ac.planning.trajectory.aerial_manipulator_minco.flatness import quaternion_yaw
+from uav_ac.planning.trajectory.aerial_manipulator_minco.trajectory import JointTaskTrajectory
 from uav_ac.utils import StateMachine
 
 
 class PickPlaceState(Enum):
-    PLAN_TO_PICK, MOVE_TO_PICK, GRASP = auto(), auto(), auto()
-    PLAN_TO_PLACE, MOVE_TO_PLACE, RELEASE = auto(), auto(), auto()
+    PLAN_TASK, MOVE_TO_PICK, GRASP = auto(), auto(), auto()
+    MOVE_TO_PLACE, RELEASE = auto(), auto()
     DONE, FAILED = auto(), auto()
 
 
@@ -24,7 +25,7 @@ _PICK_PLACE_TRANSITIONS.update({state: set() for state in _PICK_PLACE_FLOW[-2:]}
 
 
 def new_pick_place_machine():
-    return StateMachine(PickPlaceState.PLAN_TO_PICK, _PICK_PLACE_TRANSITIONS)
+    return StateMachine(PickPlaceState.PLAN_TASK, _PICK_PLACE_TRANSITIONS)
 
 
 def transition_pick_place(machine, target, reason=None):
@@ -34,7 +35,7 @@ def transition_pick_place(machine, target, reason=None):
 
 
 def holding_payload(machine):
-    return PickPlaceState.PLAN_TO_PLACE in machine.history and PickPlaceState.DONE not in machine.history
+    return PickPlaceState.MOVE_TO_PLACE in machine.history and PickPlaceState.DONE not in machine.history
 
 
 @dataclass
@@ -46,10 +47,11 @@ class PickPlacePlanBundle:
     gap_closed: float
     start_q: np.ndarray
     settings: dict
+    trajectory: JointTaskTrajectory | None = None
 
     @classmethod
     def from_mapping(cls, result):
-        return cls(**{key: result[key] for key in cls.__dataclass_fields__})
+        return cls(**{key: result[key] for key in cls.__dataclass_fields__ if key in result})
 
 
 class PickPlaceExecution:
@@ -64,6 +66,9 @@ class PickPlaceExecution:
         self.pick, self.place = bundle.pick, bundle.place
         self.gap_open, self.gap_closed = bundle.gap_open, bundle.gap_closed
         self.start_q, self.stride = bundle.start_q.copy(), stride
+        self.trajectory = bundle.trajectory or JointTaskTrajectory(
+            self.plans['pick'], self.plans['place'], self.gap_open, self.gap_closed,
+            float(self.settings['settle_time']))
         self.record_joint_trace = bool(record_joint_trace)
         self.physics_index, self.stage_start = 0, simulation.time
         self.stable_time, self.stable_since = 0., None
@@ -158,8 +163,10 @@ class PickPlaceExecution:
     def _gripper_reference(self, state, now):
         grasping = state is PickPlaceState.GRASP
         gap = self.gap_closed if grasping else self.gap_open
-        reference = self._terminal_with_gap(gap)
         elapsed = now-self.stage_start
+        planned_gap, gap_rate, gap_acceleration = self.trajectory.gap_motion(
+            'grasp' if grasping else 'release', elapsed)
+        reference = self._terminal_with_gap(planned_gap, gap_rate, gap_acceleration)
         settled = (elapsed >= float(self.settings["settle_time"])
                    and abs(self.robot.gripper_opening-gap) <= .005)
         if settled and grasping:
@@ -167,7 +174,6 @@ class PickPlaceExecution:
             if not self._state_matches(goal, .06):
                 transition_pick_place(self.machine, PickPlaceState.FAILED, "carry_start_state_mismatch")
                 return reference
-            transition_pick_place(self.machine, PickPlaceState.PLAN_TO_PLACE)
             transition_pick_place(self.machine, PickPlaceState.MOVE_TO_PLACE)
             self.stage_start = now
         elif settled:
@@ -211,14 +217,16 @@ class PickPlaceExecution:
                 and np.linalg.norm(self.robot.velocity[:3]) <= tolerance
                 and np.linalg.norm(self.robot.velocity[6:10]) <= tolerance)
 
-    def _terminal_with_gap(self, gap):
+    def _terminal_with_gap(self, gap, gap_rate=0., gap_acceleration=0.):
         name = "pick" if self.machine.state is PickPlaceState.GRASP else "place"
         trajectory = self.plans[name]
         reference = trajectory.reference(trajectory.total_time, self.robot, gripper_opening=gap)
         from uav_ac.robot.aerial_manipulator import AerialManipulatorReference
         configuration = reference.configuration.copy()
         configuration[11] = gap
-        return AerialManipulatorReference(configuration, reference.velocity, reference.acceleration)
+        velocity, acceleration = reference.velocity.copy(), reference.acceleration.copy()
+        velocity[-1], acceleration[-1] = gap_rate, gap_acceleration
+        return AerialManipulatorReference(configuration, velocity, acceleration)
 
     def joint_trace(self):
         return {key: np.asarray(self.trace[key], dtype=float).reshape(-1, 4)
@@ -236,7 +244,12 @@ def _plan_result_fields(plans):
     for suffix, attribute, missing, convert in specs:
         for name in ("pick", "place"):
             plan = plans.get(name)
-            fields[f"{name}_{suffix}"] = convert(getattr(plan, attribute)) if plan else missing
+            value = getattr(plan, attribute) if plan else missing
+            fields[f"{name}_{suffix}"] = None if value is None else convert(value)
+    for name in ("pick", "place"):
+        plan = plans.get(name)
+        fields[f"{name}_validation_performed"] = bool(
+            plan and getattr(plan, "validation_performed", plan.validation_passed is not None))
     return fields
 
 

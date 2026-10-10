@@ -50,7 +50,7 @@ class BandedPLU:
             values = values[:, None]
         solution, info = dgbtrs(
             self.lu, self.lower_bandwidth, self.upper_bandwidth,
-            np.asfortranarray(values), self.pivots,
+            np.array(values, dtype=float, order='F', copy=True), self.pivots,
             trans=1 if transpose else 0, overwrite_b=True)
         if info != 0:
             raise np.linalg.LinAlgError(f"banded PLU solve failed with info={info}")
@@ -186,7 +186,7 @@ class MINCOQuintic:
                            direct_grad_times: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         adjoint = system.solve(grad_coefficients, transpose=True)
         grad_points = np.stack([adjoint[6*i + 5] for i in range(self.pieces - 1)], axis=0) \
-            if self.pieces > 1 else np.zeros((0, 3))
+            if self.pieces > 1 else np.zeros((0, self.dimensions))
         grad_times = direct_grad_times.copy()
         blocks = coefficients.reshape(self.pieces, 6, self.dimensions)
         duration = times[:, None]
@@ -251,8 +251,9 @@ class MINCOQuintic:
         if gradients.shape != (6*self.pieces, self.dimensions):
             raise ValueError("coefficient gradients must match the solved coefficient shape")
         adjoint = system.solve(gradients, transpose=True)
-        return _native_math.adjoint_gradients(np.ascontiguousarray(blocks),
+        points, gradient_times = _native_math.adjoint_gradients(np.ascontiguousarray(blocks),
             np.ascontiguousarray(durations), np.ascontiguousarray(adjoint), np.ascontiguousarray(direct))
+        return points.reshape(self.pieces-1, self.dimensions), gradient_times
 
 
 __all__ = ["BandedPLU", "MINCOQuintic"]

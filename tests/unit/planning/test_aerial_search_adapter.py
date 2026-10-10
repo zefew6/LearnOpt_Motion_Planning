@@ -3,7 +3,7 @@ import pytest
 
 from uav_ac.planning.geometry.esdf import ESDF
 from uav_ac.planning.geometry.grid_map import GridMap
-from uav_ac.planning.trajectory.aerial_manipulator_minco.search_adapter import (
+from uav_ac.planning.trajectory.aerial_manipulator_minco.search import (
     AerialAStarMaps, AerialManipulatorStateSpaceAdapter,
     plan_aerial_astar_guide,
 )

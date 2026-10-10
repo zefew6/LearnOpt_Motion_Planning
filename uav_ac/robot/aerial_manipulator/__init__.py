@@ -102,6 +102,9 @@ class AerialManipulator:
     def prepare_kinematics(self, configuration=None, *, check_limits=True):
         return self._model.prepare_kinematics(configuration, check_limits=check_limits)
 
+    def planning_collision_spheres(self):
+        return self._model.planning_collision_spheres()
+
     def compile_collision_pairs(self, pairs=None, *, payload_attached=False):
         return self._model.compile_collision_pairs(pairs, payload_attached=payload_attached)
 

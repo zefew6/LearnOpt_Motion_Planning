@@ -139,7 +139,7 @@ def adjoint_gradients(const double[:, :, ::1] blocks, const double[::1] times,
     cdef Py_ssize_t n=times.shape[0], dimensions=blocks.shape[2], i, d, row
     if n < 1 or blocks.shape[0] != n or blocks.shape[1] != 6 or adjoint.shape[0] != 6*n or adjoint.shape[1] != dimensions or direct.shape[0] != n:
         raise ValueError("invalid adjoint input shapes")
-    points = np.empty((n-1, dimensions), dtype=np.float64) if n > 1 else np.zeros((0, 3))
+    points = np.empty((n-1, dimensions), dtype=np.float64)
     result = np.array(direct, dtype=np.float64, copy=True)
     cdef double[:, ::1] gp = points
     cdef double[::1] gt = result

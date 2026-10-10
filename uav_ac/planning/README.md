@@ -58,18 +58,21 @@ Each returned `FIRIRegion` owns its half-spaces and visualization geometry:
 
 The aerial manipulator MINCO planner keeps its GridMap/ESDF inflation,
 clearance costs, guide diagnostics, and `R3 × SO2 × R4` state-space conversion
-in its local `search_adapter.py`. This keeps the generic package independent
+in its local `search.py`. This keeps the generic package independent
 of aerial-specific dimensions and lets other planners provide their own
 adapters.
 
 ## Aerial-manipulator pick and place
 
-The whole-body manipulation task plans each leg in
+The whole-body manipulation task uses
 `[x, y, z, yaw, q1, q2, q3, q4]` using OMPL `RRTConnect` on `R3 × SO2 × R4`, an
-8-D quintic MINCO spline, and analytic-gradient L-BFGS refinement. The initial
-MINCO knots are sampled by equivalent 8-D arc length (0.25 m by default), with
-all RRT corners retained; the segment count follows the sampled path. One
-positive total-time variable is shared equally across the segments.
+8-D quintic MINCO splines, and analytic-gradient L-BFGS refinement. Search
+provides initialization; both movement blocks, their shared grasp configuration,
+the release configuration and every segment duration belong to one joint
+decision vector. Task positions are immutable. Stationary-event translation
+and lateral jerk conditions are eliminated through differentiable variable maps.
+The planned task includes smooth gripper closure/release dwell intervals;
+execution may pause for tracking and gripper confirmation.
 
 At flight initialization, `PickPlacePlanner` voxelizes scene primitives and
 ground once and constructs the ESDF. The shared occupancy grid feeds RRT
@@ -79,6 +82,43 @@ gradients. The RRT searches nominal horizontal body geometry, while MINCO and
 dense validation use the full roll/pitch/yaw recovered from flatness. Their
 collision costs differentiate through acceleration and yaw, and exact MuJoCo
 distances confirm close geometry contacts.
+
+The public numerical layer under `trajectory/gcopter` keeps `minco` and
+`trajectory` as numerical foundations. `optimization.py` groups waypoint
+specifications, variable maps, sampling, objective assembly and adjoint
+propagation; `optimizer.py` adapts numerical solvers. Both planners use this
+shared layer. GCOPTER-specific
+corridor/flight penalties remain in `gcopter/penalties.py`. Whole-body collision,
+physical constraints, flatness recovery, trajectory conversion and dense validation
+live in the aerial package. Package-level imports remain available; internal
+module imports use the consolidated locations below.
+
+`TaskWaypoint` fixes position and optional scalar-first orientation/world-NED
+twist, with axis masks. `TaskEventConstraint.linearize(times, coefficients)`
+provides residuals and coefficient/time Jacobians; use
+`gcopter.evaluate_minco_constraints` to propagate them to spline variables.
+Its robot-map Jacobians currently use central differences; spline adjoints and
+stationary-event maps are analytic. `DerivativeWaypoint` supplies analytic
+constraints on internal polynomial derivatives. New task constraints can use
+these interfaces without editing the spline kernel.
+Orientation masks select target-frame rotation-vector axes; velocity masks
+select world-NED components.
+
+The existing pick/place task is a stationary interaction task: nonzero grasp or
+release velocity requires a moving-task formulation rather than a dwell. Its
+flatness recovery retains the existing simplified dynamics assumptions, not a
+proof of differential flatness for the full coupled MuJoCo model. Optimization
+uses 21 manually authored sphere sites (22 when carrying payload) and 170 explicit
+self-collision candidate pairs. XML owns local centres/radii; the robot exposes
+`planning_collision_spheres()`. Search uses batched ESDF distances for the same
+sphere envelope used by the objective. The selected workcell uses
+`self_clearance: 0.0` to allow tangent proxies; environment clearance and voxel
+margin remain separate. Normal pick/place runs one joint numerical driver, with
+no dense-validation refinement, whole-task restart or post-solve retiming.
+`validation_passed=None` and `validation_performed=False` mean unvalidated;
+optimizer convergence and sampled constraint residuals are still reported.
+`validation.py` retains explicit offline exact-geometry/task/dwell evaluation.
+Custom robots without planning sphere sites retain the legacy collision API.
 
 Native planning source is grouped in `uav_ac/planning/native/`:
 
@@ -113,7 +153,7 @@ global exploration stage. The weighted A* route is a hint, not an optimality
 certificate. The `--search-only` benchmark measures pick and place
 independently of MINCO; each seed runs in a fresh process by default.
 
-Run the deterministic headless demo with:
+Run the selected workcell configuration with:
 
 ```bash
 .venv/bin/python -m uav_ac.main --config configs/aerial_manipulator_workcell.yaml
@@ -123,7 +163,7 @@ Set `visualize: true` to open the existing MuJoCo viewer. The V1 payload is a
 kinematic marker: it follows the grasp frame after closure and freezes at the
 release pose. Its mass and contact forces do not enter the robot dynamics.
 Planning and execution results separately report optimizer convergence,
-dense trajectory validation, mission state, collision status, and failure
+whether independent validation was performed, mission state, collision status, and failure
 reason. The final collision check is dense sampling; it does not certify every
 continuous-time point between samples.
 
@@ -142,7 +182,8 @@ geometry/              shared polytope, ellipsoid, collision and sampling tools
 search/                generic GridMap A*, callback RRT*, and adapter RRT-Connect
 corridor/firi/         FIRI configuration, separation, MVIE and corridor planning
 trajectory/minimum_snap.py
-trajectory/gcopter/    MINCO, mappings, penalties, L-BFGS and planner orchestration
+trajectory/gcopter/    shared spline/variable/objective mechanics and corridor planning
+trajectory/aerial_manipulator_minco/  whole-body mapping, task constraints and validation
 trajectory/gcs/        CVXPY perspective SOCP, flow rounding and Bezier restriction
 trajectory/bmtp/       independent Bernstein BMTP trajectory/plane alternation
 pipeline/              mission-level composition of RRT*, FIRI and trajectory planning
@@ -150,6 +191,28 @@ pipeline/              mission-level composition of RRT*, FIRI and trajectory pl
 
 Public imports follow the package hierarchy directly; no duplicate flat-module
 compatibility layer is maintained.
+
+Both planner packages have nine implementation modules plus `__init__.py`:
+
+```text
+gcopter/                       aerial_manipulator_minco/
+  config.py                      config.py
+  planner.py                     planner.py
+  optimization.py                optimization.py
+  optimizer.py                   constraints.py
+  minco.py                       flatness.py
+  mappings.py                    collision.py
+  penalties.py                   search.py
+  trajectory.py                  trajectory.py
+  types.py                       validation.py
+```
+
+`aerial_manipulator_minco/planner.py` owns entrypoints and orchestration;
+point-to-point refinement and joint-task assembly live in its `optimization.py`.
+`constraints.py` owns `TaskWaypoint`, task/physical constraints and the initialized
+evaluation context. `search.py` owns A*/OMPL adapters, path preparation and nominal
+task seeds. Quaternion conversions live in `flatness.py`, and result classes in
+`trajectory.py`. No forwarding-only modules are retained for the old internal paths.
 
 ## BMTP API and reproduction demo
 

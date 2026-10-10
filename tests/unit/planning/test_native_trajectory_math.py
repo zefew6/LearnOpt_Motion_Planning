@@ -1,3 +1,4 @@
+from uav_ac.planning.trajectory.gcopter import trajectory
 """Native/reference parity gates; build native kernels explicitly before running."""
 import numpy as np
 import pytest
@@ -49,9 +50,9 @@ def test_polynomials_clipping_boundaries_empty_and_strides(native, monkeypatch, 
     coefficients = rng.normal(size=(3, 6, 16))[:, :, ::2]
     queries = [np.array([[-1., 0., .3], [1., 2.1, 3.]]), np.array([]), .3]
     for query in queries:
-        monkeypatch.setattr(mappings, '_native_math', None)
+        monkeypatch.setattr(trajectory, '_native_math', None)
         expected = mappings.evaluate_piecewise_quintic(durations, coefficients, query, derivative)
-        monkeypatch.setattr(mappings, '_native_math', native)
+        monkeypatch.setattr(trajectory, '_native_math', native)
         actual = mappings.evaluate_piecewise_quintic(durations, coefficients, query, derivative)
         np.testing.assert_allclose(actual, expected, rtol=5e-14, atol=5e-13)
     times = np.linspace(-.4, 1.3, 23)[::2]
@@ -87,7 +88,7 @@ def test_native_adjoint_matches_finite_difference(native, monkeypatch):
 
 def test_native_facades_reject_unsafe_shapes(native, monkeypatch):
     monkeypatch.setattr(minco, '_native_math', native)
-    monkeypatch.setattr(mappings, '_native_math', native)
+    monkeypatch.setattr(trajectory, '_native_math', native)
     solver = minco.MINCOQuintic(np.zeros((3, 8)), np.ones((3, 8)), 2)
     with pytest.raises(ValueError):
         solver._band_storage(np.ones(1))

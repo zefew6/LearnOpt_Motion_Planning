@@ -74,3 +74,10 @@ flight limits, and rotor allocation and motor-response parameters. Its
 defaults are defined in `quad.py`; MuJoCo provides rigid-body dynamics in
 simulation. The aerial-manipulator command interface uses the same collective
 thrust, body-moment, and rotor model.
+
+The aerial model defines `planning_sphere_01` through `planning_sphere_21` as
+nonphysical, group-5 spherical sites. `robot.planning_collision_spheres()` returns
+body-local FLU centres and radii for planning; world positions/Jacobians use the
+existing NED public query API. These sites do not change inertial properties or
+MuJoCo contact geometry. The planner owns the explicit self-pair mask; physical
+geometry remains available for independent evaluation.

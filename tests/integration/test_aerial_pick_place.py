@@ -14,16 +14,20 @@ def test_aerial_manipulator_task_plans_and_executes_headless():
     assert result["success"]
     assert result["state"] == "DONE"
     assert result["event_sequence"] == [
-        "PLAN_TO_PICK", "MOVE_TO_PICK", "GRASP", "PLAN_TO_PLACE",
+        "PLAN_TASK", "MOVE_TO_PICK", "GRASP",
         "MOVE_TO_PLACE", "RELEASE", "DONE",
     ]
-    assert result["pick_plan_valid"] and result["place_plan_valid"]
-    assert 0 < result["pick_validation_sample_dt"] <= .025
-    assert 0 < result["place_validation_sample_dt"] <= .025
+    assert result["pick_plan_valid"] is None and result["place_plan_valid"] is None
+    assert not result["pick_validation_performed"] and not result["place_validation_performed"]
+    assert result['planning_metrics']['joint_problem']
+    assert result['planning_metrics']['task_equality_feasible']
+    assert np.isnan(result["pick_validation_sample_dt"])
+    assert np.isnan(result["place_validation_sample_dt"])
     assert result["planning_metrics"]["planning_seconds"] <= 60.0
     assert (result["planning_metrics"]["minco_optimizer_seconds"]
             <= result["planning_metrics"]["planning_seconds"])
-    assert all(result["planning_metrics"]["legs"][name]["optimizer_converged"]
+    assert result["planning_metrics"]["joint_optimizer_restarts"] == 0
+    assert all(result["planning_metrics"]["legs"][name]["optimizer_iterations"] > 0
                for name in ("pick", "place"))
     assert result["planning_metrics"]["legs"]["pick"]["rrt_nodes"] > 2
     assert result["planning_metrics"]["legs"]["place"]["rrt_nodes"] > 2
@@ -81,9 +85,10 @@ def test_xml_only_scene_layout_runs_same_headless_pipeline(tmp_path, primitives)
 
     assert result["success"]
     assert result["event_sequence"] == [
-        "PLAN_TO_PICK", "MOVE_TO_PICK", "GRASP", "PLAN_TO_PLACE",
+        "PLAN_TASK", "MOVE_TO_PICK", "GRASP",
         "MOVE_TO_PLACE", "RELEASE", "DONE",
     ]
-    assert result["pick_plan_valid"] and result["place_plan_valid"]
+    assert result["pick_plan_valid"] is None and result["place_plan_valid"] is None
+    assert not result["pick_validation_performed"] and not result["place_validation_performed"]
     assert result["released_payload_error"] <= .02
     assert not result["collision"]

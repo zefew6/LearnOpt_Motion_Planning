@@ -34,9 +34,11 @@ from .mappings import (
     polynomial_bases as _polynomial_bases,
     smoothed_l1_array as _smoothed_l1_array,
 )
+from .optimization import evaluate_minco_objective
 from .minco import MINCOQuintic as _MINCOQuintic
 from .optimizer import scipy_lbfgs as _scipy_lbfgs
-from .penalties import stack_piece_halfspaces as _stack_piece_halfspaces
+from .penalties import (stack_piece_halfspaces as _stack_piece_halfspaces,
+                        integrated_penalty as _integrated_penalty)
 from .types import (
     GCOPTERTrajectory,
     HalfSpaceRegion,
@@ -173,23 +175,18 @@ class GCOPTER:
         points = self._decode_points(
             xi, xi_slices, variable_point_indices, variable_poly_indices,
             fixed_points, piece_count - 1, v_polytopes)
-        try:
-            coefficients, system = minco.solve(points, times)
-        except np.linalg.LinAlgError:
-            return 1.0e30, np.zeros_like(variables)
-        if not np.all(np.isfinite(coefficients)):
-            return 1.0e30, np.zeros_like(variables)
+        def term(durations, blocks):
+            gc = np.zeros_like(blocks).reshape(-1, 3)
+            gt = np.zeros(len(durations))
+            value = self._integrated_penalty(durations, blocks, piece_halfspaces, gc, gt)
+            self._last_penalty_cost = value
+            return value, gc.reshape(blocks.shape), gt
 
-        cost, grad_coefficients, direct_grad_times = minco.jerk_energy(coefficients, times)
-        penalty_cost = self._integrated_penalty(
-            times, coefficients, piece_halfspaces,
-            grad_coefficients, direct_grad_times,
-        )
-        self._last_penalty_cost = penalty_cost
-        cost += penalty_cost + self.config.time_weight * float(np.sum(times))
-        direct_grad_times += self.config.time_weight
-        grad_points, grad_times = minco.propagate_gradient(
-            system, coefficients, times, grad_coefficients, direct_grad_times)
+        try:
+            cost, grad_points, grad_times, _ = evaluate_minco_objective(
+                minco, points, times, terms=(term,), time_weight=self.config.time_weight)
+        except (np.linalg.LinAlgError, ValueError):
+            return 1.0e30, np.zeros_like(variables)
 
         grad_xi = np.zeros_like(xi)
         for segment, point_index, poly_index in zip(
@@ -208,136 +205,9 @@ class GCOPTER:
             return 1.0e30, np.zeros_like(variables)
         return float(cost), gradient
 
-    def _integrated_penalty(
-            self,
-            times: np.ndarray,
-            coefficients: np.ndarray,
-            piece_halfspaces: tuple[np.ndarray, np.ndarray, np.ndarray],
-            grad_coefficients: np.ndarray,
-            grad_times: np.ndarray,
-    ) -> float:
-        resolution = self.config.integral_resolution
-        fraction = 1.0 / resolution
-        piece_count = len(times)
-        sample_count = resolution + 1
-        blocks = coefficients.reshape(piece_count, 6, 3)
-        alpha = np.arange(sample_count, dtype=float) * fraction
-        local_times = (times[:, None] * alpha[None, :]).reshape(-1)
-        bases = _polynomial_bases(local_times).reshape(5, piece_count, sample_count, 6)
-        position, velocity, acceleration, jerk, snap = np.einsum(
-            "dpqk,pkc->dpqc", bases, blocks)
-
-        halfspace_A, halfspace_b, halfspace_mask = piece_halfspaces
-        position_violation = (
-            np.einsum("pqd,pfd->pqf", position, halfspace_A)
-            - halfspace_b[:, None, :]
-        )
-        position_values, position_derivatives = _smoothed_l1_array(
-            position_violation, self.config.smoothing_epsilon)
-        position_values *= halfspace_mask[:, None, :]
-        position_derivatives *= halfspace_mask[:, None, :]
-        penalty = self.config.position_weight * np.sum(position_values, axis=2)
-        grad_position = self.config.position_weight * np.einsum(
-            "pqf,pfd->pqd", position_derivatives, halfspace_A)
-
-        vmax2 = self.config.max_velocity**2
-        amax2 = self.config.max_acceleration**2
-        velocity_values, velocity_derivatives = _smoothed_l1_array(
-            np.sum(velocity * velocity, axis=2) - vmax2,
-            self.config.smoothing_epsilon)
-        penalty += self.config.velocity_weight * velocity_values
-        grad_velocity = (
-            2.0 * self.config.velocity_weight
-            * velocity_derivatives[:, :, None] * velocity)
-
-        acceleration_values, acceleration_derivatives = _smoothed_l1_array(
-            np.sum(acceleration * acceleration, axis=2) - amax2,
-            self.config.smoothing_epsilon)
-        penalty += self.config.acceleration_weight * acceleration_values
-        grad_acceleration = (
-            2.0 * self.config.acceleration_weight
-            * acceleration_derivatives[:, :, None] * acceleration)
-
-        # NED point-mass differential flatness: a = g*e_z - thrust/mass * body_z.
-        force_direction = np.stack((
-            -acceleration[:, :, 0],
-            -acceleration[:, :, 1],
-            self.config.gravity - acceleration[:, :, 2],
-        ), axis=2)
-        force_norm = np.maximum(np.linalg.norm(force_direction, axis=2), 1.0e-8)
-        body_z = force_direction / force_norm[:, :, None]
-        thrust = self.config.mass * force_norm
-
-        thrust_mean = 0.5 * (self.config.min_thrust + self.config.max_thrust)
-        thrust_radius = 0.5 * (self.config.max_thrust - self.config.min_thrust)
-        thrust_violation = (thrust - thrust_mean)**2 - thrust_radius**2
-        thrust_values, thrust_derivatives = _smoothed_l1_array(
-            thrust_violation, self.config.smoothing_epsilon)
-        penalty += self.config.thrust_weight * thrust_values
-        thrust_violation_gradient = (
-            -2.0 * self.config.mass * (thrust - thrust_mean)[:, :, None] * body_z)
-        grad_acceleration += (
-            self.config.thrust_weight * thrust_derivatives[:, :, None]
-            * thrust_violation_gradient)
-
-        cos_tilt = np.clip(body_z[:, :, 2], -1.0, 1.0)
-        tilt = np.arccos(cos_tilt)
-        tilt_values, tilt_derivatives = _smoothed_l1_array(
-            tilt - self.config.max_tilt_angle, self.config.smoothing_epsilon)
-        penalty += self.config.tilt_weight * tilt_values
-        sin_tilt = np.maximum(
-            np.sqrt(np.maximum(1.0 - cos_tilt**2, 0.0)), 1.0e-8)
-        vertical = np.array([0.0, 0.0, 1.0])
-        tilt_gradient_acceleration = (
-            vertical - cos_tilt[:, :, None] * body_z
-        ) / (force_norm * sin_tilt)[:, :, None]
-        grad_acceleration += (
-            self.config.tilt_weight * tilt_derivatives[:, :, None]
-            * tilt_gradient_acceleration)
-
-        body_z_dot_jerk = np.sum(body_z * jerk, axis=2)
-        projected_jerk = jerk - body_z_dot_jerk[:, :, None] * body_z
-        projected_jerk_norm2 = np.sum(projected_jerk * projected_jerk, axis=2)
-        body_rate_squared = projected_jerk_norm2 / force_norm**2
-        body_rate_values, body_rate_derivatives = _smoothed_l1_array(
-            body_rate_squared - self.config.max_body_rate**2,
-            self.config.smoothing_epsilon)
-        penalty += self.config.body_rate_weight * body_rate_values
-        body_rate_gradient_jerk = (
-            2.0 * projected_jerk / force_norm[:, :, None]**2)
-        body_rate_gradient_acceleration = 2.0 * (
-            body_z_dot_jerk[:, :, None] * projected_jerk
-            + projected_jerk_norm2[:, :, None] * body_z
-        ) / force_norm[:, :, None]**3
-        grad_acceleration += (
-            self.config.body_rate_weight * body_rate_derivatives[:, :, None]
-            * body_rate_gradient_acceleration)
-        grad_jerk = (
-            self.config.body_rate_weight * body_rate_derivatives[:, :, None]
-            * body_rate_gradient_jerk)
-
-        quadrature_weights = np.ones(sample_count)
-        quadrature_weights[[0, -1]] = 0.5
-        scales = times[:, None] * fraction * quadrature_weights[None, :]
-        grad_blocks = (
-            np.einsum("pqk,pqc,pq->pkc", bases[0], grad_position, scales)
-            + np.einsum("pqk,pqc,pq->pkc", bases[1], grad_velocity, scales)
-            + np.einsum("pqk,pqc,pq->pkc", bases[2], grad_acceleration, scales)
-            + np.einsum("pqk,pqc,pq->pkc", bases[3], grad_jerk, scales)
-        )
-        grad_coefficients += grad_blocks.reshape(-1, 3)
-        state_gradient = (
-            np.sum(grad_position * velocity, axis=2)
-            + np.sum(grad_velocity * acceleration, axis=2)
-            + np.sum(grad_acceleration * jerk, axis=2)
-            + np.sum(grad_jerk * snap, axis=2)
-        )
-        grad_times += np.sum(
-            alpha[None, :] * scales * state_gradient
-            + quadrature_weights[None, :] * fraction * penalty,
-            axis=1,
-        )
-        return float(np.sum(scales * penalty))
+    def _integrated_penalty(self, times, coefficients, piece_halfspaces, grad_coefficients, grad_times):
+        return _integrated_penalty(times, coefficients, piece_halfspaces,
+                                   grad_coefficients, grad_times, self.config)
 
     @staticmethod
     def _normalized_region(

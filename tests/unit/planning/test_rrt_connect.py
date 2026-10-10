@@ -4,7 +4,7 @@ import pytest
 from uav_ac.planning.search.rrt_connect import (
     RRTConnectPlanningError, plan_rrt_connect,
 )
-from uav_ac.planning.trajectory.aerial_manipulator_minco.search_adapter import (
+from uav_ac.planning.trajectory.aerial_manipulator_minco.search import (
     AerialManipulatorStateSpaceAdapter,
 )
 from uav_ac.planning.trajectory.aerial_manipulator_minco.planner import (

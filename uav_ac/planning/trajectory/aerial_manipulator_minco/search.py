@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import time
-
 import numpy as np
+from dataclasses import dataclass, field
 from ompl import base as ob
-
 from ...geometry.grid_map import GridMap
 from ...search.astar import astar_search
-
+from .flatness import yaw_quaternion
 
 @dataclass(frozen=True)
 class AStarGuide:
@@ -348,9 +346,148 @@ class AerialManipulatorStateSpaceAdapter:
         space.setBounds(bounds)
 
 
+
+
+def make_terminal_state(
+        robot, target_position_ned, nominal_yaw, nominal_joints, *, gripper_opening,
+        workspace_bounds=None):
+    """Return ``[base_position, yaw, arm_joints]`` placing grasp frame on target."""
+    target = np.asarray(target_position_ned, dtype=float)
+    joints = np.asarray(nominal_joints, dtype=float)
+    if target.shape != (3,) or not np.all(np.isfinite(target)):
+        raise ValueError("target_position_ned must be a finite 3-vector")
+    if joints.shape != (4,) or not np.all(np.isfinite(joints)):
+        raise ValueError("nominal_joints must contain four finite values")
+    if (np.any(joints < robot.limits.joint_lower)
+            or np.any(joints > robot.limits.joint_upper)):
+        raise ValueError("nominal joints exceed robot limits")
+    q = robot.configuration.copy()
+    q[:3] = 0.0
+    q[3:7] = yaw_quaternion(float(nominal_yaw))
+    q[7:11] = joints
+    q[11] = float(gripper_opening)
+    if not robot.limits.gripper_opening[0] <= q[11] <= robot.limits.gripper_opening[1]:
+        raise ValueError("gripper opening exceeds robot limits")
+    grasp_at_origin, _ = robot.forward_kinematics(q, frame="grasp")
+    q[:3] = target-grasp_at_origin
+    if workspace_bounds is not None:
+        bounds = np.asarray(workspace_bounds, dtype=float)
+        if bounds.shape != (2, 3) or np.any(q[:3] < bounds[0]) or np.any(q[:3] > bounds[1]):
+            raise ValueError("computed base target lies outside workspace bounds")
+    grasp, _ = robot.forward_kinematics(q, frame="grasp")
+    if np.linalg.norm(grasp-target) >= 1.0e-6:
+        raise ValueError("computed terminal state does not reach grasp target")
+    return np.r_[q[:3], float(nominal_yaw), joints]
+
+def task_initialization(planner, start, seeds, *, robot, esdf, quad,
+                        workspace_bounds, gaps, occupancy=None, astar_maps=None,
+                        on_rrt_path=None):
+    from .constraints import AerialManipulatorTrajectoryEvaluator
+    paths, searches = [], []
+    previous = start
+    for i, (name, goal, gap) in enumerate(zip(('pick', 'place'), seeds, gaps, strict=True)):
+        callback = None if on_rrt_path is None else lambda path, name=name: on_rrt_path(name, path)
+        result = planner.plan(previous, goal, robot=robot, esdf=esdf, quad=quad,
+            workspace_bounds=workspace_bounds, gripper_opening=gap, carry_payload=bool(i),
+            occupancy=occupancy, astar_maps=astar_maps, search_only=True, on_rrt_path=callback)
+        cfg = planner.config
+        evaluator = AerialManipulatorTrajectoryEvaluator(robot, esdf, quad, cfg,
+            workspace_bounds, gap, bool(i), occupancy=occupancy)
+        def edge_valid(first, second):
+            delta = second-first
+            delta[3] = _wrap(delta[3])
+            count = max(1, int(np.ceil(np.linalg.norm(delta[:3])/cfg.edge_position_resolution)),
+                int(np.ceil(abs(delta[3])/cfg.edge_yaw_resolution)),
+                int(np.ceil(np.max(np.abs(delta[4:]))/cfg.edge_joint_resolution)))
+            states = np.asarray([_interpolate_state(first, second, a) for a in np.linspace(0., 1., count+1)])
+            return bool(np.all(evaluator.collision_feasible_batch(states)))
+        short, attempts = _greedy_shortcut(result.path, edge_valid)
+        path = _resample_preserving_corners(_unwrap_path_yaw(short),
+            cfg.minco_sample_spacing_m, cfg.position_scale, cfg.yaw_scale, cfg.joint_scales)
+        # Additional knots provide freedom for stationary flatness event rates.
+        if len(path) < 4:
+            path = np.linspace(path[0], path[-1], 4) if len(path) == 2 else np.insert(path, 1, (path[0]+path[1])/2, axis=0)
+        paths.append(path); searches.append(result)
+        previous = goal
+    return paths, searches
+
+
+def _wrap(angle):
+    return float((angle+np.pi)%(2*np.pi)-np.pi)
+
+
+def _interpolate_state(first, second, alpha):
+    first, second = np.asarray(first, dtype=float), np.asarray(second, dtype=float)
+    delta = second-first
+    delta[3] = _wrap(delta[3])
+    result = first+float(alpha)*delta
+    result[3] = _wrap(result[3])
+    return result
+
+
+def _unwrap_path_yaw(path):
+    result = np.asarray(path, dtype=float).copy()
+    for i in range(1, len(result)):
+        original = result[i, 3]
+        result[i, 3] = original+2.*np.pi*round(
+            (result[i-1, 3]-original)/(2.*np.pi))
+    return result
+
+
+def _greedy_shortcut(path, edge_valid):
+    """Remove redundant route knots while validating every replacement edge."""
+    path = np.asarray(path, dtype=float)
+    if len(path) <= 2:
+        return path.copy(), 0
+    result, current, attempts = [path[0].copy()], 0, 0
+    while current < len(path)-1:
+        following = len(path)-1
+        while following > current+1:
+            attempts += 1
+            if edge_valid(path[current], path[following]):
+                break
+            following -= 1
+        result.append(path[following].copy())
+        current = following
+    return _unwrap_path_yaw(np.asarray(result)), attempts
+
+
+def _resample_preserving_corners(path, spacing, position_scale=.5,
+                                 yaw_scale=.7, joint_scales=(.8, .8, .8, .8)):
+    """Sample an 8-D RRT polyline by equivalent arc length, retaining corners."""
+    if len(path) < 2:
+        raise ValueError("RRT path must have distinct start and goal entries")
+    path = _unwrap_path_yaw(path)
+    path = path[np.r_[True, np.any(np.diff(path, axis=0) != 0., axis=1)]]
+    if not np.isfinite(spacing) or spacing <= 0.:
+        raise ValueError("MINCO sample spacing must be finite and positive")
+    if len(path) < 2:
+        raise ValueError("RRT path must contain distinct 8-D start and goal states")
+    position_scale, yaw_scale = float(position_scale), float(yaw_scale)
+    joint_scales = np.asarray(joint_scales, dtype=float)
+    if (position_scale <= 0. or yaw_scale <= 0. or joint_scales.shape != (4,)
+            or np.any(joint_scales <= 0.)):
+        raise ValueError("8-D path metric scales must be positive")
+    scale = np.r_[np.full(3, position_scale), yaw_scale, joint_scales]
+    delta = np.diff(path, axis=0)
+    edge_lengths = position_scale*np.sqrt(np.sum((delta/scale)**2, axis=1))
+    if np.sum(edge_lengths) <= 1e-12:
+        raise ValueError("RRT start and goal have zero 8-D path length")
+    knots = [path[0].copy()]
+    for edge, length in enumerate(edge_lengths):
+        count = max(1, int(np.ceil(length/float(spacing))))
+        knots.extend((path[edge+1].copy() if step == count else
+                      path[edge]+(path[edge+1]-path[edge])*(step/count))
+                     for step in range(1, count+1))
+    return np.asarray(knots)
+
+
 __all__ = [
-    "AStarGuide",
-    "AerialAStarMaps",
-    "AerialManipulatorStateSpaceAdapter",
-    "plan_aerial_astar_guide",
+    'AStarGuide',
+    'AStarSearchGrid',
+    'AerialAStarMaps',
+    'AerialManipulatorStateSpaceAdapter',
+    'plan_aerial_astar_guide',
+    'make_terminal_state',
+    'task_initialization',
 ]

@@ -110,7 +110,16 @@ def test_validation_failure_is_reported_without_blocking_execution(monkeypatch, 
             optimizer_converged=True, iterations=1, validation_sample_dt=.025,
             total_time=1., evaluate=lambda times: np.tile(start, (len(times), 1)))
 
-    monkeypatch.setattr(pipeline.AerialManipulatorMINCO, 'plan', plan_leg)
+    def plan_task(self, start, targets, seeds, **kwargs):
+        # Exercise the pipeline's joint-result reporting independently of search.
+        plans, metrics = {}, {}
+        for i, name in enumerate(('pick', 'place')):
+            plans[name] = plan_leg(self, start if i == 0 else seeds[0], seeds[i], carry_payload=bool(i))
+            metrics[name] = dict(self.last_metrics)
+        self.last_metrics = dict(optimizer_seconds=0., joint_optimizer_calls=1, joint_problem=True)
+        return plans, metrics
+
+    monkeypatch.setattr(pipeline.AerialManipulatorMINCO, 'plan_task', plan_task)
     diagnostics = {}
     result = planner.plan(diagnostics=diagnostics,
                           on_minco_trajectory=lambda name, _: published.append(name))

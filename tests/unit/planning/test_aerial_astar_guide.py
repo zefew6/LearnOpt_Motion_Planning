@@ -2,7 +2,7 @@ import numpy as np
 
 from uav_ac.planning.geometry.esdf import ESDF
 from uav_ac.planning.geometry.grid_map import GridMap
-from uav_ac.planning.trajectory.aerial_manipulator_minco.search_adapter import (
+from uav_ac.planning.trajectory.aerial_manipulator_minco.search import (
     AerialAStarMaps, plan_aerial_astar_guide,
 )
 
@@ -48,10 +48,10 @@ def test_a_star_endpoint_inside_proxy_obstacle_returns_no_guide():
 
 
 def test_initialized_a_star_maps_reused_without_map_construction(monkeypatch):
-    from uav_ac.planning.trajectory.aerial_manipulator_minco import search_adapter
+    from uav_ac.planning.trajectory.aerial_manipulator_minco import search as aerial_search
 
     occupancy, esdf = _grid_with_wall_opening()
-    maps = search_adapter.AerialAStarMaps(
+    maps = aerial_search.AerialAStarMaps(
         occupancy, esdf, proxy_radius=.02, margin=0., grid_resolution=.1,
         fallback_resolution=.05)
     snapshots = [grid.occupancy.occupied.copy() for grid in maps.grids]
@@ -79,13 +79,13 @@ def test_initialized_a_star_maps_reused_without_map_construction(monkeypatch):
 
 def test_fallback_search_uses_preinitialized_fine_grid(monkeypatch):
     from types import SimpleNamespace
-    from uav_ac.planning.trajectory.aerial_manipulator_minco import search_adapter
+    from uav_ac.planning.trajectory.aerial_manipulator_minco import search as aerial_search
 
     occupancy, esdf = _grid_with_wall_opening()
-    maps = search_adapter.AerialAStarMaps(
+    maps = aerial_search.AerialAStarMaps(
         occupancy, esdf, proxy_radius=.02, margin=0., grid_resolution=.1,
         fallback_resolution=.05)
-    original_search = search_adapter.astar_search
+    original_search = aerial_search.astar_search
     seen = []
 
     def search(grid, *args, **kwargs):
@@ -94,7 +94,7 @@ def test_fallback_search_uses_preinitialized_fine_grid(monkeypatch):
             return SimpleNamespace(found=False, path=None, expansions=3)
         return original_search(grid, *args, **kwargs)
 
-    monkeypatch.setattr(search_adapter, 'astar_search', search)
+    monkeypatch.setattr(aerial_search, 'astar_search', search)
     monkeypatch.setattr(GridMap, '__post_init__', lambda *_: (_ for _ in ()).throw(
         AssertionError('fallback rebuilt a map')))
     guide, metrics = plan_aerial_astar_guide(maps, [.2, .5, .5], [.8, .5, .5])

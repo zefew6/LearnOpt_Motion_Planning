@@ -4,7 +4,10 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from uav_ac.planning.trajectory.aerial_manipulator_minco import evaluator as module
+from uav_ac.planning.trajectory.aerial_manipulator_minco import constraints as module
+from uav_ac.planning.trajectory.aerial_manipulator_minco import constraints as constraints_module
+from uav_ac.planning.trajectory.aerial_manipulator_minco import collision as collision_module
+from uav_ac.planning.trajectory.aerial_manipulator_minco import flatness as flatness_module
 from uav_ac.planning.trajectory.aerial_manipulator_minco.config import AerialManipulatorMINCOConfig
 
 native = pytest.importorskip('uav_ac.planning.native._aerial_constraints')
@@ -43,7 +46,7 @@ def test_rate_and_tangent_reference(case):
         np.testing.assert_allclose(actual[0],expected[0],rtol=3e-12,atol=1e-12)
         np.testing.assert_allclose(actual[1],expected[1],rtol=3e-12,atol=1e-10)
         actual=native.flatness_attitude_tangent_jacobian(acceleration,yaw,9.81)
-        expected=module._flatness_attitude_tangent_jacobian_python(acceleration,yaw,9.81)
+        expected=flatness_module._flatness_attitude_tangent_jacobian(acceleration,yaw,9.81)
         for a,b in zip(actual,expected): np.testing.assert_allclose(a,b,rtol=2e-12,atol=1e-10)
 
 
@@ -101,7 +104,7 @@ def test_integration_reference_finite_difference_and_callback_ownership(pieces,r
 def test_native_missing_keeps_reference_fallback(monkeypatch):
     obj=evaluator();rng=np.random.default_rng(77);args=rng.normal(size=(4,8))
     expected=obj.sample_cost_gradient(*args)
-    monkeypatch.setattr(module,'_native_aerial',None)
+    monkeypatch.setattr(constraints_module,'_native_aerial',None)
     actual=obj.sample_cost_gradient(*args)
     for a,b in zip(actual,expected): np.testing.assert_allclose(a,b,rtol=3e-12,atol=1e-9)
 
@@ -155,7 +158,7 @@ def test_exact_collision_accumulation_random_boundaries_and_immutable_inputs(cou
     inputs=(12.5,state,acceleration,distances,jacobians,kinds,tangent,
             .35,.04,20000.,10000.,.01,-.4,-.2,-.1,.1)
     copies=[a.copy() for a in inputs if isinstance(a,np.ndarray)]
-    expected=module._exact_collision_penalty_python(*inputs)
+    expected=collision_module._exact_collision_penalty_python(*inputs)
     actual=native.exact_collision_penalty(*inputs)
     for a,b in zip(actual,expected): np.testing.assert_allclose(a,b,rtol=2e-13,atol=2e-10)
     for a,b in zip((a for a in inputs if isinstance(a,np.ndarray)),copies):
@@ -173,14 +176,14 @@ def test_actual_collision_native_reference_parity(carry_payload,monkeypatch):
     cfg=AerialManipulatorMINCOConfig(obstacle_clearance=.35)
     obj=module.AerialManipulatorTrajectoryEvaluator(sim.robot,esdf,sim.quad,cfg,sim.space_limits,.06,carry_payload)
     rng=np.random.default_rng(390)
-    metadata=[obj._query_base_kinds.copy(),np.asarray(obj._query_pairs.ids).copy()]
+    metadata=[obj.self_pairs.copy(),obj.sphere_radii.copy()]
     for height in (-1.,-.35,-.2):
         sigma=rng.normal(scale=.025,size=8);sigma[2]=height
         acceleration=rng.normal(scale=.1,size=8)
-        monkeypatch.setattr(module,'_native_aerial',native)
+        monkeypatch.setattr(collision_module,'_native_aerial',native)
         actual=obj.collision_cost_gradient(sigma,acceleration)
-        monkeypatch.setattr(module,'_native_aerial',None)
+        monkeypatch.setattr(collision_module,'_native_aerial',None)
         expected=obj.collision_cost_gradient(sigma,acceleration)
         for a,b in zip(actual,expected): np.testing.assert_allclose(a,b,rtol=2e-11,atol=2e-8)
-    np.testing.assert_array_equal(obj._query_base_kinds,metadata[0])
-    np.testing.assert_array_equal(obj._query_pairs.ids,metadata[1])
+    np.testing.assert_array_equal(obj.self_pairs,metadata[0])
+    np.testing.assert_array_equal(obj.sphere_radii,metadata[1])

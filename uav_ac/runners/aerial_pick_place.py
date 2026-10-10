@@ -16,7 +16,7 @@ from uav_ac.tasks.aerial_pick_place import (
 
 
 def run_aerial_pick_place(config):
-    """Plan both legs before moving, then execute both with the baseline controller."""
+    """Solve the joint task before moving, then execute its confirmed events."""
     simulation = MujocoSimulation(
         config["scene"], record_actual_trajectory=False,
         planning_path_capacity=2 if config["visualize"] else 0)
@@ -147,9 +147,10 @@ def _public_metrics(diagnostics):
 def _print_result(result):
     seconds = result["planning_metrics"].get("planning_seconds")
     planning_time = f"{seconds:.2f}s" if seconds is not None and np.isfinite(seconds) else "n/a"
+    pick_status = "unvalidated" if result['pick_plan_valid'] is None else str(result['pick_plan_valid'])
+    place_status = "unvalidated" if result['place_plan_valid'] is None else str(result['place_plan_valid'])
     print(f"Aerial pick/place: state={result['state']} | success={'yes' if result['success'] else 'no'} | "
-          f"collision={'yes' if result['collision'] else 'no'} | plans={result['pick_plan_valid']}/"
-          f"{result['place_plan_valid']} | planning={planning_time}")
+          f"collision={'yes' if result['collision'] else 'no'} | plans={pick_status}/"
+          f"{place_status} | planning={planning_time}")
     if result["failure_reason"]:
         print(f"Failure: {result['failure_reason']}")
-

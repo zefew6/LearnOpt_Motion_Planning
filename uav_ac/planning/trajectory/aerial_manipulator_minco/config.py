@@ -82,7 +82,7 @@ class AerialManipulatorMINCOConfig:
                 raise ValueError(f"{name} must contain {expected} finite non-negative values")
         positive = ("time_weight", "max_speed", "max_acceleration", "max_body_rate", "max_yaw_rate",
                     "max_yaw_acceleration", "obstacle_clearance",
-                    "esdf_discretization_margin", "esdf_resolution", "self_clearance",
+                    "esdf_discretization_margin", "esdf_resolution",
                     "obstacle_weight", "self_collision_weight",
                     "constraint_weight", "smoothing_epsilon", "gradient_tolerance",
                     "relative_cost_tolerance",
@@ -102,6 +102,9 @@ class AerialManipulatorMINCOConfig:
                or not np.isfinite(getattr(self, name))
                or getattr(self, name) <= 0 for name in positive):
             raise ValueError("continuous planner settings must be positive and finite")
+        if (isinstance(self.self_clearance, bool) or not np.isfinite(self.self_clearance)
+                or self.self_clearance < 0.):
+            raise ValueError("self_clearance must be finite and non-negative")
         if self.esdf_discretization_margin < np.sqrt(3.0)*self.esdf_resolution:
             raise ValueError(
                 "esdf_discretization_margin must cover one voxel diagonal")

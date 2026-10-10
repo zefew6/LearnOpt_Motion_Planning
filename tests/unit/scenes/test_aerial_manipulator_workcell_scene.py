@@ -2,7 +2,7 @@ import numpy as np
 
 from uav_ac.main import load_config
 from uav_ac.planning.trajectory.aerial_manipulator_minco import make_terminal_state
-from uav_ac.planning.trajectory.aerial_manipulator_minco.task_targets import yaw_quaternion
+from uav_ac.planning.trajectory.aerial_manipulator_minco.flatness import yaw_quaternion
 from uav_ac.simulation.mujoco_sim import MujocoSimulation
 
 

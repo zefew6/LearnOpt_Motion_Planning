@@ -7,7 +7,7 @@ from uav_ac.planning.geometry.esdf import ESDF
 from uav_ac.planning.trajectory.aerial_manipulator_minco.config import (
     AerialManipulatorMINCOConfig,
 )
-from uav_ac.planning.trajectory.aerial_manipulator_minco.evaluator import (
+from uav_ac.planning.trajectory.aerial_manipulator_minco.constraints import (
     AerialManipulatorTrajectoryEvaluator,
 )
 from uav_ac.planning.trajectory.aerial_manipulator_minco.planner import (
@@ -17,7 +17,7 @@ from uav_ac.planning.trajectory.aerial_manipulator_minco.planner import (
     _encode_internal_joint_waypoints,
     _tanh_joint_waypoint_derivative,
 )
-from uav_ac.planning.trajectory.aerial_manipulator_minco.task_targets import quaternion_yaw
+from uav_ac.planning.trajectory.aerial_manipulator_minco.flatness import quaternion_yaw
 from uav_ac.planning.trajectory.gcopter.mappings import inverse_time
 from uav_ac.planning.trajectory.gcopter.minco import MINCOQuintic
 from uav_ac.simulation.mujoco_sim import MujocoSimulation
