@@ -332,3 +332,111 @@ def exact_collision_penalty(double cost, const double[:] state_gradient,
         minimum_clearance=min(minimum_clearance,distances[pair]-margin)
     return (cost,gradient_array,acceleration_array,obstacle_violation,
             minimum_clearance,self_violation,payload_violation)
+
+
+# Model-derived FK for the fixed/hinge/slide subtree of a floating robot.
+# The robot wrapper validates metadata and public configurations before entry.
+from libc.stdint cimport int64_t
+
+
+cdef void _quat_product(const double* a, const double* b, double* out) noexcept nogil:
+    out[0] = a[0]*b[0]-a[1]*b[1]-a[2]*b[2]-a[3]*b[3]
+    out[1] = a[0]*b[1]+a[1]*b[0]+a[2]*b[3]-a[3]*b[2]
+    out[2] = a[0]*b[2]-a[1]*b[3]+a[2]*b[0]+a[3]*b[1]
+    out[3] = a[0]*b[3]+a[1]*b[2]-a[2]*b[1]+a[3]*b[0]
+
+
+cdef void _quat_rotate(const double* q, const double* p, double* out) noexcept nogil:
+    cdef double tx = 2.*(q[2]*p[2]-q[3]*p[1])
+    cdef double ty = 2.*(q[3]*p[0]-q[1]*p[2])
+    cdef double tz = 2.*(q[1]*p[1]-q[2]*p[0])
+    out[0] = p[0]+q[0]*tx+q[2]*tz-q[3]*ty
+    out[1] = p[1]+q[0]*ty+q[3]*tx-q[1]*tz
+    out[2] = p[2]+q[0]*tz+q[1]*ty-q[2]*tx
+
+
+def batch_point_positions(const double[:, ::1] configurations,
+                          const int64_t[::1] parents,
+                          const double[:, ::1] offsets,
+                          const double[:, ::1] orientations,
+                          const int64_t[::1] joint_types,
+                          const int64_t[::1] joint_columns,
+                          const double[:, ::1] axes,
+                          const double[:, ::1] anchors,
+                          const double[::1] references,
+                          const int64_t[::1] point_bodies,
+                          const double[:, ::1] local_points):
+    """NED/FRD configurations to NED points; no live/scratch MuJoCo mutation."""
+    result_array = np.empty((configurations.shape[0], local_points.shape[0], 3))
+    transform_array = np.empty((parents.shape[0], 7))
+    cdef double[:, :, ::1] result = result_array
+    cdef double[:, ::1] transform = transform_array
+    cdef Py_ssize_t batch, body, parent, point, axis
+    cdef double value, norm, sign
+    cdef double position[3]
+    cdef double quaternion[4]
+    cdef double joint_quaternion[4]
+    cdef double local_quaternion[4]
+    cdef double local_position[3]
+    cdef double rotated[3]
+    cdef double vector[3]
+    cdef double parent_quaternion[4]
+    with nogil:
+        for batch in range(configurations.shape[0]):
+            for axis in range(3):
+                transform[0, axis] = configurations[batch, axis]*(1. if axis == 0 else -1.)
+            norm = 0.
+            for axis in range(4):
+                norm += configurations[batch, axis+3]*configurations[batch, axis+3]
+            norm = sqrt(norm)
+            for axis in range(4):
+                sign = 1. if axis < 2 else -1.
+                transform[0, axis+3] = sign*configurations[batch, axis+3]/norm
+            for body in range(1, parents.shape[0]):
+                parent = parents[body]
+                for axis in range(3):
+                    local_position[axis] = offsets[body, axis]
+                for axis in range(4):
+                    local_quaternion[axis] = orientations[body, axis]
+                    parent_quaternion[axis] = transform[parent, axis+3]
+                if joint_types[body] != -1:
+                    value = configurations[batch, joint_columns[body]]
+                    if joint_columns[body] == 11:
+                        value = (value-.020)*.5
+                    value -= references[body]
+                    if joint_types[body] == 2:  # MuJoCo slide
+                        for axis in range(3):
+                            vector[axis] = axes[body, axis]*value
+                        _quat_rotate(local_quaternion, vector, rotated)
+                        for axis in range(3):
+                            local_position[axis] += rotated[axis]
+                    else:  # MuJoCo hinge, including an off-origin anchor
+                        joint_quaternion[0] = cos(value*.5)
+                        for axis in range(3):
+                            joint_quaternion[axis+1] = axes[body, axis]*sin(value*.5)
+                            vector[axis] = anchors[body, axis]
+                        _quat_rotate(joint_quaternion, vector, rotated)
+                        for axis in range(3):
+                            vector[axis] -= rotated[axis]
+                        _quat_rotate(local_quaternion, vector, rotated)
+                        for axis in range(3):
+                            local_position[axis] += rotated[axis]
+                        _quat_product(local_quaternion, joint_quaternion, quaternion)
+                        for axis in range(4):
+                            local_quaternion[axis] = quaternion[axis]
+                _quat_rotate(parent_quaternion, local_position, position)
+                _quat_product(parent_quaternion, local_quaternion, quaternion)
+                for axis in range(3):
+                    transform[body, axis] = transform[parent, axis]+position[axis]
+                for axis in range(4):
+                    transform[body, axis+3] = quaternion[axis]
+            for point in range(local_points.shape[0]):
+                body = point_bodies[point]
+                for axis in range(4):
+                    quaternion[axis] = transform[body, axis+3]
+                for axis in range(3):
+                    vector[axis] = local_points[point, axis]
+                _quat_rotate(quaternion, vector, rotated)
+                for axis in range(3):
+                    result[batch, point, axis] = (transform[body, axis]+rotated[axis])*(1. if axis == 0 else -1.)
+    return result_array

@@ -1,6 +1,6 @@
 """Fused numeric RRT broad phase; no model state or geometric approximation."""
 
-from libc.math cimport ceil, nearbyint, sqrt, INFINITY
+from libc.math cimport ceil, nearbyint, sqrt, fabs, INFINITY
 from libc.stdint cimport int64_t
 import numpy as np
 
@@ -107,3 +107,100 @@ def query(
                             worlds[batch] += 1
     return (env_array, self_array, payload_array, selected_array.view(np.bool_),
             worlds_array, outside_array.view(np.bool_))
+
+
+ctypedef fused field_t:
+    float
+    double
+
+
+cdef bint _pairs_collide(const double[:, :, ::1] points, Py_ssize_t batch,
+                        const double[::1] radii,
+                        const int64_t[:, ::1] pairs, double clearance) noexcept nogil:
+    cdef Py_ssize_t pair, a, b
+    cdef double dx, dy, dz, limit, distance2
+    for pair in range(pairs.shape[0]):
+        a, b = pairs[pair, 0], pairs[pair, 1]
+        limit = radii[a]+radii[b]+clearance
+        dx = points[batch, a, 0]-points[batch, b, 0]
+        dy = points[batch, a, 1]-points[batch, b, 1]
+        dz = points[batch, a, 2]-points[batch, b, 2]
+        distance2 = dx*dx+dy*dy+dz*dz
+        if limit > 0. and distance2 < limit*limit:
+            # Retain the reference subtraction at contact: squaring a
+            # tolerance-shifted radius changes decisions by a rounding ulp.
+            if limit-sqrt(distance2) > 1e-10:
+                return True
+    return False
+
+
+def sphere_feasible(const field_t[:, :, ::1] values, const double[::1] origin,
+                    double resolution, const double[:, :, ::1] points,
+                    const double[::1] radii, const int64_t[:, ::1] self_pairs,
+                    const int64_t[:, ::1] payload_pairs, double margin,
+                    double discretization_margin, double self_clearance,
+                    bint with_uncertainty=False):
+    """Boolean manual-sphere checks, matching the NumPy/SciPy reference.
+
+    Metadata is validated by WholeBodyCollision. Both float32 and float64
+    fields are read directly, without copying a scene-sized ESDF.
+    """
+    result = np.ones(points.shape[0], dtype=np.bool_)
+    uncertain_array = np.zeros(points.shape[0], dtype=np.bool_) if with_uncertainty else np.empty(0, dtype=np.bool_)
+    cdef unsigned char[::1] valid = result.view(np.uint8)
+    cdef unsigned char[::1] uncertain = uncertain_array.view(np.uint8)
+    cdef Py_ssize_t batch, sphere, axis, corner, x, y, z
+    cdef Py_ssize_t index[3]
+    cdef double upper[3]
+    cdef double fraction[3]
+    cdef double coordinate, clipped, delta, outside2, distance, weight, required
+    cdef bint reject
+    for axis in range(3):
+        upper[axis] = origin[axis]+resolution*(values.shape[axis]-1)
+    with nogil:
+        for batch in range(points.shape[0]):
+            # Self collision can reject before any map interpolation.
+            if (_pairs_collide(points, batch, radii, self_pairs, self_clearance)
+                    or _pairs_collide(points, batch, radii, payload_pairs, self_clearance)):
+                valid[batch] = 0
+                continue
+            for sphere in range(points.shape[1]):
+                reject = False
+                outside2 = 0.
+                for axis in range(3):
+                    coordinate = points[batch, sphere, axis]
+                    if (origin[axis]+radii[sphere]-coordinate > 1e-10
+                            or coordinate-(upper[axis]-radii[sphere]) > 1e-10):
+                        reject = True
+                        break
+                    clipped = coordinate
+                    if clipped < origin[axis]:
+                        clipped = origin[axis]
+                    elif clipped > upper[axis]:
+                        clipped = upper[axis]
+                    delta = coordinate-clipped
+                    outside2 += delta*delta
+                    coordinate = (clipped-origin[axis])/resolution
+                    index[axis] = <Py_ssize_t>coordinate
+                    if index[axis] >= values.shape[axis]-1:
+                        index[axis] = values.shape[axis]-2
+                    fraction[axis] = coordinate-index[axis]
+                if reject:
+                    valid[batch] = 0
+                    break
+                distance = 0.
+                for corner in range(8):
+                    x, y, z = corner & 1, (corner >> 1) & 1, (corner >> 2) & 1
+                    weight = (fraction[0] if x else 1.-fraction[0])
+                    weight *= fraction[1] if y else 1.-fraction[1]
+                    weight *= fraction[2] if z else 1.-fraction[2]
+                    distance += weight*values[index[0]+x, index[1]+y, index[2]+z]
+                required = radii[sphere]+margin+discretization_margin+sqrt(outside2)
+                if with_uncertainty and fabs(required-distance-1e-10) <= 1e-12*(1.+fabs(required)+fabs(distance)):
+                    # Direct trilinear evaluation and SciPy's B-spline can
+                    # differ by rounding ulps. Confirm tolerance ties upstream.
+                    uncertain[batch] = 1
+                if required-distance > 1e-10:
+                    valid[batch] = 0
+                    break
+    return (result, uncertain_array) if with_uncertainty else result

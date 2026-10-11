@@ -119,13 +119,19 @@ no dense-validation refinement, whole-task restart or post-solve retiming.
 optimizer convergence and sampled constraint residuals are still reported.
 `validation.py` retains explicit offline exact-geometry/task/dwell evaluation.
 Custom robots without planning sphere sites retain the legacy collision API.
+RRT boolean checks fuse trilinear ESDF queries, map boundaries and sphere-pair
+tests in an optional Cython kernel, stopping when a state is colliding. States
+at the ESDF feasibility tolerance are confirmed by the NumPy/SciPy reference.
+Batch FK uses XML-derived robot transforms through the public robot API; the
+NumPy/MuJoCo fallback preserves the same margins and pair mask.
 
 Native planning source is grouped in `uav_ac/planning/native/`:
 
-- `_collision_broadphase.pyx`: fused RRT occupancy/self/payload/AABB candidates.
+- `_collision_broadphase.pyx`: fused RRT occupancy/self/payload/AABB candidates
+  and manual sphere/ESDF boolean feasibility.
 - `_trajectory_math.pyx`: polynomial batches, quintic band assembly, jerk-energy
   derivatives and adjoint assembly. LAPACK factorization/solves remain unchanged.
-- `_aerial_constraints.pyx`: physical constraints, flatness derivatives, sample
+- `_aerial_constraints.pyx`: model-derived batch point FK, physical constraints, flatness derivatives, sample
   integration and exact-distance penalty/gradient accumulation. Exact MuJoCo
   geometry queries remain unchanged.
 

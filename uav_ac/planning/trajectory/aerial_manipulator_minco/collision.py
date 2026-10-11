@@ -15,6 +15,11 @@ try:
 except ImportError:
     _native_aerial = None
 
+try:
+    from ...native._collision_broadphase import sphere_feasible as _native_sphere_feasible
+except ImportError:
+    _native_sphere_feasible = None
+
 
 def _flatness_attitude_tangent_jacobian(acceleration, yaw, gravity=9.81):
     if _native_aerial is not None:
@@ -466,15 +471,35 @@ class WholeBodyCollision:
         if not len(states):
             return np.empty(0, dtype=bool)
         phase_started = time.perf_counter()
-        configurations = np.asarray([self._configuration(state) for state in states])
+        configurations = np.empty((len(states), 12))
+        configurations[:, :3] = states[:, :3]
+        configurations[:, 3] = np.cos(states[:, 3]*.5)
+        configurations[:, 4:6] = 0.
+        configurations[:, 6] = np.sin(states[:, 3]*.5)
+        configurations[:, 7:11] = states[:, 4:8]
+        configurations[:, 11] = self.gripper_opening
         points = self.robot.point_positions_batch(
             configurations, self.sphere_names, self.sphere_points, check_limits=False)
         self.rrt_batch_fk_seconds += time.perf_counter()-phase_started
         if self.manual_spheres:
             phase_started = time.perf_counter()
-            broad = self._manual_feasibility_batch(points, self.config.rrt_obstacle_margin)
+            if (_native_sphere_feasible is not None
+                    and self.esdf.values.dtype in (np.dtype('float32'), np.dtype('float64'))):
+                valid, uncertain = _native_sphere_feasible(
+                    self.esdf.values, self.esdf.origin, self.esdf.resolution,
+                    points, self.sphere_radii, self.self_pairs, self.payload_pairs,
+                    self.config.rrt_obstacle_margin, self.esdf_discretization_margin,
+                    self.config.self_clearance, with_uncertainty=True)
+                if np.any(uncertain):
+                    broad = self._manual_feasibility_batch(
+                        points[uncertain], self.config.rrt_obstacle_margin)
+                    valid[uncertain] = ((broad[0] <= 1e-10) & (broad[1] <= 1e-10)
+                                        & (broad[2] <= 1e-10))
+            else:
+                broad = self._manual_feasibility_batch(points, self.config.rrt_obstacle_margin)
+                valid = (broad[0] <= 1e-10) & (broad[1] <= 1e-10) & (broad[2] <= 1e-10)
             self.rrt_broadphase_seconds += time.perf_counter()-phase_started
-            return (broad[0] <= 1e-10) & (broad[1] <= 1e-10) & (broad[2] <= 1e-10)
+            return valid
         phase_started = time.perf_counter()
         broad = self._broadphase.query(
             points, self.config.rrt_obstacle_margin, self.config.rrt_obstacle_margin,

@@ -399,7 +399,7 @@ def task_initialization(planner, start, seeds, *, robot, esdf, quad,
             count = max(1, int(np.ceil(np.linalg.norm(delta[:3])/cfg.edge_position_resolution)),
                 int(np.ceil(abs(delta[3])/cfg.edge_yaw_resolution)),
                 int(np.ceil(np.max(np.abs(delta[4:]))/cfg.edge_joint_resolution)))
-            states = np.asarray([_interpolate_state(first, second, a) for a in np.linspace(0., 1., count+1)])
+            states = _interpolate_states(first, second, np.linspace(0., 1., count+1))
             return bool(np.all(evaluator.collision_feasible_batch(states)))
         short, attempts = _greedy_shortcut(result.path, edge_valid)
         path = _resample_preserving_corners(_unwrap_path_yaw(short),
@@ -423,6 +423,16 @@ def _interpolate_state(first, second, alpha):
     result = first+float(alpha)*delta
     result[3] = _wrap(result[3])
     return result
+
+
+def _interpolate_states(first, second, fractions):
+    """Batch the same shortest-yaw interpolation used by scalar edge checks."""
+    first, second = np.asarray(first, dtype=float), np.asarray(second, dtype=float)
+    delta = second-first
+    delta[3] = _wrap(delta[3])
+    states = first+np.asarray(fractions)[:, None]*delta
+    states[:, 3] = (states[:, 3]+np.pi)%(2*np.pi)-np.pi
+    return states
 
 
 def _unwrap_path_yaw(path):

@@ -110,3 +110,34 @@ def test_optimizer_penalizes_sphere_extents_outside_known_map(context):
     plus=state.copy();minus=state.copy();plus[0]+=1e-6;minus[0]-=1e-6
     numeric=(e.collision_cost_gradient(plus)[0]-e.collision_cost_gradient(minus)[0])/2e-6
     np.testing.assert_allclose(g[0],numeric,rtol=3e-4,atol=.01)
+
+
+@pytest.mark.parametrize('loaded', [False, True])
+def test_rrt_native_and_reference_agree_for_real_robot(context, monkeypatch, loaded):
+    from uav_ac.planning.trajectory.aerial_manipulator_minco import collision
+    sim, esdf, cfg = context
+    evaluator = AerialManipulatorTrajectoryEvaluator(sim.robot, esdf, sim.quad, cfg,
+        sim.space_limits, .025 if loaded else .06, loaded)
+    rng = np.random.default_rng(153)
+    states = rng.uniform([-2., -2., -2., -np.pi, -2., -1., -1., -1.],
+                         [2., 2., -.2, np.pi, 2., 1., 1., 1.], (500, 8))
+    native = evaluator.collision_feasible_batch(states)
+    monkeypatch.setattr(collision, '_native_sphere_feasible', None)
+    np.testing.assert_array_equal(evaluator.collision_feasible_batch(states), native)
+
+
+def test_rrt_confirms_esdf_tolerance_with_reference(context, monkeypatch):
+    sim, _, cfg = context
+    rng = np.random.default_rng(16)
+    esdf = ESDF(rng.uniform(.2, .8, (12, 12, 12)), np.full(3, -5.), 1.)
+    e = AerialManipulatorTrajectoryEvaluator(sim.robot, esdf, sim.quad, cfg,
+        sim.space_limits, .06, False)
+    e.esdf_discretization_margin = .02
+    e.sphere_radii = np.zeros(21)
+    e.sphere_radii[0] = .34698481505543266
+    e.self_pairs = np.empty((0, 2), dtype=np.int64)
+    point = [-1.6162490144938144, -.2250604982143245, .46371416789287734]
+    points = np.tile(point, (1, 21, 1))
+    # Supply exact query geometry to isolate interpolation/tolerance handling.
+    monkeypatch.setattr(sim.robot, 'point_positions_batch', lambda *a, **k: points)
+    assert not e.collision_feasible_batch(np.zeros((1, 8)))[0]

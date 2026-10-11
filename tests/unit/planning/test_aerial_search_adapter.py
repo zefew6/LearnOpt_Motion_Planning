@@ -86,3 +86,17 @@ def test_aerial_state_space_adapter_rejects_invalid_sampling_bounds():
 
     with pytest.raises(ValueError, match="sampling bounds"):
         adapter.set_sampling_bounds(lower, np.r_[upper[:7], -1.])
+
+
+def test_batch_edge_interpolation_wraps_yaw_and_preserves_samples():
+    from uav_ac.planning.trajectory.aerial_manipulator_minco import search
+    interpolate = getattr(search, '_interpolate_states', None)
+    assert interpolate is not None, 'batch edge interpolation is missing'
+    first = np.array([0., 1., 2., 3., .1, .2, .3, .4])
+    second = np.array([2., 3., 4., -3., .5, .6, .7, .8])
+    fractions = np.array([0., .25, .5, 1.])
+    actual = interpolate(first, second, fractions)
+    expected = np.array([search._interpolate_state(first, second, a) for a in fractions])
+    np.testing.assert_array_equal(actual, expected)
+    np.testing.assert_allclose(actual[2], [1., 2., 3., -np.pi, .3, .4, .5, .6])
+    assert interpolate(first, second, np.empty(0)).shape == (0, 8)

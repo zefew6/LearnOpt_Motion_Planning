@@ -4,6 +4,11 @@ from dataclasses import dataclass
 import mujoco
 import numpy as np
 
+try:
+    from uav_ac.planning.native._aerial_constraints import batch_point_positions as _native_batch_points
+except ImportError:
+    _native_batch_points = None
+
 S = np.diag([1.0, -1.0, -1.0])  # ENU/FLU coordinates to NED/FRD coordinates
 Q_SIGN = np.array([1.0, 1.0, -1.0, -1.0])
 GAP_MIN, GAP_MAX = .020, .070
@@ -97,6 +102,7 @@ class AerialManipulatorModel:
             for body in range(model.nbody)
         }
         self._point_body_cache = {}
+        self._batch_fk_metadata = None
         self._body_joint_ancestors = np.zeros((model.nbody, len(self.arm_joints)), dtype=bool)
         for body in range(model.nbody):
             for joint_index, joint in enumerate(self.arm_joints):
@@ -454,13 +460,60 @@ class AerialManipulatorModel:
         rotations = d.xmat[body_ids].reshape(-1, 3, 3)
         return (d.xpos[body_ids] + np.einsum("nij,nj->ni", rotations, points)) @ S
 
+    def _compile_batch_fk(self):
+        """Derive a supported kinematic tree from XML, otherwise use MuJoCo.
+
+        Only the public floating base, four arm hinges and symmetric finger
+        slides may move. Extra joints/mocap bodies retain the reference path.
+        """
+        model = self.model
+        bodies = np.array(sorted(self._descendant_bodies), dtype=np.int64)
+        if not len(bodies) or bodies[0] != self.base:
+            return None
+        lookup = {int(body): i for i, body in enumerate(bodies)}
+        columns = {int(j): 7+i for i, j in enumerate(self.arm_joints)}
+        columns.update({int(j): 11 for j in self.gripper_joints})
+        parents = np.full(len(bodies), -1, dtype=np.int64)
+        types = np.full(len(bodies), -1, dtype=np.int64)
+        qcolumns = np.zeros(len(bodies), dtype=np.int64)
+        axes = np.zeros((len(bodies), 3))
+        anchors = np.zeros((len(bodies), 3))
+        references = np.zeros(len(bodies))
+        for i, body in enumerate(bodies):
+            count = int(model.body_jntnum[body])
+            if model.body_mocapid[body] >= 0:
+                return None
+            if i == 0:
+                if count != 1 or model.body_jntadr[body] != self.free_joint:
+                    return None
+                continue
+            parents[i] = lookup[int(model.body_parentid[body])]
+            if count == 0:
+                continue
+            joint = int(model.body_jntadr[body])
+            if count != 1 or joint not in columns or model.jnt_type[joint] not in (2, 3):
+                return None
+            if ((joint in self.arm_joints and model.jnt_type[joint] != 3)
+                    or (joint in self.gripper_joints and model.jnt_type[joint] != 2)):
+                return None
+            types[i], qcolumns[i] = model.jnt_type[joint], columns[joint]
+            axes[i], anchors[i] = model.jnt_axis[joint], model.jnt_pos[joint]
+            references[i] = model.qpos0[model.jnt_qposadr[joint]]
+        body_indices = np.full(model.nbody, -1, dtype=np.int64)
+        body_indices[bodies] = np.arange(len(bodies))
+        metadata = (parents, model.body_pos[bodies].copy(), model.body_quat[bodies].copy(),
+                    types, qcolumns, axes, anchors, references)
+        for value in (*metadata, body_indices):
+            value.setflags(write=False)
+        return metadata, body_indices
+
     def point_positions_batch(self, configurations, body_names, local_points,
                               *, check_limits=True):
         """Return ``(B, S, 3)`` NED positions using kinematics-only updates.
 
-        Body names and local points are resolved once per batch. Each state is
-        evaluated in the model's independent scratch ``MjData`` object with
-        ``mj_kinematics``; the live simulation state is never changed.
+        Body names are cached. Supported robot subtrees use model-derived
+        native FK; other queries use isolated ``mj_kinematics`` updates.
+        Neither path changes the live simulation state.
         """
         configurations = np.asarray(configurations, dtype=float)
         names = tuple(body_names)
@@ -478,6 +531,25 @@ class AerialManipulatorModel:
                 self._point_body_cache[names] = body_ids
         except KeyError as error:
             raise ValueError(f"unknown body name: {error.args[0]}") from error
+        if _native_batch_points is not None:
+            if self._batch_fk_metadata is None:
+                self._batch_fk_metadata = self._compile_batch_fk() or False
+            if self._batch_fk_metadata is not False:
+                metadata, body_indices = self._batch_fk_metadata
+                point_bodies = body_indices[body_ids]
+                if np.all(point_bodies >= 0):
+                    norms = np.linalg.norm(configurations[:, 3:7], axis=1)
+                    if np.any(norms < 1e-12):
+                        raise ValueError("configuration quaternion cannot be zero")
+                    if check_limits:
+                        if (np.any(configurations[:, 7:11] < self.limits.joint_lower)
+                                or np.any(configurations[:, 7:11] > self.limits.joint_upper)):
+                            raise ValueError("configuration exceeds an arm joint limit")
+                        if np.any((configurations[:, 11] < GAP_MIN) | (configurations[:, 11] > GAP_MAX)):
+                            raise ValueError("configuration gripper gap must be within [0.020, 0.070] m")
+                    return _native_batch_points(
+                        np.ascontiguousarray(configurations), *metadata,
+                        point_bodies, np.ascontiguousarray(points))
         result = np.empty((len(configurations), len(names), 3), dtype=float)
         d = self._scratch
         for index, configuration in enumerate(configurations):

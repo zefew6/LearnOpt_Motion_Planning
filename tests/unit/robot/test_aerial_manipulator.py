@@ -569,3 +569,61 @@ def test_dynamics_accepts_small_soft_joint_stop_overshoot_without_mutating_live_
     assert sim.time == before[2]
     with pytest.raises(ValueError, match='joint limit'):
         sim.robot.forward_kinematics(q)
+@pytest.mark.parametrize('alter_model', [False, True])
+def test_native_batch_fk_matches_mujoco_without_scratch_updates(alter_model, monkeypatch):
+    pytest.importorskip('uav_ac.planning.native._aerial_constraints')
+    sim = MujocoSimulation('uav_ac/simulation/models/aerial_manipulator_workcell.xml',
+                           record_actual_trajectory=False)
+    robot = sim.robot
+    if alter_model:
+        # Exercise XML-derived rotations, off-origin hinges and joint references.
+        model = sim.model
+        arm = robot._model.arm_joints
+        model.jnt_pos[arm[1]] = [.015, -.021, .008]
+        model.qpos0[robot._model.arm_qpos] = [.13, -.2, .15, .08]
+        model.body_quat[model.jnt_bodyid[arm[2]]] = [np.cos(np.pi/8), np.sin(np.pi/8), 0., 0.]
+    spheres = robot.planning_collision_spheres()
+    names = tuple(s['body'] for s in spheres)+(robot.frame_point('grasp')[0],)
+    points = np.array([s['center'] for s in spheres]+[robot.frame_point('grasp')[1]])
+    rng = np.random.default_rng(817)
+    q = np.tile(robot.configuration, (80, 1))
+    q[:, :3] = rng.normal(size=(80, 3))
+    q[:, 3:7] = rng.normal(size=(80, 4))*2.  # Public API normalizes quaternions.
+    q[:, 7:11] = rng.uniform(robot.limits.joint_lower, robot.limits.joint_upper, (80, 4))
+    q[:, 11] = rng.uniform(.02, .07, 80)
+    expected = np.array([robot.point_positions(row, names, points) for row in q])
+    live = sim.data.qpos.copy()
+    def unexpected(*args, **kwargs):
+        pytest.fail('accelerated batch FK fell back to per-state scratch preparation')
+    monkeypatch.setattr(robot._model, '_prepare_kinematic', unexpected)
+    actual = robot.point_positions_batch(q, names, points)
+    np.testing.assert_allclose(actual, expected, rtol=2e-12, atol=2e-12)
+    np.testing.assert_array_equal(sim.data.qpos, live)
+
+
+def test_batch_fk_fallback_and_public_input_validation(monkeypatch):
+    from uav_ac.robot.aerial_manipulator import model as module
+    sim = MujocoSimulation(MODEL, record_actual_trajectory=False)
+    robot = sim.robot
+    q = np.repeat(robot.configuration[None, :], 2, axis=0)
+    names = ('quadrotor', 'gripper_left_body')
+    local = np.array([[.1, -.2, .3], [.01, .02, -.03]])
+    expected = np.array([robot.point_positions(row, names, local) for row in q])
+    native_backend = module._native_batch_points
+    for backend in (native_backend, None):
+        monkeypatch.setattr(module, '_native_batch_points', backend)
+        np.testing.assert_allclose(robot.point_positions_batch(q, names, local), expected, atol=1e-12)
+        assert robot.point_positions_batch(q[:0], names, local).shape == (0, 2, 3)
+        invalid = q.copy(); invalid[0, 3:7] = 0.
+        with pytest.raises(ValueError, match='quaternion'):
+            robot.point_positions_batch(invalid, names, local, check_limits=False)
+        invalid = q.copy(); invalid[0, 7] = 100.
+        with pytest.raises(ValueError, match='joint limit'):
+            robot.point_positions_batch(invalid, names, local)
+        invalid = q.copy(); invalid[0, 11] = .1
+        with pytest.raises(ValueError, match='gripper gap'):
+            robot.point_positions_batch(invalid, names, local)
+    # A query outside the robot subtree must use MuJoCo's world transforms.
+    monkeypatch.setattr(module, '_native_batch_points', native_backend)
+    np.testing.assert_array_equal(robot.point_positions_batch(q, ('world',), np.zeros((1, 3))),
+                                  np.zeros((2, 1, 3)))

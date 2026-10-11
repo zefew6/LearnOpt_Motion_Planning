@@ -11,6 +11,7 @@ from .search import (
     plan_aerial_astar_guide,
     _greedy_shortcut,
     _interpolate_state,
+    _interpolate_states,
     _resample_preserving_corners,
     _unwrap_path_yaw,
     _wrap,
@@ -102,10 +103,13 @@ class AerialManipulatorMINCO(AerialManipulatorOptimization):
         rrt_state_cache_hits = 0
         rrt_collision_batches = 0
         rrt_edge_cache_hits = 0
+        physical_lower, physical_upper = lower.copy(), upper.copy()
+        physical_lower[3], physical_upper[3] = -np.inf, np.inf
 
         def validate_states(states):
             nonlocal rrt_state_queries, rrt_state_cache_hits, rrt_collision_batches
             states = np.asarray(states, dtype=float).reshape(-1, 8)
+            in_bounds = np.all((states >= physical_lower) & (states <= physical_upper), axis=1)
             result = np.empty(len(states), dtype=bool)
             pending, pending_keys, pending_indices = [], [], []
             rrt_state_queries += len(states)
@@ -114,9 +118,7 @@ class AerialManipulatorMINCO(AerialManipulatorOptimization):
                 if key in validity_cache:
                     rrt_state_cache_hits += 1
                     result[index] = validity_cache[key]
-                elif (np.any(state[:3] < bounds[0]) or np.any(state[:3] > bounds[1])
-                      or np.any(state[4:8] < robot.limits.joint_lower)
-                      or np.any(state[4:8] > robot.limits.joint_upper)):
+                elif not in_bounds[index]:
                     validity_cache[key] = False
                     result[index] = False
                 else:
@@ -158,8 +160,7 @@ class AerialManipulatorMINCO(AerialManipulatorOptimization):
                         int(np.ceil(np.max(np.abs(delta[4:8]))/cfg.edge_joint_resolution)))
             fractions = np.arange(1, count+1, dtype=float)/count
             for first_index in range(0, len(fractions), 32):
-                states = np.asarray([_interpolate_state(first, second, alpha)
-                                     for alpha in fractions[first_index:first_index+32]])
+                states = _interpolate_states(first, second, fractions[first_index:first_index+32])
                 if not np.all(validate_states(states)):
                     edge_cache[key] = False
                     return False

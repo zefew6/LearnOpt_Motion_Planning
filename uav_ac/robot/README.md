@@ -81,3 +81,9 @@ body-local FLU centres and radii for planning; world positions/Jacobians use the
 existing NED public query API. These sites do not change inertial properties or
 MuJoCo contact geometry. The planner owns the explicit self-pair mask; physical
 geometry remains available for independent evaluation.
+
+`point_positions_batch()` uses optional native FK derived from the compiled
+XML body transforms, hinge anchors/axes and joint references. Its metadata is
+cached for the robot model lifetime; construct a new robot interface when
+changing these model parameters. Unsupported joint trees, points outside the
+robot subtree and missing native kernels use the MuJoCo scratch-data fallback.
