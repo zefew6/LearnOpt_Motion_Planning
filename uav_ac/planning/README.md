@@ -74,6 +74,27 @@ and lateral jerk conditions are eliminated through differentiable variable maps.
 The planned task includes smooth gripper closure/release dwell intervals;
 execution may pause for tracking and gripper confirmation.
 
+The default `shortcut_method: legacy` retains random shortcuts followed by
+farthest-visible-node greedy simplification. The experimental
+`shortcut_method: cost_partial` preserves raw RRT nodes and chooses the minimum
+weighted-length valid ordered subsequence using dynamic programming. Connection
+costs normalize position, yaw and joints by their existing scales and use
+shortest-angle yaw differences. This optimum is limited to supplied route nodes.
+Three partial-shortcut sweeps then simplify yaw and individual arm motion while
+keeping base-route corners and endpoints. Every accepted change reduces weighted
+length and passes the existing full-body edge validator. Long edges receive the
+existing arc-length samples before MINCO initialization.
+
+Select the experiment explicitly in `aerial_manipulator_minco:`; the tracked
+workcell configuration remains on the default. Fixed-route testing reduced
+joint motion, but random-route execution exposed collisions, so this method is
+not a validated replacement for the default. A collision-free geometric shortcut
+does not guarantee a collision-free MINCO curve or successful tracking.
+`rrt_simplify_attempts` and `rrt_simplify_budget_s` control legacy random
+simplification only. Generic RRT callers retain their existing behavior. Task
+diagnostics include `rrt_shortcut_method`, shortcut timing, checks and input/output
+node counts.
+
 At flight initialization, `PickPlacePlanner` voxelizes scene primitives and
 ground once and constructs the ESDF. The shared occupancy grid feeds RRT
 collision checks and the `edt` package generates the signed Euclidean distance

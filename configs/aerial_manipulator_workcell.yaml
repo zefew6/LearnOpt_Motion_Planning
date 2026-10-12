@@ -40,7 +40,7 @@ aerial_manipulator_minco:
   smoothing_epsilon: 0.005
 
   # ===== MINCO =====
-  minco_sample_spacing_m: 1.5
+  minco_sample_spacing_m: 1.0
   # Fixed-initialization benchmark: four intervals, 30 iterations, under 3 s.
   integral_resolution: 4
   integral_resolution_floor_unloaded: 2
@@ -50,7 +50,7 @@ aerial_manipulator_minco:
 
   # ===== L-BFGS =====
   # One joint solve; numerical convergence is reported independently.
-  max_iterations: 30
+  max_iterations: 60
   lbfgs_memory: 12
   gradient_tolerance: 0.8
   relative_cost_tolerance: 0.001

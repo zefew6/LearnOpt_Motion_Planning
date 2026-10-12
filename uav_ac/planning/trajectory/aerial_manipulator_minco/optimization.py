@@ -531,6 +531,7 @@ class AerialManipulatorOptimization:
         self.last_metrics.update({
             "esdf_discretization_margin_used": evaluator.esdf_discretization_margin,
             "rrt_greedy_shortcut_attempts": int(shortcut_attempts),
+            "rrt_shortcut_checks": int(shortcut_attempts),
             "validation_seconds": validation_seconds,
             "validation_samples": evaluator.validation_samples,
             "optimized_total_time_s": float(provisional.total_time),

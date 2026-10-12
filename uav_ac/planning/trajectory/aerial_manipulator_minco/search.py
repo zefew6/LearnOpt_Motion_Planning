@@ -401,7 +401,22 @@ def task_initialization(planner, start, seeds, *, robot, esdf, quad,
                 int(np.ceil(np.max(np.abs(delta[4:]))/cfg.edge_joint_resolution)))
             states = _interpolate_states(first, second, np.linspace(0., 1., count+1))
             return bool(np.all(evaluator.collision_feasible_batch(states)))
-        short, attempts = _greedy_shortcut(result.path, edge_valid)
+        shortcut_started = time.perf_counter()
+        if cfg.shortcut_method == 'cost_partial':
+            short, attempts = _shortest_shortcut(result.path, edge_valid,
+                cfg.position_scale, cfg.yaw_scale, cfg.joint_scales)
+            short, partial_checks = _partial_shortcut(short, edge_valid,
+                cfg.position_scale, cfg.yaw_scale, cfg.joint_scales)
+        else:
+            short, attempts = _greedy_shortcut(result.path, edge_valid)
+            partial_checks = 0
+        result.metrics.update(
+            rrt_shortcut_method=cfg.shortcut_method,
+            rrt_shortcut_seconds=time.perf_counter()-shortcut_started,
+            rrt_shortcut_checks=attempts,
+            rrt_partial_shortcut_checks=partial_checks,
+            rrt_shortcut_input_nodes=len(result.path),
+            rrt_shortcut_output_nodes=len(short))
         path = _resample_preserving_corners(_unwrap_path_yaw(short),
             cfg.minco_sample_spacing_m, cfg.position_scale, cfg.yaw_scale, cfg.joint_scales)
         # Additional knots provide freedom for stationary flatness event rates.
@@ -445,7 +460,7 @@ def _unwrap_path_yaw(path):
 
 
 def _greedy_shortcut(path, edge_valid):
-    """Remove redundant route knots while validating every replacement edge."""
+    """Legacy farthest-visible-node shortcut, retained as the default."""
     path = np.asarray(path, dtype=float)
     if len(path) <= 2:
         return path.copy(), 0
@@ -460,6 +475,94 @@ def _greedy_shortcut(path, edge_valid):
         result.append(path[following].copy())
         current = following
     return _unwrap_path_yaw(np.asarray(result)), attempts
+
+
+def _shortest_shortcut(path, edge_valid, position_scale=.5, yaw_scale=.7,
+                       joint_scales=(.8, .8, .8, .8)):
+    """Find the minimum weighted-length valid ordered subsequence of a route.
+
+    Keep every original node available until the final backtrack. Edges use
+    the search validator and shortest-yaw interpolation; no new states or
+    alternate obstacle routes are introduced. Cost pruning avoids checking
+    connections that cannot improve the best prefix already found.
+    """
+    path = np.asarray(path, dtype=float)
+    if len(path) <= 2:
+        return _unwrap_path_yaw(path), 0
+    scale = np.r_[np.full(3, position_scale), yaw_scale, joint_scales]
+    costs = np.full(len(path), np.inf)
+    costs[0] = 0.
+    previous = np.full(len(path), -1, dtype=int)
+    attempts = 0
+    for last in range(1, len(path)):
+        deltas = path[last]-path[:last]
+        deltas[:, 3] = (deltas[:, 3]+np.pi)%(2*np.pi)-np.pi
+        candidates = costs[:last]+np.linalg.norm(deltas/scale, axis=1)
+        # The first valid candidate in cost order is the optimal prefix.
+        for first in np.argsort(candidates, kind='stable'):
+            if candidates[first] >= costs[last]:
+                break
+            attempts += 1
+            if edge_valid(path[first], path[last]):
+                costs[last] = candidates[first]
+                previous[last] = first
+                break
+        if previous[last] < 0:
+            raise RuntimeError('shortcut input path has no valid ordered connection')
+    indices, current = [], len(path)-1
+    while current >= 0:
+        indices.append(current)
+        current = previous[current]
+    return _unwrap_path_yaw(path[indices[::-1]]), attempts
+
+
+def _partial_shortcut(path, edge_valid, position_scale=.5, yaw_scale=.7,
+                      joint_scales=(.8, .8, .8, .8)):
+    """Shorten yaw/individual arm motion while retaining base-route corners.
+
+    Full-state straight connections can be blocked by the base even when an
+    arm coordinate needlessly wanders. Interpolate one coordinate over each
+    subroute and accept only a cost reduction with all replacement edges valid.
+    Endpoints and base positions remain fixed.
+    """
+    path = _unwrap_path_yaw(path)
+    scale = np.r_[np.full(3, position_scale), yaw_scale, joint_scales]
+
+    def lengths(points):
+        delta = np.diff(points, axis=0)
+        delta[:, 3] = (delta[:, 3]+np.pi)%(2*np.pi)-np.pi
+        return np.linalg.norm(delta/scale, axis=1)
+
+    checks = 0
+    for _ in range(3):
+        changed = False
+        for span in range(len(path)-1, 1, -1):
+            for first in range(len(path)-span):
+                last = first+span
+                arc = np.r_[0., np.cumsum(lengths(path[first:last+1]))]
+                if arc[-1] <= 1e-12:
+                    continue
+                fractions = arc/arc[-1]
+                for axis in range(3, 8):
+                    candidate = path[first:last+1].copy()
+                    delta = candidate[-1, axis]-candidate[0, axis]
+                    if axis == 3:
+                        delta = _wrap(delta)
+                    candidate[1:-1, axis] = candidate[0, axis]+fractions[1:-1]*delta
+                    if lengths(candidate).sum() >= lengths(path[first:last+1]).sum()-1e-9:
+                        continue
+                    valid = True
+                    for a, b in zip(candidate[:-1], candidate[1:], strict=True):
+                        checks += 1
+                        if not edge_valid(a, b):
+                            valid = False
+                            break
+                    if valid:
+                        path[first:last+1] = candidate
+                        changed = True
+        if not changed:
+            break
+    return _unwrap_path_yaw(path), checks
 
 
 def _resample_preserving_corners(path, spacing, position_scale=.5,

@@ -115,3 +115,80 @@ def test_distance_resampling_counts_joint_and_in_place_yaw_motion():
     assert len(knots) > 2
     np.testing.assert_array_equal(knots[0], path[0])
     np.testing.assert_array_equal(knots[-1], path[-1])
+
+
+def test_shortcut_minimizes_route_cost_instead_of_farthest_node_index():
+    from uav_ac.planning.trajectory.aerial_manipulator_minco.search import _shortest_shortcut
+
+    path = np.zeros((4, 8))
+    path[:, :2] = [[0., 0.], [1., 0.], [0., 4.], [2., 0.]]
+    allowed = {(0, 1), (1, 2), (2, 3), (0, 2), (1, 3)}
+
+    def edge_valid(a, b):
+        first = next(i for i, point in enumerate(path) if np.array_equal(point, a))
+        last = next(i for i, point in enumerate(path) if np.array_equal(point, b))
+        return (first, last) in allowed
+
+    result, _ = _shortest_shortcut(path, edge_valid)
+    np.testing.assert_array_equal(result, path[[0, 1, 3]])
+
+
+def test_shortcut_uses_shortest_yaw_difference_when_comparing_routes():
+    from uav_ac.planning.trajectory.aerial_manipulator_minco.search import _shortest_shortcut
+
+    path = np.zeros((4, 8))
+    path[:, 0] = [0., .5, 1., 2.]
+    path[:, 3] = [3.1, -3.1, 0., -3.0]
+    result, _ = _shortest_shortcut(path, lambda a, b: not (a[0] == 0. and b[0] == 2.))
+    np.testing.assert_array_equal(result[:, 0], [0., .5, 2.])
+    assert np.sum(np.abs(np.diff(result[:, 3]))) < .2
+
+
+def test_shortcut_counts_joint_motion_and_preserves_required_connections():
+    from uav_ac.planning.trajectory.aerial_manipulator_minco.search import _shortest_shortcut
+
+    path = np.zeros((4, 8))
+    path[:, 0] = [0., .5, 1., 2.]
+    path[2, 4] = 2.
+    result, _ = _shortest_shortcut(path, lambda a, b: not (a[0] == 0. and b[0] == 2.))
+    np.testing.assert_array_equal(result, path[[0, 1, 3]])
+    unchanged, _ = _shortest_shortcut(path, lambda a, b: (a[0], b[0]) in
+                                    {(0., .5), (.5, 1.), (1., 2.)})
+    np.testing.assert_array_equal(unchanged, path)
+
+
+def test_partial_shortcut_removes_arm_detours_without_cutting_base_route():
+    from uav_ac.planning.trajectory.aerial_manipulator_minco.search import _partial_shortcut
+
+    path = np.zeros((3, 8))
+    path[:, :2] = [[0., 0.], [1., 1.], [2., 0.]]
+    path[1, 3:] = [.8, 1., -.5, .3, .2]
+    result, _ = _partial_shortcut(path, lambda a, b: True)
+    np.testing.assert_array_equal(result[:, :3], path[:, :3])
+    np.testing.assert_array_equal(result[:, 3:], np.zeros((3, 5)))
+    np.testing.assert_array_equal(result[[0, -1]], path[[0, -1]])
+
+
+def test_partial_shortcut_retains_joint_pose_needed_to_pass_obstacle():
+    from uav_ac.planning.trajectory.aerial_manipulator_minco.search import _partial_shortcut
+
+    path = np.zeros((3, 8))
+    path[:, 0] = [0., 1., 2.]
+    path[1, 4] = 1.
+
+    def edge_valid(a, b):
+        # At the middle of the passage the arm must remain folded.
+        return (a[0] != 1. or a[4] >= .9) and (b[0] != 1. or b[4] >= .9)
+
+    result, _ = _partial_shortcut(path, edge_valid)
+    np.testing.assert_array_equal(result, path)
+
+
+def test_experimental_shortcut_requires_explicit_selection():
+    from uav_ac.planning.trajectory.aerial_manipulator_minco.config import AerialManipulatorMINCOConfig
+
+    assert AerialManipulatorMINCOConfig().shortcut_method == 'legacy'
+    config = AerialManipulatorMINCOConfig.from_mapping({'shortcut_method': 'cost_partial'})
+    assert config.shortcut_method == 'cost_partial'
+    with pytest.raises(ValueError, match='shortcut_method'):
+        AerialManipulatorMINCOConfig.from_mapping({'shortcut_method': 'unknown'})

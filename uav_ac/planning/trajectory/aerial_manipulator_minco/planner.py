@@ -9,6 +9,8 @@ from .constraints import AerialManipulatorTrajectoryEvaluator
 from .search import (
     AerialManipulatorStateSpaceAdapter,
     plan_aerial_astar_guide,
+    _shortest_shortcut,
+    _partial_shortcut,
     _greedy_shortcut,
     _interpolate_state,
     _interpolate_states,
@@ -227,7 +229,9 @@ class AerialManipulatorMINCO(AerialManipulatorOptimization):
                 state_valid=state_valid, edge_valid=edge_valid,
                 range_size=cfg.rrt_step_size,
                 sampling_regions=regions,
-                simplify_attempts=cfg.rrt_simplify_attempts,
+                # Preserve candidate nodes for the whole-body cost shortcut.
+                simplify_attempts=(0 if cfg.shortcut_method == 'cost_partial'
+                                   else cfg.rrt_simplify_attempts),
                 simplify_budget_s=cfg.rrt_simplify_budget_s,
                 timeout_s=None)
         except (RuntimeError, ValueError) as error:
@@ -277,7 +281,22 @@ class AerialManipulatorMINCO(AerialManipulatorOptimization):
             self.last_metrics["rrt_path_states"] = int(len(path))
             return AerialManipulatorSearchResult(path, self.last_metrics)
         path = _unwrap_path_yaw(path)
-        path, shortcut_attempts = _greedy_shortcut(path, edge_valid)
+        shortcut_started = time.perf_counter()
+        shortcut_input_nodes = len(path)
+        if cfg.shortcut_method == 'cost_partial':
+            path, shortcut_attempts = _shortest_shortcut(
+                path, edge_valid, cfg.position_scale, cfg.yaw_scale, cfg.joint_scales)
+            path, partial_checks = _partial_shortcut(
+                path, edge_valid, cfg.position_scale, cfg.yaw_scale, cfg.joint_scales)
+        else:
+            path, shortcut_attempts = _greedy_shortcut(path, edge_valid)
+            partial_checks = 0
+        self.last_metrics.update(
+            rrt_shortcut_method=cfg.shortcut_method,
+            rrt_shortcut_seconds=time.perf_counter()-shortcut_started,
+            rrt_shortcut_input_nodes=shortcut_input_nodes,
+            rrt_shortcut_output_nodes=len(path),
+            rrt_partial_shortcut_checks=partial_checks)
         knots = _resample_preserving_corners(
             path, cfg.minco_sample_spacing_m, cfg.position_scale,
             cfg.yaw_scale, cfg.joint_scales)

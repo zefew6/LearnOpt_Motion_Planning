@@ -46,6 +46,7 @@ class AerialManipulatorMINCOConfig:
     astar_tube_std_m: float = .10
     rrt_simplify_attempts: int = 32
     rrt_simplify_budget_s: float = .02
+    shortcut_method: str = "legacy"
     minco_sample_spacing_m: float = .8
     position_scale: float = .5
     yaw_scale: float = .7
@@ -116,6 +117,8 @@ class AerialManipulatorMINCOConfig:
             raise ValueError("rrt_obstacle_margin must be finite and non-negative")
         if self.joint_waypoint_parameterization not in {"direct", "tanh"}:
             raise ValueError("joint_waypoint_parameterization must be 'direct' or 'tanh'")
+        if self.shortcut_method not in {"legacy", "cost_partial"}:
+            raise ValueError("shortcut_method must be 'legacy' or 'cost_partial'")
         if not isinstance(self.astar_guidance_enabled, (bool, np.bool_)):
             raise ValueError("astar_guidance_enabled must be boolean")
 
