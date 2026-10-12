@@ -16,7 +16,7 @@ aerial_manipulator_minco:
   # ===== Objective =====
   # Prefer smooth, trackable motion over aggressive time minimization.
   jerk_weights: [1.0, 1.0, 1.0, 1.0, 0.2, 0.2, 0.2, 0.2]
-  time_weight: 3.0
+  time_weight: 20.0
 
   # ===== Dynamic Constraints =====
   max_speed: 5.0

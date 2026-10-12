@@ -4,7 +4,7 @@
 .junie/
 
 # Python environments, caches and test reports
-docs/
+docs/superpowers/
 venv/
 tools/
 .venv/
