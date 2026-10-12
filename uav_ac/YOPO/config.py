@@ -29,18 +29,31 @@ class DatasetConfig:
     max_attempts_per_sample: int = 500
     gripper_gap: float = .06
     depth: DepthSpec = field(default_factory=DepthSpec)
+    profile: str = 'stationary_v1'
+    snapshot_min: float = .2
+    snapshot_max: float = 1.2
 
     def __post_init__(self):
         for name in ('seed','scene_count','samples_per_scene','max_attempts_per_sample'):
             val=getattr(self,name)
             if isinstance(val,bool) or not isinstance(val,int) or val<(0 if name=='seed' else 1):
                 raise ValueError(f'{name} must be a valid integer')
+        if self.profile not in ('stationary_v1','rolling_v2'):
+            raise ValueError('unknown dataset profile')
+        if not np.isfinite([self.snapshot_min,self.snapshot_max]).all() or not 0<self.snapshot_min<self.snapshot_max<3:
+            raise ValueError('snapshot bounds must lie within the source trajectory')
         counts=tuple(self.split_counts)
         if len(counts)!=3 or any(isinstance(v,bool) or not isinstance(v,int) or v<1 for v in counts) or sum(counts)!=self.scene_count:
             raise ValueError('split_counts must be positive train/validation/test counts summing to scene_count')
         if not np.isfinite(self.gripper_gap) or not .02<=self.gripper_gap<=.07:
             raise ValueError('invalid gripper gap')
         object.__setattr__(self,'split_counts',counts)
+
+    def as_mapping(self):
+        values={name:getattr(self,name) for name in self.__dataclass_fields__}
+        values['depth']=self.depth.as_mapping()
+        values['split_counts']=list(self.split_counts)
+        return values
 
 
 def load_config(path):

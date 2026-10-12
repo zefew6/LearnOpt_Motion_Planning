@@ -7,6 +7,7 @@ import numpy as np
 from uav_ac.planning.end2end.contracts import DepthSpec, PlannerObservation
 
 FIELDS=('depth_m','depth_valid','configuration','velocity','start_pva','goal')
+DYNAMIC_FIELDS=FIELDS+('timestamp','start_jerk','derivative_source')
 
 
 def file_hash(path):return hashlib.sha256(Path(path).read_bytes()).hexdigest()
@@ -31,7 +32,8 @@ class PlanningDataset:
         self.path=Path(path).resolve()
         try:
             self.manifest=json.loads((self.path/'manifest.json').read_text())
-            if self.manifest['schema_version']!=1:raise ValueError('unsupported dataset schema')
+            if self.manifest['schema_version'] not in (1,2):raise ValueError('unsupported dataset schema')
+            fields=DYNAMIC_FIELDS if self.manifest['schema_version']==2 else FIELDS
             if split not in (None,'train','validation','test'):raise ValueError('unknown dataset split')
             self.spec=DepthSpec(**self.manifest['depth_spec'])
             self._records=[];self._shards={};self.scene_ids=[];seen=set();xml_paths=set();xml_hashes=set();shard_paths=set()
@@ -49,8 +51,8 @@ class PlanningDataset:
                     raise ValueError('dataset file checksum mismatch')
                 if split is not None and split!=scene['split']:continue
                 with np.load(shard,allow_pickle=False) as data:
-                    if set(data.files)!=set(FIELDS):raise ValueError('shard fields do not match observation schema')
-                    arrays={name:data[name].copy() for name in FIELDS}
+                    if set(data.files)!=set(fields):raise ValueError('shard fields do not match observation schema')
+                    arrays={name:data[name].copy() for name in fields}
                 count=scene['count']
                 if any(len(value)!=count for value in arrays.values()):raise ValueError('shard length mismatch')
                 for i in range(count):PlannerObservation(**{k:v[i] for k,v in arrays.items()},depth_spec=self.spec)

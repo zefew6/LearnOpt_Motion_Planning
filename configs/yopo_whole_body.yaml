@@ -1,4 +1,7 @@
-# P0-P2 only: independent ideal-depth dataset preparation, no training.
+# P0-P2 rolling revision: coherent reference motion samples, no training.
+profile: rolling_v2
+snapshot_min: 0.2
+snapshot_max: 1.2
 seed: 17
 scene_count: 12
 samples_per_scene: 32

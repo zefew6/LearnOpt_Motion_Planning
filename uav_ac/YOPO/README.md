@@ -1,4 +1,4 @@
-# YOPO whole-body planning: P0–P2
+# YOPO whole-body planning: P0–P2 rolling revision
 
 This package prepares ideal-depth observations and provides training-only MINCO guidance. Network training and learned deployment (P3+) are not implemented yet.
 
@@ -10,11 +10,34 @@ Run from the repository root with the existing Python 3.13 environment:
   --run-dir runs/yopo_whole_body/my_dataset
 ```
 
-The output directory must not already exist. Defaults produce 12 XML scene instances and 384 samples, split by scene into 8/2/2 train/validation/test instances. Each sample has valid, collision-checked stationary endpoints; no path solver selects samples, so reachability and fixed-3-second trajectory feasibility remain unconfirmed. Ground height and obstacle geometry vary with the recorded seed. A dataset includes a copy of the robot XML, numeric NPZ shards, checksums, a JSON manifest and rejection/range statistics.
+The output directory must not already exist. The tracked configuration selects `rolling_v2`; `stationary_v1` remains supported. Defaults produce 12 XML scene instances and 384 samples, split by scene into 8/2/2 train/validation/test instances. Rolling samples have a dynamically consistent reference-sampled starting configuration/rates and a collision-checked global goal; no path solver selects samples, so reachability and fixed-3-second trajectory feasibility remain unconfirmed. Ground height and obstacle geometry vary with the recorded seed. A dataset includes a copy of the robot XML, numeric NPZ shards, checksums, a JSON manifest and rejection/range statistics.
+
+## Rolling profile and official reference
+
+The rolling profile follows official [YOPO-MINCO](https://github.com/TJU-Aerial-Robotics/YOPO/tree/d5e1e60f83cc991602f142d9b6b96204a24d6b9f) variable roles: **one inner waypoint, free terminal PVA and two variable segment durations**. The repository's MINCOQuintic coefficients are compared against the pinned official inference matrix in a licensed test fixture. Production continues to use this repository's robot/solver/ESDF infrastructure; no ROS/CUDA simulator stack is installed.
+
+Eight-dimensional expansion gives 34 physical parameters. Two terminal linear-velocity components are eliminated to match the observed starting body angular velocity, leaving 30 spatial variables plus two times: **32 free parameters**, not 32 waypoints. Times are physical seconds in [0.1,3] per segment; future network activation/bounded primitive transforms are not implemented here. The old four-piece/20-variable stationary decoder remains a compatibility baseline.
+
+```python
+from uav_ac.planning.end2end.rolling import RollingMap, decode_rolling
+from uav_ac.planning.end2end.encoding import LocalFrame
+
+mapping = RollingMap.from_observation(obs)
+free = mapping.seed(LocalFrame.from_observation(obs).local_goal(obs.goal))
+trajectory = decode_rolling(free, obs)
+```
+
+Use `RollingEvaluator` with rolling observations/32-value free parameters; use `PrivilegedEvaluator` only with the old stationary profile. Rolling guidance adds a terminal goal-progress term and a trainable duration cost; analytic gradients include terminal derivatives and the time-dependent boundary elimination. The global goal is an input, not a hard terminal constraint on each local plan.
+
+`ReferenceSchedule` and `observation_at` support nominal-reference handoff checks, including C2 and FRD angular-rate continuity, monotonically increasing time and explicit horizon exhaustion. They do not implement a trained policy, asynchronous perception or physical execution. `ObservationHistory` retains only observed timed frames and does not reconstruct hidden geometry.
+
+Schema v2 stores timestamp, start jerk and derivative source. Dynamic samples come from existing reference trajectories, with physical snapshot and collision checks; they are explicitly labeled `reference`, **not physics rollout data**. Four scene families include staggered dense obstacles. Schema v1/static datasets remain readable. Old 384-sample data is preserved; new acceptance data is in `runs/yopo_whole_body/p2_rolling_acceptance/`.
+
+For actual offscreen rendering in environments where GLFW is unavailable, run with `MUJOCO_GL=egl` set before Python starts. This verifies rendering, not the interactive viewer.
 
 ## Observation and coordinate boundary
 
-`planning/end2end/contracts.py` defines `DepthSpec` and immutable `PlannerObservation`. Observations contain optical-z depth and a validity mask, robot configuration (12), tangent velocity (11), start PVA (3×8) and goal configuration (8). They do not contain a scene ID, ESDF, obstacle map or simulation handle. Raw physical state uses NED/FRD. The shared local frame uses the start position/yaw and retains the gravity direction. `encode_observation` emits a two-channel depth batch and a 58-value state feature vector; `STATE_LAYOUT` documents its order. FRD angular velocity remains in its body frame. Both start and goal joint positions are retained and normalized by actual limits.
+`planning/end2end/contracts.py` defines `DepthSpec` and immutable `PlannerObservation`. Observations contain optical-z depth and a validity mask, robot configuration (12), tangent velocity (11), start PVA (3×8), start jerk (8), timestamp/derivative source and goal configuration (8). They do not contain a scene ID, ESDF, obstacle map or simulation handle. Raw physical state uses NED/FRD. The shared local frame uses the start position/yaw and retains the gravity direction. `encode_observation` emits a two-channel depth batch and a 58-value state feature vector; `STATE_LAYOUT` documents its order. FRD angular velocity remains in its body frame. Both start and goal joint positions are retained and normalized by actual limits.
 
 `simulation/depth_observation.py` provides a reusable offscreen `IdealDepthObserver`. It validates focal lengths, centered principal point, robot-relative optical mounting and clipping range. A render-only model/data copy excludes planning sites and debug markers by render groups without modifying live physics. Physical robot geometry still occludes the depth sensor. Out-of-range/background returns have mask=false and depth=far_m; near returns clip to near_m but remain valid. The sensor is a first-surface observation, not a complete local map. World-mounted cameras are supported for standalone rendering probes; body-frame observation construction requires the declared robot-mounted camera.
 
@@ -22,7 +45,7 @@ The output directory must not already exist. Defaults produce 12 XML scene insta
 
 `InteriorMap(head_pva, tail_pva, durations)` operates in the coordinates supplied by its caller. It binds an affine 24-node-variable to 20-free-variable map for four quintic segments. Both horizontal jerk endpoint constraints are eliminated analytically; default durations are `[.75,.75,.75,.75]` seconds. Intermediate joint/physical limits are penalties, not hard guarantees.
 
-The public `decode_trajectory` and `PrivilegedEvaluator.evaluate` consistently accept **start-yaw local** free parameters. Their head/goal/observation state arguments are in world NED. The decoder restores world coefficients and returns the existing aerial reference type, with empty RRT path and explicitly unknown validation status. It performs neither search nor online optimization.
+The public `decode_trajectory` and `PrivilegedEvaluator.evaluate` consistently accept **start-yaw local** free parameters. Their head/goal/observation state arguments are in world NED. This paragraph describes the stationary_v1 API; rolling_v2 uses the separate RollingMap/decode_rolling API above. The decoder restores world coefficients and returns the existing aerial reference type, with empty RRT path and explicitly unknown validation status. It performs neither search nor online optimization.
 
 For example:
 

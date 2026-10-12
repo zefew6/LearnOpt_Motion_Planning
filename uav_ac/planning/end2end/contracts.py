@@ -67,12 +67,21 @@ class PlannerObservation:
     start_pva: np.ndarray
     goal: np.ndarray
     depth_spec: DepthSpec = field(default_factory=DepthSpec)
+    timestamp: float = 0.
+    start_jerk: np.ndarray = field(default_factory=lambda: np.zeros(8))
+    derivative_source: str = 'stationary'
 
     def __post_init__(self):
         shape=(self.depth_spec.height,self.depth_spec.width)
         for name,dim in [('depth_m',shape),('configuration',(12,)),('velocity',(11,)),
-                         ('start_pva',(3,8)),('goal',(8,))]:
+                         ('start_pva',(3,8)),('goal',(8,)),('start_jerk',(8,))]:
             object.__setattr__(self,name,finite_array(getattr(self,name),dim,name))
+        from numbers import Real
+        if not isinstance(self.timestamp,Real) or isinstance(self.timestamp,(bool,np.bool_)) or not np.isfinite(self.timestamp) or self.timestamp < 0:
+            raise ValueError('timestamp must be a finite nonnegative scalar')
+        object.__setattr__(self,'timestamp',float(self.timestamp))
+        if self.derivative_source not in ('stationary', 'reference', 'simulation', 'imu'):
+            raise ValueError('unknown derivative source')
         mask=np.array(self.depth_valid,copy=True)
         if mask.shape!=shape or mask.dtype!=np.bool_:
             raise ValueError('depth_valid must be a boolean depth-sized mask')
@@ -92,7 +101,9 @@ class PlannerObservation:
         if not .020<=q[11]<=.070:
             raise ValueError('gripper opening outside model limits')
         from scipy.spatial.transform import Rotation
-        yaw=Rotation.from_quat(q[[4,5,6,3]]).as_euler('xyz')[2]
+        rotation=Rotation.from_quat(q[[4,5,6,3]]).as_matrix()
+        # Flatness heading is determined by body-y, not Euler yaw under tilt.
+        yaw=np.arctan2(-rotation[0,1],rotation[1,1])
         if (not np.allclose(self.start_pva[0,:3],q[:3],atol=1e-7) or
             not np.allclose(self.start_pva[0,4:],q[7:11],atol=1e-7) or
             abs(np.arctan2(np.sin(self.start_pva[0,3]-yaw),np.cos(self.start_pva[0,3]-yaw)))>1e-7 or
