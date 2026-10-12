@@ -1,15 +1,21 @@
-"""Whole-body aerial-manipulator MINCO planning."""
+"""Lazy compatibility exports for trajectory planning."""
+from uav_ac.planning._lazy import install_exports
 
-from .config import AerialManipulatorMINCOConfig
-from .planner import AerialManipulatorMINCO
-from .search import make_terminal_state
-from .trajectory import AerialManipulatorSearchResult, AerialManipulatorTrajectory
-from .trajectory import JointTaskTrajectory
-from .constraints import TaskWaypoint
-from .constraints import TaskEventConstraint
+_EXPORTS = {'AerialManipulatorMINCO': ('uav_ac.planning.trajectory.aerial_manipulator_minco.planner',
+                            'AerialManipulatorMINCO'),
+ 'AerialManipulatorMINCOConfig': ('uav_ac.planning.trajectory.aerial_manipulator_minco.config',
+                                  'AerialManipulatorMINCOConfig'),
+ 'AerialManipulatorSearchResult': ('uav_ac.planning.trajectory.aerial_manipulator_minco.trajectory',
+                                   'AerialManipulatorSearchResult'),
+ 'AerialManipulatorTrajectory': ('uav_ac.planning.trajectory.aerial_manipulator_minco.trajectory',
+                                 'AerialManipulatorTrajectory'),
+ 'make_terminal_state': ('uav_ac.planning.trajectory.aerial_manipulator_minco.search',
+                         'make_terminal_state'),
+ 'JointTaskTrajectory': ('uav_ac.planning.trajectory.aerial_manipulator_minco.trajectory',
+                         'JointTaskTrajectory'),
+ 'TaskWaypoint': ('uav_ac.planning.trajectory.aerial_manipulator_minco.constraints',
+                  'TaskWaypoint'),
+ 'TaskEventConstraint': ('uav_ac.planning.trajectory.aerial_manipulator_minco.constraints',
+                         'TaskEventConstraint')}
 
-__all__ = [
-    "AerialManipulatorMINCO", "AerialManipulatorMINCOConfig",
-    "AerialManipulatorSearchResult", "AerialManipulatorTrajectory", "make_terminal_state",
-    "JointTaskTrajectory", "TaskWaypoint", "TaskEventConstraint",
-]
+install_exports(globals(), _EXPORTS)
