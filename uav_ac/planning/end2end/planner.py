@@ -7,6 +7,7 @@ from .checkpoint import load_checkpoint
 from .encoding import encode_observation
 from .anchors import make_anchors
 from .direct import decode_direct
+from .primitive import primitive_anchors,encode_primitive
 
 # The fixed opening is a servo target; retain the measured state within 0.5 mm.
 GRIPPER_SERVO_TOLERANCE = .0005
@@ -42,8 +43,13 @@ class End2EndPlanner:
             raise ValueError('observation depth calibration mismatch')
         if 'gripper_gap' not in self.metadata or not np.isclose(observation.configuration[11],self.metadata['gripper_gap'],rtol=0.,atol=self.gripper_tolerance):
             raise ValueError('observation gripper opening mismatch')
-        n=self.model.normalization;e=encode_observation(observation,n)
-        anchors=make_anchors(observation,n,count=self.count)
+        n=self.model.normalization
+        if self.metadata['profile']=='primitive_v4':
+            e=encode_primitive(observation,n,self.model.spec)
+            anchors=primitive_anchors(observation,n,self.model.spec)
+        else:
+            e=encode_observation(observation,n)
+            anchors=make_anchors(observation,n,count=self.count)
         output=self.model(torch.as_tensor(e.depth,device=self.device),torch.as_tensor(e.state,device=self.device),
                           torch.as_tensor(anchors[None],dtype=torch.float32,device=self.device))
         parameters=output.parameters[0].cpu().numpy();scores=output.scores[0].cpu().numpy()

@@ -11,6 +11,8 @@ from .dataset import PlanningDataset
 from .learning import DirectEvaluator,ranking_loss,augment_observation
 from .losses import guidance_costs,score_loss,calibrate_cost_scale
 from uav_ac.planning.end2end.network import WholeBodyPlannerNet
+from uav_ac.planning.end2end.primitive_network import PrimitivePlannerNet
+from uav_ac.planning.end2end.primitive import primitive_anchors,encode_primitive
 from uav_ac.planning.end2end.anchors import make_anchors
 from uav_ac.planning.end2end.encoding import Normalization,encode_observation
 from uav_ac.planning.end2end.checkpoint import save_checkpoint,load_checkpoint
@@ -20,6 +22,7 @@ from uav_ac.planning.trajectory.aerial_manipulator_minco.config import AerialMan
 
 @dataclass(frozen=True)
 class TrainingConfig:
+    profile: str = 'direct_v3'
     steps: int = 100
     train_samples: int = 32
     validation_samples: int = 8
@@ -37,6 +40,8 @@ class TrainingConfig:
     threads: int = 2
 
     def __post_init__(self):
+        if self.profile not in ('direct_v3','primitive_v4'):raise ValueError('unknown training profile')
+        if self.profile=='primitive_v4' and self.candidate_count!=27:raise ValueError('primitive_v4 requires 27 candidates')
         for name in ('steps','train_samples','validation_samples','batch_size','width','evaluation_interval','threads'):
             value=getattr(self,name)
             if isinstance(value,bool) or not isinstance(value,int) or value<1:raise ValueError(f'invalid {name}')
@@ -74,9 +79,9 @@ def subset(dataset,count):
     return [dataset[int(i)] for i in np.linspace(0,len(dataset)-1,min(count,len(dataset)),dtype=int)]
 
 
-def tensors(observations,normalization,count,device):
-    encoded=[encode_observation(o,normalization) for o in observations]
-    anchors=np.stack([make_anchors(o,normalization,count=count) for o in observations])
+def tensors(observations,normalization,count,device,profile='direct_v3',primitive_spec=None):
+    encoded=[encode_primitive(o,normalization,primitive_spec) if profile=='primitive_v4' else encode_observation(o,normalization) for o in observations]
+    anchors=np.stack([primitive_anchors(o,normalization,primitive_spec) if profile=='primitive_v4' else make_anchors(o,normalization,count=count) for o in observations])
     return (torch.as_tensor(np.concatenate([e.depth for e in encoded]),device=device),
             torch.as_tensor(np.concatenate([e.state for e in encoded]),device=device),
             torch.as_tensor(anchors,dtype=torch.float32,device=device))
@@ -91,7 +96,7 @@ def evaluate(model,samples,cache,count,device):
     selected_violations={name:[] for name in ('environment','self','physical')}
     with torch.inference_mode():
         for obs,priv in samples:
-            output=model(*tensors([obs],model.normalization,count,device))
+            output=model(*tensors([obs],model.normalization,count,device,getattr(model,'profile','direct_v3'),getattr(model,'spec',None)))
             result=cache.get(priv).evaluate(obs,output.parameters[0].cpu().numpy())
             score=output.scores[0].cpu().numpy();index=int(np.argmin(score) if model.score_mode=='cost' else np.argmax(score))
             unsafe=(result.components['environment']>1e-6)|(result.components['self']>1e-6)|(result.components['physical']>1e-6)
@@ -116,15 +121,17 @@ def train(config,dataset_path,run_dir,*,resume=None):
     first_oracle=cache.get(samples[0][1]);robot=first_oracle.robot
     normalization=Normalization(tuple(robot.limits.joint_lower),tuple(robot.limits.joint_upper))
     mode='cost' if config.candidate_count==1 else 'ranking'
-    model=WholeBodyPlannerNet(normalization,score_mode=mode,width=config.width,depth_spec=data.spec).to(config.device)
+    cls=PrimitivePlannerNet if config.profile=='primitive_v4' else WholeBodyPlannerNet
+    model=cls(normalization,score_mode=mode,width=config.width,depth_spec=data.spec).to(config.device)
     optimizer=torch.optim.AdamW(model.parameters(),lr=config.learning_rate,weight_decay=.0001)
     start_step=0;rng=np.random.default_rng(config.seed)
     if resume is not None:
         model,metadata=load_checkpoint(resume,device=config.device,expected_robot_hash=data.manifest['robot_sha256'],expected_depth_spec=data.spec)
+        if metadata['profile']!=config.profile:raise ValueError('resume profile mismatch')
         if metadata['candidate_count']!=config.candidate_count or model.width!=config.width:raise ValueError('resume architecture mismatch')
         previous=metadata['training_config']
         for name,value in asdict(config).items():
-            if name not in ('steps','evaluation_interval','threads','device') and previous.get(name)!=value:
+            if name not in ('steps','evaluation_interval','threads','device') and previous.get(name,'direct_v3' if name=='profile' else None)!=value:
                 raise ValueError(f'resume training setting mismatch: {name}')
         if metadata.get('dataset_path')!=str(Path(dataset_path).resolve()) or metadata.get('gripper_gap')!=data.manifest['gripper_gap']:
             raise ValueError('resume dataset/gripper mismatch')
@@ -137,7 +144,7 @@ def train(config,dataset_path,run_dir,*,resume=None):
     else:
         calibration=[]
         for obs,priv in samples[:8]:
-            calibration.extend(cache.get(priv).evaluate(obs,make_anchors(obs,normalization,count=config.candidate_count)).costs)
+            calibration.extend(cache.get(priv).evaluate(obs,primitive_anchors(obs,normalization) if config.profile=='primitive_v4' else make_anchors(obs,normalization,count=config.candidate_count)).costs)
         cost_scale=calibrate_cost_scale(calibration)
     initial=evaluate(model,samples,cache,config.candidate_count,config.device)
     started=time.perf_counter();history=[];best_validation=(float('inf'),float('inf'))
@@ -154,7 +161,7 @@ def train(config,dataset_path,run_dir,*,resume=None):
         indices=rng.integers(0,len(samples),size=min(config.batch_size,len(samples)))
         records=[samples[int(i)] for i in indices]
         observations=[augment_observation(o,rng,normalization,goal_std=config.goal_std,velocity_std=config.velocity_std) for o,_ in records]
-        output=model(*tensors(observations,normalization,config.candidate_count,config.device))
+        output=model(*tensors(observations,normalization,config.candidate_count,config.device,config.profile,getattr(model,'spec',None)))
         loss=output.parameters.new_zeros(());raw_cost=[]
         for i,(observation,(_,priv)) in enumerate(zip(observations,records)):
             oracle=cache.get(priv);costs=guidance_costs(output.parameters[i],observation,oracle,scale=cost_scale)

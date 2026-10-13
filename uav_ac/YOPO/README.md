@@ -272,3 +272,9 @@ Use a new run directory:
 Checkpoint selection prioritizes sampled validity, then cost on validation;
 held-out test data is used only after training. Neither that sampled metric nor
 a successful training run establishes physical closed-loop performance.
+
+The new [primitive_v4 profile](../planning/end2end/PRIMITIVE_V4.md) implements a
+calibrated 3×3 camera-cell primitive grid, three arm modes per cell, primitive-frame
+alignment and independent terminal prediction. Select it through
+`configs/yopo/train/yopo_primitive_pilot.yaml`; its experimental flight preset is
+`configs/flight/yopo_primitive_wbp.yaml`. Legacy weights and datasets are preserved.

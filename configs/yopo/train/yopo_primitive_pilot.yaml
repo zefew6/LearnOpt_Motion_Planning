@@ -1,0 +1,15 @@
+# Engineering pilot: independent current-state samples, not a converged policy.
+profile: primitive_v4
+steps: 32
+train_samples: 24
+validation_samples: 6
+batch_size: 2
+candidate_count: 27
+width: 16
+seed: 23
+learning_rate: 0.0003
+device: cpu
+peak_weight: 1.0
+self_clearance: 0.0
+evaluation_interval: 16
+threads: 2

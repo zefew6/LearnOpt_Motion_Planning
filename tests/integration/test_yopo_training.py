@@ -52,3 +52,49 @@ def test_ranking_training_and_gripper_contract(tmp_path):
     with pytest.raises(ValueError,match='gripper'):planner.plan(replace(observation,configuration=changed))
     with pytest.raises(ValueError,match='resume'):
         train(replace(config,steps=2,peak_weight=1.),dataset,tmp_path/'incompatible',resume=tmp_path/'train'/'last')
+
+
+def test_primitive_training_save_load_deploy_and_profile_resume_guard(tmp_path):
+    import pytest
+    root=tmp_path/'data'
+    generate_dataset(DatasetConfig(profile='rolling_v2',scene_count=3,samples_per_scene=1,split_counts=(1,1,1)),root)
+    config=TrainingConfig(profile='primitive_v4',steps=1,train_samples=1,validation_samples=1,batch_size=1,width=4,candidate_count=27)
+    report=train(config,root/'dataset',tmp_path/'primitive')
+    assert np.isfinite(report['final_train_cost'])
+    model,meta=load_checkpoint(tmp_path/'primitive'/'last')
+    assert meta['profile']=='primitive_v4'
+    o,_=PlanningDataset(root/'dataset',split='validation')[0]
+    output=End2EndPlanner(tmp_path/'primitive'/'last').plan(o)
+    assert output.candidate_count==27 and np.isfinite(output.parameters).all()
+    from dataclasses import replace
+    with pytest.raises(ValueError,match='resume profile'):
+        train(replace(config,profile='direct_v3',steps=2),root/'dataset',tmp_path/'wrong',resume=tmp_path/'primitive'/'last')
+
+
+def test_primitive_resume_keeps_saved_observation_normalization(tmp_path,monkeypatch):
+    from dataclasses import replace
+    import shutil
+    import torch
+    from uav_ac.YOPO import training
+    from uav_ac.planning.end2end.primitive_network import PrimitivePlannerNet
+    from uav_ac.planning.end2end.checkpoint import save_checkpoint
+    root=tmp_path/'data'
+    generate_dataset(DatasetConfig(profile='rolling_v2',scene_count=3,samples_per_scene=1,split_counts=(1,1,1)),root)
+    config=TrainingConfig(profile='primitive_v4',steps=1,train_samples=1,validation_samples=1,batch_size=1,width=4,candidate_count=27)
+    train(config,root/'dataset',tmp_path/'initial')
+    old,meta=load_checkpoint(tmp_path/'initial'/'last')
+    custom=PrimitivePlannerNet(old.normalization,width=4,depth_spec=old.depth_spec,spec=replace(old.spec,goal_clip=5.,max_speed=1.5))
+    old_params=dict(old.named_parameters())
+    with torch.no_grad():
+        for name,value in custom.named_parameters():value.copy_(old_params[name])
+    save_checkpoint(tmp_path/'custom',custom,meta)
+    shutil.copyfile(tmp_path/'initial'/'last'/'training_state.pt',tmp_path/'custom'/'training_state.pt')
+    original=training.tensors;seen=[]
+    def tensors(*args,**kwargs):
+        if torch.is_grad_enabled():
+            spec=kwargs.get('primitive_spec',args[5] if len(args)>5 else None)
+            seen.append(spec)
+        return original(*args,**kwargs)
+    monkeypatch.setattr(training,'tensors',tensors)
+    train(replace(config,steps=2),root/'dataset',tmp_path/'resumed',resume=tmp_path/'custom')
+    assert seen and all(spec is not None and spec.goal_clip==5. and spec.max_speed==1.5 for spec in seen)

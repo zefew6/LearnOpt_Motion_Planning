@@ -224,7 +224,10 @@ It requires the local checkpoint named in the YAML. The outdoor scene contains
 four ruined walls with twenty openings, distributed trees, industrial remains and varied low obstacles. Each planning tick
 uses one current depth frame and actual robot state to reach the XML-owned 8-D
 final goal. See [online benchmark details](uav_ac/tasks/WHOLE_BODY_ONLINE.md)
-for timing, settings and current model limitations.
+for timing, settings and current model limitations. The new
+[3×3 primitive-frame profile](uav_ac/planning/end2end/PRIMITIVE_V4.md) has a separate
+experimental preset, `configs/flight/yopo_primitive_wbp.yaml`, and requires newly
+trained weights.
 
 
 ## Optional MPC and RL workflows
