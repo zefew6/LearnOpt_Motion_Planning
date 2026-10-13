@@ -1,0 +1,42 @@
+"""Map-free learned candidate selection and deterministic MINCO decode."""
+from dataclasses import dataclass
+import time
+import numpy as np
+import torch
+from .checkpoint import load_checkpoint
+from .encoding import encode_observation
+from .anchors import make_anchors
+from .direct import decode_direct
+
+
+@dataclass
+class LearnedPlan:
+    trajectory: object
+    candidate_count: int
+    selected_index: int
+    scores: np.ndarray
+    parameters: np.ndarray
+    seconds: float
+
+
+class End2EndPlanner:
+    def __init__(self,checkpoint,*,device='cpu',expected_robot_hash=None):
+        self.model,self.metadata=load_checkpoint(checkpoint,device=device,expected_robot_hash=expected_robot_hash)
+        self.device=device;self.count=int(self.metadata['candidate_count'])
+        if self.count not in (1,27):raise ValueError('unsupported candidate count')
+
+    @torch.inference_mode()
+    def plan(self,observation):
+        started=time.perf_counter()
+        if observation.depth_spec.as_mapping()!=self.metadata['depth_spec']:
+            raise ValueError('observation depth calibration mismatch')
+        if 'gripper_gap' not in self.metadata or not np.isclose(observation.configuration[11],self.metadata['gripper_gap'],rtol=0.,atol=1e-8):
+            raise ValueError('observation gripper opening mismatch')
+        n=self.model.normalization;e=encode_observation(observation,n)
+        anchors=make_anchors(observation,n,count=self.count)
+        output=self.model(torch.as_tensor(e.depth,device=self.device),torch.as_tensor(e.state,device=self.device),
+                          torch.as_tensor(anchors[None],dtype=torch.float32,device=self.device))
+        parameters=output.parameters[0].cpu().numpy();scores=output.scores[0].cpu().numpy()
+        if not np.isfinite(parameters).all() or not np.isfinite(scores).all():raise FloatingPointError('nonfinite network output')
+        index=int(np.argmin(scores) if self.model.score_mode=='cost' else np.argmax(scores))
+        return LearnedPlan(decode_direct(parameters[index],observation),self.count,index,scores,parameters,time.perf_counter()-started)

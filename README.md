@@ -20,6 +20,11 @@ Built on [Mdhvince/UAV-Autonomous-control](https://github.com/Mdhvince/UAV-Auton
 
 The flight CLI supports trajectory tracking; the RL training/evaluation entrypoints also support gate racing without a planner or trajectory bank. Implementation details and experiment workflows are documented in the [planning library guide](uav_ac/planning/README.md), [robot guide](uav_ac/robot/README.md), [RL workflow guide](uav_ac/rl/README.md), [gate racing guide](docs/gate_racing.md), and [contributor guide](AGENTS.md).
 
+Aerial-manipulator depth-to-whole-body guidance learning has an independent
+[YOPO dataset, training and map-free prediction workflow](uav_ac/YOPO/README.md).
+Its P3/P4 stages provide offline learning and candidate selection; physical
+closed-loop integration remains a separate stage.
+
 ## Experiment videos
 
 The videos show the implemented planning and tracking pipelines in MuJoCo. The

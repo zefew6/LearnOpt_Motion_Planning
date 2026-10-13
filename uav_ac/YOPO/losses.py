@@ -31,3 +31,8 @@ def calibrate_cost_scale(costs):
     if values.ndim!=1 or not len(values) or not np.isfinite(values).all() or np.any(values<0):
         raise ValueError('calibration costs must be finite nonnegative candidates')
     return max(1.,float(np.median(values[:256])))
+
+
+def guidance_costs(parameters,obs,oracle,*,scale=1.):
+    if not np.isfinite(scale) or scale<=0:raise ValueError('cost scale must be positive')
+    return _Guidance.apply(parameters,obs,oracle,float(scale))

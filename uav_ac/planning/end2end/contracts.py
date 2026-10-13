@@ -80,7 +80,7 @@ class PlannerObservation:
         if not isinstance(self.timestamp,Real) or isinstance(self.timestamp,(bool,np.bool_)) or not np.isfinite(self.timestamp) or self.timestamp < 0:
             raise ValueError('timestamp must be a finite nonnegative scalar')
         object.__setattr__(self,'timestamp',float(self.timestamp))
-        if self.derivative_source not in ('stationary', 'reference', 'simulation', 'imu'):
+        if self.derivative_source not in ('stationary', 'reference', 'simulation', 'imu', 'augmentation'):
             raise ValueError('unknown derivative source')
         mask=np.array(self.depth_valid,copy=True)
         if mask.shape!=shape or mask.dtype!=np.bool_:

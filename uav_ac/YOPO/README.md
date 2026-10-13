@@ -66,7 +66,7 @@ trajectory = decode_trajectory(mapping.seed(), obs.start_pva, obs.goal,
 
 `PrivilegedEvaluator.from_simulation` creates occupancy/ESDF once for that scene, then reuses the robot's scratch queries. Guidance combines the existing weighted jerk energy, whole-body environment/self collision and physical constraints with exact MINCO adjoints. At least 16 quadrature intervals per segment are used. Components are reported separately. Fixed duration has no trainable time cost, and terminal goals are hard boundaries. Reference-v1 accepts only stationary starts whose actual attitude agrees with the simplified flatness boundary.
 
-`guidance_loss` supplies custom analytic backward to PyTorch; `score_loss` detaches its oracle target. `calibrate_cost_scale` computes a positive common frozen normalization. These helpers do not implement a training loop or launch learning.
+`guidance_loss` supplies custom analytic backward to PyTorch; `score_loss` detaches its oracle target. `calibrate_cost_scale` computes a positive common frozen normalization. The P0–P2 helpers are used by the P3/P4 training loop described below.
 
 ```python
 from uav_ac.YOPO.dataset import PlanningDataset
@@ -86,4 +86,76 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 .venv/bin/python -m pytest -o addopts='' -q \
   tests/integration/test_yopo_depth.py tests/integration/test_yopo_trajectory.py
 ```
 
-Real rendering needs a working OpenGL backend. Configuration and numerical tests alone do not prove rendering. Full-body flatness/physical penalties use the current simplified model, not a proof for complete coupled MuJoCo dynamics. Dense exact-geometry sampling is an independent diagnostic, not continuous collision certification or flight tracking. No payload, grasp/place events, neural network, online ESDF access or fallback RRT planner is added here.
+Real rendering needs a working OpenGL backend. Configuration and numerical tests alone do not prove rendering. Full-body flatness/physical penalties use the current simplified model, not a proof for complete coupled MuJoCo dynamics. Dense exact-geometry sampling is an independent diagnostic, not continuous collision certification or flight tracking. The P0–P2 infrastructure adds no payload or grasp/place events. P3/P4 below add the neural network without online ESDF access or a fallback RRT planner.
+
+## P3/P4 learned planning (direct_v3)
+
+The current primary network lives under `planning/end2end`; dataset generation,
+privileged costs and training live here. Existing v1/v2 APIs above remain
+research baselines. The learned two-piece trajectory has 34 outputs: inner
+configuration (8), terminal PVA (24), and two durations. P3 uses one candidate;
+P4 uses nine spatial directions × three arm templates. Anchors are geometric
+priors, not a promise of distinct homotopies or safety. They require no map.
+
+The reduced-width ResNet18-style depth/mask backbone retains spatial features.
+Camera-projected anchor tokens and pooled visual features are conditioned on
+58 state features and the anchor descriptor. A shared head predicts bounded
+residuals and candidate scores. Candidate order is exchangeable. Projection
+uses actual body attitude, camera mounting and CNN stride. All eight-dimensional
+trajectory coordinates share the start-yaw NED frame; arm angles stay in their
+physical coordinates. The decoder accepts actual pose/rate model residuals.
+
+Guidance uses existing MINCO analytic adjoints for whole-body environment/self
+collision, physical constraints, jerk energy and duration; terminal goal progress
+and initial angular-rate mismatch are differentiable soft penalties. Optional
+log-mean-exp emphasizes peak sampled safety cost. This is an additive peak term,
+not a reproduction of upstream first-collision truncation or curvature limits.
+P3 minimizes `mean(J/C) + SmoothL1(score, stopgrad(J/C))`. P4 uses per-observation
+detached cost normalization and detached positive score weights for generation,
+plus cross entropy for the safest lowest-cost candidate. All candidates receive
+guidance. Ranking uses greatest logit; P3 cost regression uses smallest score.
+Weights, coefficients and sampling remain configurable research choices.
+
+No expert trajectories are used as labels. The stored reference snapshots supply
+observations; scene ESDF and robot geometry are privileged only to the training
+oracle. Optional independent goal/state jitter preserves images and actual pose,
+and is marked `augmentation`, not physics rollout. Scene-disjoint splits are
+preserved. Default smoke configurations use no augmentation to isolate learning.
+
+Run from the repository root with a prepared dataset:
+
+```bash
+.venv/bin/python -m uav_ac.YOPO.training --config configs/yopo_p3.yaml \
+  --dataset runs/yopo_whole_body/p2_rolling_v2_verified/dataset \
+  --run-dir runs/yopo_whole_body/my_p3
+.venv/bin/python -m uav_ac.YOPO.training --config configs/yopo_p4.yaml \
+  --dataset runs/yopo_whole_body/p2_rolling_v2_verified/dataset \
+  --run-dir runs/yopo_whole_body/my_p4
+.venv/bin/python -m uav_ac.YOPO.evaluation \
+  --dataset runs/yopo_whole_body/p2_rolling_v2_verified/dataset \
+  --checkpoints runs/yopo_whole_body/my_p3/last runs/yopo_whole_body/my_p4/last \
+  --split validation --samples 8 --output runs/yopo_whole_body/comparison.json
+```
+
+Run directories must be new. `--resume <checkpoint-dir>` restores weights,
+optimizer and RNG into a new run; extend `steps` while retaining data and training
+settings. Explicit CPU smoke configs reflect the currently available hardware.
+`best_<step>` selection prioritizes sampled constraint validity, then selected
+cost; `last` is the terminal checkpoint. Offline comparison applies one common
+objective to both models and reports selected/random/oracle costs and ranks.
+
+```python
+from uav_ac.planning.end2end.planner import End2EndPlanner
+planner = End2EndPlanner(checkpoint, device='cpu', expected_robot_hash=robot_hash)
+plan = planner.plan(observation)  # call again with a fresh actual-state observation
+```
+
+Deployment imports no training oracle. The checkpoint checks robot/camera/layout/
+normalization and fixed gripper opening. The resulting trajectory is explicitly
+uncertified. This API enables later rolling integration; P3/P4 do not wire a learned
+policy into the viewer/controller or prove flight tracking. Initial attitude is
+not independently controlled by the flat-output model; the soft rate penalty
+cannot eliminate actual attitude/model discrepancies. Physical closed-loop
+execution belongs to P5. Zero sampled weighted penalties are only a proxy metric.
+Use `MUJOCO_GL=egl` before Python for offscreen dataset/integration verification
+on machines without a working display. Source comparisons are in [SOURCE.md](SOURCE.md).

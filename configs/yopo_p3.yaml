@@ -1,0 +1,12 @@
+steps: 100
+train_samples: 32
+validation_samples: 8
+batch_size: 4
+candidate_count: 1
+width: 16
+seed: 23
+learning_rate: 0.001
+device: cpu
+evaluation_interval: 25
+threads: 2
+self_clearance: 0.0  # authored sphere proxies may touch at joint connections
