@@ -4,6 +4,7 @@ These are geometric planning witnesses, not optimized demonstrations or physics
 rollouts. The frozen-arm comparison keeps exactly the same base motion.
 """
 from dataclasses import replace
+import xml.etree.ElementTree as ET
 import numpy as np
 from .privileged import PrivilegedEvaluator
 from uav_ac.planning.trajectory.gcopter.minco import MINCOQuintic
@@ -17,13 +18,18 @@ VALIDATION_DT=.025
 WORLD_CLEARANCE=.05
 
 
-def authored_reference(seed,variant):
+def authored_reference(seed,variant,*,route_xy=None):
     rng=np.random.default_rng(seed)
     fold=np.array([0. if variant==0 else 1.5,-1.6,2.15,-.55])
     height=1.65+float(rng.uniform(-.005,.005))
     states=np.zeros((7,8));states[:,0]=[-.10,.25,.75,1.55,2.5,2.9,3.15]
     states[:,2]=-height
     states[:,1]=(.025 if variant%2 else -.025)*np.sin(np.linspace(0,np.pi,7))
+    if route_xy is not None:
+        route_xy=np.asarray(route_xy,dtype=float)
+        if route_xy.shape!=(7,2) or not np.isfinite(route_xy).all() or np.any(np.diff(route_xy[:,0])<=0):
+            raise ValueError('source route must be finite, forward-ordered (7,2) NED knots')
+        states[:,:2]=route_xy
     states[:,4:]=np.array([0.,.55,1.,1.,1.,.45,0.])[:,None]*fold
     states[0,4:]=rng.uniform(-.06,.06,4)
     states[-1,4:]=rng.uniform(-.10,.10,4)
@@ -64,12 +70,15 @@ def build_validated_sources(sim,gap,*,seed):
     cfg=replace(AerialManipulatorMINCOConfig(),self_clearance=0.,obstacle_clearance=WORLD_CLEARANCE,
                 validation_dt=VALIDATION_DT,esdf_resolution=.04,esdf_discretization_margin=.07)
     evaluator=PrivilegedEvaluator.from_simulation(sim,gripper_gap=gap,config=cfg).evaluator
+    route_element=ET.parse(sim.scene.model_path).getroot().find("custom/numeric[@name='portal_route_xy_ned']")
+    route_xy=None if route_element is None else np.fromstring(route_element.get('data'),sep=' ').reshape(7,2)
     sources=[]
     for variant in range(2):
-        trajectory=authored_reference(seed,variant)
+        trajectory=authored_reference(seed,variant,route_xy=route_xy)
         passed,clearance,violation,dt=evaluator.dense_validate(trajectory)
         metrics=dict(evaluator.last_validation_metrics)
-        if not passed:raise RuntimeError(f'coupled source rejected variant={variant}: {metrics}')
+        if not passed or metrics['minimum_world_distance']<WORLD_CLEARANCE:
+            raise RuntimeError(f'coupled source rejected variant={variant}: {metrics}')
         trajectory=replace(trajectory,validation_passed=True,minimum_clearance=clearance,maximum_violation=violation,
                            validation_sample_dt=dt,validation_performed=True)
         counter=frozen_diagnostic(sim,trajectory,gap)
@@ -89,11 +98,24 @@ def build_validated_sources(sim,gap,*,seed):
 def sample_coupled_scene(sim,config,seed):
     sources=build_validated_sources(sim,config.gripper_gap,seed=seed)
     samples=[];records=[]
+    opening_element=ET.parse(sim.scene.model_path).getroot().find("custom/numeric[@name='portal_openings']")
+    openings=None if opening_element is None else np.fromstring(opening_element.get('data'),sep=' ').reshape(-1,9)
     # Observe vertical and lateral starting shapes across all movement phases.
     with IdealDepthObserver(sim.model,sim.data,spec=config.depth) as observer:
         allocations=[config.samples_per_scene//2,config.samples_per_scene-config.samples_per_scene//2]
         for variant,((trajectory,diagnostic),count) in enumerate(zip(sources,allocations)):
-            for timestamp in np.linspace(.35,trajectory.total_time-.35,count):
+            timestamps=np.linspace(.35,trajectory.total_time-.35,count)
+            if openings is not None:
+                from scipy.optimize import brentq
+                used=set()
+                for opening in openings:
+                    crossing=brentq(lambda t:trajectory.evaluate(t)[0]-opening[0],0.,trajectory.total_time)
+                    candidates=[i for i in range(1,count-1) if i not in used]
+                    if not candidates:raise ValueError('insufficient snapshots for every portal crossing')
+                    index=min(candidates,key=lambda i:abs(timestamps[i]-crossing))
+                    timestamps[index]=crossing;used.add(index)
+                timestamps.sort()
+            for timestamp in timestamps:
                 derivatives=np.stack([trajectory.evaluate(timestamp,d) for d in range(4)])
                 q,v=recover_state(derivatives,config.gripper_gap)
                 sim.robot.reset(q.copy(),v.copy());sim.data.time=float(timestamp)

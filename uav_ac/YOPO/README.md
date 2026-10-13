@@ -212,3 +212,47 @@ small endpoint-joint variation and an authored speed/fold schedule. It has not
 been used for retraining or physical flight. Review candidate expression range,
 speed bounds and arm-template coverage before expecting the P3/P4 smoke models
 to solve it. See [coupled dataset acceptance](COUPLED_DATA_REPORT.md).
+
+## Closed-room wall apertures with interior bamboo/tree obstacles
+
+`portal_v4` extends the motion-only prototype with three families: rectangular
+wall openings, stepped openings whose available width depends on height, and
+two consecutive laterally offset stepped openings. The walls are exact unions
+of physical boxes, 28–40 cm thick; the room has physical sides/end walls, floor
+and ceiling. Generated XML stores aperture geometry and authored NED source-route
+knots. No mesh approximations or sensor mounting changes are introduced.
+
+Between the portal walls, and in approach/exit rooms, thin bamboo-like cylinders,
+thicker tree trunks and solid spherical crowns have varied heights. A low central
+tree obstacle between the two offset walls additionally constrains downward arm
+extension. These are conservative collision primitives, not realistic botanical
+meshes or visual-only decorations. Robot dimensions and physics remain unchanged.
+
+```bash
+MUJOCO_GL=egl .venv/bin/python -m uav_ac.YOPO.generate \
+  --config configs/yopo_portal_dataset.yaml \
+  --run-dir runs/yopo_whole_body/my_portal_data
+```
+
+The bounded acceptance run is `runs/yopo_whole_body/wall_portals_forest_v4`:
+9 independent layouts ×24 observations=216, 72 each train/validation/test. Every
+split has all three aperture families, and both source modes stay with their
+layout. Source references are still authored six-piece MINCO, not expert labels
+or optimized demonstrations. Source validation uses the existing dense exact/
+physical validator plus a **strict minimum world distance ≥.05 m** generation
+gate, rather than relying on the validator's 3 mm tolerance. Frozen-arm witnesses
+retain the same full base trajectory, including lateral travel between portals.
+
+Snapshot allocation keeps approach/restoration samples and explicitly root-finds
+one sample at the center of **every wall**, for each source mode. `portal_v4`
+requires at least eight frames per scene and split scene counts divisible by
+three. Observation schema2, separate checksummed privileged sources, `direct_v3`
+network decoding and deployment isolation remain unchanged. The dataset is not
+used to retrain a policy in this prototype.
+
+`inspection/portal_forest_gallery.png` shows wall shapes, actual depth and arm
+counterfactual envelopes. The explanatory overview hides the room shell and
+makes portal walls translucent; depth/visibility checks keep every physical
+surface opaque and retain self-occlusion. The complete room is present in XML.
+There is no guarantee that every obstacle is visible from every snapshot.
+See [portal/forest acceptance](PORTAL_DATA_REPORT.md) for evidence and limitations.
