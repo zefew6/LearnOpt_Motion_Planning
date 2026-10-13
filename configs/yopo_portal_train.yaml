@@ -1,0 +1,13 @@
+steps: 200
+train_samples: 72
+validation_samples: 12
+batch_size: 1
+candidate_count: 27
+width: 16
+seed: 23
+learning_rate: 0.001
+device: cpu
+peak_weight: 1.0
+self_clearance: 0.0
+evaluation_interval: 50
+threads: 2

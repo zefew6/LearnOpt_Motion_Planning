@@ -256,3 +256,19 @@ makes portal walls translucent; depth/visibility checks keep every physical
 surface opaque and retain self-occlusion. The complete room is present in XML.
 There is no guarantee that every obstacle is visible from every snapshot.
 See [portal/forest acceptance](PORTAL_DATA_REPORT.md) for evidence and limitations.
+
+First bounded training on the portal/forest prototype uses
+`configs/yopo_portal_train.yaml`: existing width16 network,27 candidates, all72
+eligible train frames,12 validation frames,200 steps with batch1,CPU, no state/
+goal augmentation. It starts from fresh weights; old models/runs are preserved.
+Use a new run directory:
+
+```bash
+.venv/bin/python -m uav_ac.YOPO.training --config configs/yopo_portal_train.yaml \
+  --dataset runs/yopo_whole_body/wall_portals_forest_v4/dataset \
+  --run-dir runs/yopo_whole_body/my_portal_training
+```
+
+Checkpoint selection prioritizes sampled validity, then cost on validation;
+held-out test data is used only after training. Neither that sampled metric nor
+a successful training run establishes physical closed-loop performance.
