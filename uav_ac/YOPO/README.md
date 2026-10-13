@@ -1,6 +1,6 @@
 # YOPO whole-body planning: P0–P2 rolling revision
 
-This package prepares ideal-depth observations and provides training-only MINCO guidance. Network training and learned deployment (P3+) are not implemented yet.
+This package owns ideal-depth datasets, privileged MINCO guidance, training and offline evaluation. Network definitions and learned deployment live in `planning/end2end`; live physics/controller orchestration lives in `runners` and `tasks`. Training and deployment are implemented; the existing prototype checkpoints have not passed the simple-scene closed-loop promotion gate. See [staged repair and curriculum](STAGED_REPAIR.md) for the current workflow. The P0–P2 sections below describe the earlier decoder contracts retained for compatibility.
 
 Run from the repository root with the existing Python 3.13 environment:
 

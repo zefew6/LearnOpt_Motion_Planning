@@ -1,0 +1,7 @@
+profile: curriculum_v5
+seed: 31
+scene_count: 20
+split_counts: [12, 4, 4]
+samples_per_scene: 32
+max_attempts_per_sample: 500
+gripper_gap: 0.06

@@ -11,12 +11,32 @@ from uav_ac.planning.trajectory.gcopter.mappings import polynomial_basis_matrix
 from uav_ac.planning.trajectory.aerial_manipulator_minco.flatness import recover_state
 
 
+class _GeometryRobot:
+    """Use actual collision geoms for broad/narrow phase, not authored sphere costs."""
+    def __init__(self,robot):self.robot=robot
+    def planning_collision_spheres(self):return ()
+    def __getattr__(self,name):return getattr(self.robot,name)
+
+
 class DirectEvaluator(PrivilegedEvaluator):
     """Full 34-variable costs; model residuals do not reject measured states."""
-    def __init__(self,*args,peak_weight=0.,**kwargs):
+    def __init__(self,*args,peak_weight=0.,goal_stop_weight=0.,goal_stop_distance=1.5,**kwargs):
         super().__init__(*args,**kwargs);self.peak_weight=float(peak_weight)
         if not np.isfinite(self.peak_weight) or self.peak_weight<0:raise ValueError('invalid peak weight')
+        self.goal_stop_weight=float(goal_stop_weight);self.goal_stop_distance=float(goal_stop_distance)
+        if not np.isfinite([self.goal_stop_weight,self.goal_stop_distance]).all() or self.goal_stop_weight<0 or self.goal_stop_distance<=0:raise ValueError('invalid stopping cost')
         self.last_result=None
+
+    @classmethod
+    def from_simulation(cls,simulation,*,gripper_gap=.06,config=None,goal_stop_weight=0.,goal_stop_distance=1.5,collision_model='planning_spheres'):
+        if collision_model not in ('planning_spheres','exact_geometry'):raise ValueError('unknown collision model')
+        if not np.isfinite([goal_stop_weight,goal_stop_distance]).all() or goal_stop_weight<0 or goal_stop_distance<=0:raise ValueError('invalid stopping cost')
+        if collision_model=='exact_geometry':
+            from types import SimpleNamespace
+            simulation=SimpleNamespace(robot=_GeometryRobot(simulation.robot),quad=simulation.quad,space_limits=simulation.space_limits,scene_geometries=simulation.scene_geometries)
+        result=super().from_simulation(simulation,gripper_gap=gripper_gap,config=config)
+        result.goal_stop_weight=float(goal_stop_weight);result.goal_stop_distance=float(goal_stop_distance)
+        return result
 
     def _peak(self,durations,coeff):
         values=[];partials=[];time_partials=[]
@@ -52,6 +72,9 @@ class DirectEvaluator(PrivilegedEvaluator):
             progress=10.*(np.sum((error[ids]/scales[ids])**2)+2*(1-np.cos(error[3]))/scales[3]**2)
             derivative=20.*error/scales**2;derivative[3]=20.*np.sin(error[3])/scales[3]**2
             ge[0]+=derivative;cost+=progress;measured['progress']=float(progress)
+            gain=self.goal_stop_weight*max(0.,1.-np.linalg.norm(obs.goal[:3]-obs.configuration[:3])/self.goal_stop_distance)
+            stop=gain*float(np.sum((tail[1]/scales)**2))
+            ge[1]+=2*gain*tail[1]/scales**2;cost+=stop;measured['goal_stop']=stop
             # The initial rate mismatch is a soft differentiable cost, not admission.
             def rate_term(durations,coeff):
                 values=np.stack([obs.start_pva[0],obs.start_pva[1],obs.start_pva[2],6*coeff[0,3]])

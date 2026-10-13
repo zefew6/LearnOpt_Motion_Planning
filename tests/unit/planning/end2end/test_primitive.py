@@ -114,3 +114,39 @@ def test_camera_cells_and_zero_head_match_physical_anchor_initialization():
     assert np.allclose(xy,model.sampling_xy.numpy(),atol=1e-6)
     assert np.all(np.diff(xy.reshape(3,3,2)[:,:,0],axis=1)>0)
     assert np.all(np.diff(xy.reshape(3,3,2)[:,:,1],axis=0)>0)
+
+
+def test_prediction_head_does_not_force_identical_zero_terminal_outputs():
+    torch.manual_seed(23);o=observation();n=normalization()
+    model=PrimitivePlannerNet(n,width=4).eval()
+    assert torch.count_nonzero(model.parameter_head.weight)>0
+    e=encode_primitive(o,n);a=primitive_anchors(o,n)
+    output=model(torch.tensor(e.depth),torch.tensor(e.state),torch.tensor(a[None],dtype=torch.float32))
+    endpoints=output.parameters[0,:,8:11]
+    assert torch.linalg.vector_norm(endpoints[:,None]-endpoints[None],dim=-1).max()>1e-5
+
+
+def test_whole_body_goal_terminal_can_hold_and_move_behind_camera():
+    from uav_ac.planning.end2end.goal_network import GoalPrimitivePlannerNet
+    o=observation();n=normalization();net=GoalPrimitivePlannerNet(n,width=4)
+    e=encode_primitive(o,n,net.spec);state=torch.tensor(e.state);a=torch.tensor(primitive_anchors(o,n,net.spec)[None],dtype=torch.float32)
+    raw=torch.zeros(1,27,34)
+    assert torch.equal(net.decode(raw,state,a)[:,:,8:11],torch.zeros(1,27,3))
+    raw[:,:,8]=-1.
+    tail=net.decode(raw,state,a)[:,:,8:11]
+    from uav_ac.planning.end2end.primitive import local_body_rotation
+    assert (torch.einsum('bni,bij->bnj',tail,local_body_rotation(state))[:,:,0]<0).all()
+    assert (torch.linalg.vector_norm(tail,dim=-1)<net.spec.tail_max).all()
+
+
+def test_goal_profile_serialization_preserves_v4_semantics(tmp_path):
+    from uav_ac.planning.end2end.goal_network import GoalPrimitivePlannerNet
+    from uav_ac.planning.end2end.checkpoint import save_checkpoint,load_checkpoint
+    from uav_ac.planning.end2end.planner import End2EndPlanner
+    o=observation();n=normalization();model=GoalPrimitivePlannerNet(n,width=4)
+    save_checkpoint(tmp_path/'goal',model,{'candidate_count':27,'depth_spec':o.depth_spec.as_mapping(),'gripper_gap':.06})
+    loaded,info=load_checkpoint(tmp_path/'goal')
+    assert info['profile']=='primitive_goal_v5' and info['schema_version']==3
+    assert isinstance(loaded,GoalPrimitivePlannerNet)
+    plan=End2EndPlanner(tmp_path/'goal').plan(o)
+    for d in range(3):assert np.allclose(plan.trajectory.evaluate(0,d),o.start_pva[d],atol=1e-7)

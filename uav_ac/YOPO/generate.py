@@ -18,18 +18,24 @@ def generate_dataset(config,output_dir):
     split_names=['train']*config.split_counts[0]+['validation']*config.split_counts[1]+['test']*config.split_counts[2]
     for i,split in enumerate(split_names):
         seed=config.seed+i*1009
-        coupled=config.profile in ('coupled_v3','portal_v4')
+        coupled=config.profile in ('coupled_v3','portal_v4','curriculum_v5')
         source_metadata={}
         if coupled:
             from .coupled_scenes import write_coupled_scene
             from .coupled_sampling import sample_coupled_scene
             from uav_ac.simulation.mujoco_sim import MujocoSimulation
-            if config.profile=='portal_v4':
+            if config.profile=='curriculum_v5':
+                from .curriculum import write_curriculum_scene
+                scene_id,family,path=write_curriculum_scene(scenes_dir,i,seed,config.depth)
+            elif config.profile=='portal_v4':
                 from .portal_scenes import write_portal_scene
                 scene_id,family,path=write_portal_scene(scenes_dir,i,seed,config.depth)
             else:scene_id,family,path=write_coupled_scene(scenes_dir,i,seed,config.depth)
             sim=MujocoSimulation(path,planning_path_capacity=0,record_actual_trajectory=False)
-            samples,sources,records=sample_coupled_scene(sim,config,seed+1)
+            if config.profile=='curriculum_v5':
+                from .curriculum import sample_curriculum_scene
+                samples,sources,records=sample_curriculum_scene(sim,config,seed+1,family)
+            else:samples,sources,records=sample_coupled_scene(sim,config,seed+1)
             rejected={}
             witnesses=dataset/'sources';witnesses.mkdir(exist_ok=True)
             numeric=witnesses/f'{scene_id}.npz';diagnostics=witnesses/f'{scene_id}.json'
@@ -58,11 +64,14 @@ def generate_dataset(config,output_dir):
         gripper_gap=config.gripper_gap,robot_xml='scenes/model/aerial_manipulator.xml',
         robot_sha256=file_hash(scenes_dir/'model'/'aerial_manipulator.xml'),scenes=scene_entries)
     manifest_path=dataset/'manifest.json';manifest_path.write_text(json.dumps(manifest,indent=2)+'\n')
-    if config.profile in ('coupled_v3','portal_v4'):
+    if config.profile in ('coupled_v3','portal_v4','curriculum_v5'):
         manifest.update(source_profile='authored six-piece full-body MINCO; not optimized',
             derivative_provenance='densely validated reference snapshots; no physics rollout',
             trajectory_profile='training decoder unchanged: direct_v3 two-piece; source references are six-piece',
             interpretation='same-base frozen-arm collision witnesses; not proof that all fixed-arm routes are infeasible')
+        manifest_path.write_text(json.dumps(manifest,indent=2)+'\n')
+    if config.profile=='curriculum_v5':
+        manifest.update(source_profile='offline two-piece feasibility witness; not a training label',interpretation='independent current states; witnesses establish one route only, not universal reachability',derivative_provenance='independent current-state PVA augmentation; no rollout or reference sampling',trajectory_profile='physical MINCO34; network profile selected in training configuration')
         manifest_path.write_text(json.dumps(manifest,indent=2)+'\n')
     start_states=np.asarray(start_states);goal_states=np.asarray(goal_states)
     report=dict(samples=len(start_states),scenes=len(scene_entries),seconds=time.perf_counter()-started,
@@ -70,7 +79,7 @@ def generate_dataset(config,output_dir):
         goals_min=goal_states.min(axis=0).tolist(),goals_max=goal_states.max(axis=0).tolist(),
         rejected={k:sum(s['rejected'][k] for s in scene_entries) for k in scene_entries[0]['rejected']},
         path_feasibility=('all source paths densely exact-geometry/physical checked; not continuous certification'
-                          if config.profile in ('coupled_v3','portal_v4') else 'unconfirmed; only endpoint limits/exact geometry checked'),
+                          if config.profile in ('coupled_v3','portal_v4','curriculum_v5') else 'unconfirmed; only endpoint limits/exact geometry checked'),
         observation='first-hit ideal depth; self-occlusion retained, hidden geometry unavailable to network')
     (output/'generation_report.json').write_text(json.dumps(report,indent=2)+'\n')
     return manifest_path

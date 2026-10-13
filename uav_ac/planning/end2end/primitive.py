@@ -38,7 +38,7 @@ class PrimitiveSpec:
         if (self.rows,self.columns,self.arm_modes)!=(3,3,3) or any(isinstance(x,bool) for x in (self.rows,self.columns,self.arm_modes)):
             raise ValueError('primitive_v4 requires a 3x3 grid and three arm modes')
         values=[getattr(self,n) for n in self.__dataclass_fields__ if n not in ('rows','columns','arm_modes')]
-        if any(isinstance(v,bool) or not isinstance(v,(int,float)) for v in values) or not np.isfinite(values).all() or min(values)<=0:
+        if any(isinstance(v,bool) or not isinstance(v,(int,float)) for v in values) or not np.isfinite(values).all() or any(getattr(self,n)<=0 for n in self.__dataclass_fields__ if n not in ('rows','columns','arm_modes','inner_min','tail_min')) or self.tail_min<0 or self.inner_min<0:
             raise ValueError('primitive settings must be positive finite numbers')
         if not 1<=self.overlap<=1.3 or self.inner_min>=self.inner_max or self.tail_min>=self.tail_max:
             raise ValueError('invalid primitive overlap/reach')

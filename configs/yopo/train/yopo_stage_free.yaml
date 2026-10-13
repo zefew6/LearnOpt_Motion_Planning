@@ -1,0 +1,19 @@
+profile: primitive_goal_v5
+families:
+- free
+steps: 200
+train_samples: 96
+validation_samples: 16
+batch_size: 2
+candidate_count: 27
+width: 16
+seed: 31
+learning_rate: 0.0003
+device: cpu
+peak_weight: 1.0
+self_clearance: 0.0
+evaluation_interval: 200
+threads: 2
+goal_stop_weight: 50.0
+goal_stop_distance: 1.5
+collision_model: exact_geometry

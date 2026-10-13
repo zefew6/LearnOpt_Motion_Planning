@@ -44,7 +44,7 @@ class End2EndPlanner:
         if 'gripper_gap' not in self.metadata or not np.isclose(observation.configuration[11],self.metadata['gripper_gap'],rtol=0.,atol=self.gripper_tolerance):
             raise ValueError('observation gripper opening mismatch')
         n=self.model.normalization
-        if self.metadata['profile']=='primitive_v4':
+        if self.metadata['profile'] in ('primitive_v4','primitive_goal_v5'):
             e=encode_primitive(observation,n,self.model.spec)
             anchors=primitive_anchors(observation,n,self.model.spec)
         else:

@@ -61,3 +61,56 @@ def test_checkpoint_selection_prioritizes_constraint_validity():
     safe={'selected_valid_fraction':1.,'selected_cost':1000.}
     unsafe={'selected_valid_fraction':0.,'selected_cost':10.}
     assert checkpoint_priority(safe)<checkpoint_priority(unsafe)
+
+
+def test_curriculum_family_selection_and_training_configuration():
+    from uav_ac.YOPO.training import TrainingConfig,subset
+    class Data:
+        def __len__(self):return 4
+        def family_at(self,i):return ('free','obstacle','low','wall')[i]
+        def __getitem__(self,i):return i
+    assert subset(Data(),10,families=('free','low'))==[0,2]
+    assert TrainingConfig(families=('free',)).families==('free',)
+    with pytest.raises(ValueError,match='famil'):TrainingConfig(families=('bogus',))
+
+
+def test_near_goal_stopping_cost_and_gradient():
+    from dataclasses import replace
+    o=runpy.run_path('tests/unit/planning/end2end/test_rolling.py')['moving_observation']()
+    goal=o.goal.copy();goal[0]=o.configuration[0]+.5;o=replace(o,goal=goal)
+    sim=MujocoSimulation('uav_ac/simulation/models/yopo_free.xml',planning_path_capacity=0,record_actual_trajectory=False)
+    n=Normalization(tuple(sim.robot.limits.joint_lower),tuple(sim.robot.limits.joint_upper));z=make_anchors(o,n,count=1)[0]
+    oracle=DirectEvaluator.from_simulation(sim,goal_stop_weight=50.,goal_stop_distance=1.5)
+    result=oracle.evaluate(o,z[None]);assert result.components['goal_stop'][0]>0
+    d=np.zeros(34);d[16]=1.
+    fd=(oracle.evaluate(o,(z+1e-6*d)[None]).costs[0]-oracle.evaluate(o,(z-1e-6*d)[None]).costs[0])/2e-6
+    assert abs(fd-result.free_gradients[0]@d)/max(1.,abs(fd))<1e-4
+
+
+def test_exact_training_geometry_agrees_with_validated_folded_pose():
+    from dataclasses import replace
+    from uav_ac.planning.trajectory.aerial_manipulator_minco.config import AerialManipulatorMINCOConfig
+    sim=MujocoSimulation('uav_ac/simulation/models/yopo_stage_wall.xml',planning_path_capacity=0,record_actual_trajectory=False)
+    cfg=replace(AerialManipulatorMINCOConfig(),self_clearance=0.)
+    sigma=np.array([1.5,0,-1.8,0,0,-1.6,1.9,-.3]);a=np.zeros(8)
+    oracle=DirectEvaluator.from_simulation(sim,config=cfg,collision_model='exact_geometry')
+    q=oracle.evaluator._configuration(sigma,a)
+    assert not sim.robot.check_collision(q,clearance=.05,self_clearance=0.)['pairs']
+    assert oracle._parts['self'].collision_cost_gradient(sigma,a)[0]<1e-8
+    assert oracle._parts['environment'].collision_cost_gradient(sigma,a)[0]<1e-8
+
+
+def test_exact_environment_collision_gradient_at_penetrating_arm_pose():
+    from uav_ac.planning.trajectory.aerial_manipulator_minco.config import AerialManipulatorMINCOConfig
+    sim=MujocoSimulation('uav_ac/simulation/models/yopo_stage_wall.xml',planning_path_capacity=0,record_actual_trajectory=False)
+    oracle=DirectEvaluator.from_simulation(sim,config=AerialManipulatorMINCOConfig(self_clearance=0.),collision_model='exact_geometry')
+    # Avoid the symmetric, nondifferentiable gripper/box contact orientation.
+    sigma=np.array([1.451,.023,-1.763,.031,.027,-.81,1.03,-.17])
+    acceleration=np.array([.02,-.01,.03,0,0,0,0,0])
+    evaluate=oracle._parts['environment'].collision_cost_gradient
+    value=evaluate(sigma,acceleration);assert value[0]>0
+    for dimension in range(8):
+        step=np.eye(8)[dimension]*1e-6
+        numeric=(evaluate(sigma+step,acceleration)[0]-evaluate(sigma-step,acceleration)[0])/2e-6
+        analytic=value[1][dimension]
+        assert abs(numeric-analytic)/max(1.,abs(numeric),abs(analytic))<1e-4

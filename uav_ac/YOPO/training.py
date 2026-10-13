@@ -12,6 +12,8 @@ from .learning import DirectEvaluator,ranking_loss,augment_observation
 from .losses import guidance_costs,score_loss,calibrate_cost_scale
 from uav_ac.planning.end2end.network import WholeBodyPlannerNet
 from uav_ac.planning.end2end.primitive_network import PrimitivePlannerNet
+from uav_ac.planning.end2end.goal_network import GoalPrimitivePlannerNet
+from uav_ac.planning.end2end.primitive import PrimitiveSpec
 from uav_ac.planning.end2end.primitive import primitive_anchors,encode_primitive
 from uav_ac.planning.end2end.anchors import make_anchors
 from uav_ac.planning.end2end.encoding import Normalization,encode_observation
@@ -23,6 +25,8 @@ from uav_ac.planning.trajectory.aerial_manipulator_minco.config import AerialMan
 @dataclass(frozen=True)
 class TrainingConfig:
     profile: str = 'direct_v3'
+    collision_model: str = 'planning_spheres'
+    families: tuple = ()
     steps: int = 100
     train_samples: int = 32
     validation_samples: int = 8
@@ -33,6 +37,8 @@ class TrainingConfig:
     learning_rate: float = .001
     device: str = 'cpu'
     goal_std: float = 0.
+    goal_stop_weight: float = 0.
+    goal_stop_distance: float = 1.5
     velocity_std: float = 0.
     peak_weight: float = 0.
     self_clearance: float = 0.
@@ -40,16 +46,20 @@ class TrainingConfig:
     threads: int = 2
 
     def __post_init__(self):
-        if self.profile not in ('direct_v3','primitive_v4'):raise ValueError('unknown training profile')
-        if self.profile=='primitive_v4' and self.candidate_count!=27:raise ValueError('primitive_v4 requires 27 candidates')
+        if self.collision_model not in ('planning_spheres','exact_geometry'):raise ValueError('unknown collision model')
+        if not isinstance(self.families,(tuple,list)) or any(f not in ('free','obstacle','low','wall') for f in self.families) or len(set(self.families))!=len(self.families):raise ValueError('invalid curriculum families')
+        object.__setattr__(self,'families',tuple(self.families))
+        if self.profile not in ('direct_v3','primitive_v4','primitive_goal_v5'):raise ValueError('unknown training profile')
+        if self.profile in ('primitive_v4','primitive_goal_v5') and self.candidate_count!=27:raise ValueError('primitive_v4 requires 27 candidates')
         for name in ('steps','train_samples','validation_samples','batch_size','width','evaluation_interval','threads'):
             value=getattr(self,name)
             if isinstance(value,bool) or not isinstance(value,int) or value<1:raise ValueError(f'invalid {name}')
         if self.candidate_count not in (1,27) or isinstance(self.candidate_count,bool):raise ValueError('candidate_count must be 1 or 27')
         if isinstance(self.seed,bool) or not isinstance(self.seed,int) or self.seed<0:raise ValueError('invalid seed')
         if self.learning_rate<=0 or not np.isfinite(self.learning_rate):raise ValueError('invalid learning rate')
-        for name in ('goal_std','velocity_std','peak_weight','self_clearance'):
+        for name in ('goal_std','velocity_std','peak_weight','self_clearance','goal_stop_weight'):
             if getattr(self,name)<0 or not np.isfinite(getattr(self,name)):raise ValueError(f'invalid {name}')
+        if not np.isfinite(self.goal_stop_distance) or self.goal_stop_distance<=0:raise ValueError('invalid goal_stop_distance')
         if self.width<4:raise ValueError('width must be >=4')
         if self.device!='cpu' and not self.device.startswith('cuda'):raise ValueError('device must be cpu or cuda')
 
@@ -61,27 +71,29 @@ def load_training_config(path):
 
 
 class OracleCache:
-    def __init__(self,dataset,peak_weight,self_clearance=0.):
-        self.dataset=dataset;self.entries={};self.peak_weight=peak_weight;self.self_clearance=self_clearance
+    def __init__(self,dataset,peak_weight,self_clearance=0.,goal_stop_weight=0.,goal_stop_distance=1.5,collision_model='planning_spheres'):
+        self.dataset=dataset;self.entries={};self.peak_weight=peak_weight;self.self_clearance=self_clearance;self.goal_stop_weight=goal_stop_weight;self.goal_stop_distance=goal_stop_distance;self.collision_model=collision_model
     def get(self,privileged):
         if privileged.scene_id not in self.entries:
             sim=MujocoSimulation(privileged.scene_path,planning_path_capacity=0,record_actual_trajectory=False)
             self.entries[privileged.scene_id]=(sim,DirectEvaluator.from_simulation(sim,
                 gripper_gap=self.dataset.manifest['gripper_gap'],config=replace(
                     AerialManipulatorMINCOConfig(),
-                    self_clearance=self.self_clearance)))
+                    self_clearance=self.self_clearance),goal_stop_weight=self.goal_stop_weight,goal_stop_distance=self.goal_stop_distance,collision_model=self.collision_model))
             self.entries[privileged.scene_id][1].peak_weight=self.peak_weight
         return self.entries[privileged.scene_id][1]
 
 
-def subset(dataset,count):
-    if not len(dataset):raise ValueError('empty dataset split')
-    return [dataset[int(i)] for i in np.linspace(0,len(dataset)-1,min(count,len(dataset)),dtype=int)]
+def subset(dataset,count,*,families=()):
+    indices=[i for i in range(len(dataset)) if not families or dataset.family_at(i) in families]
+    if not indices:raise ValueError('empty dataset split/family selection')
+    return [dataset[indices[int(i)]] for i in np.linspace(0,len(indices)-1,min(count,len(indices)),dtype=int)]
 
 
 def tensors(observations,normalization,count,device,profile='direct_v3',primitive_spec=None):
-    encoded=[encode_primitive(o,normalization,primitive_spec) if profile=='primitive_v4' else encode_observation(o,normalization) for o in observations]
-    anchors=np.stack([primitive_anchors(o,normalization,primitive_spec) if profile=='primitive_v4' else make_anchors(o,normalization,count=count) for o in observations])
+    if profile=='primitive_goal_v5' and primitive_spec is None:primitive_spec=PrimitiveSpec(inner_min=0.,tail_min=0.)
+    encoded=[encode_primitive(o,normalization,primitive_spec) if profile in ('primitive_v4','primitive_goal_v5') else encode_observation(o,normalization) for o in observations]
+    anchors=np.stack([primitive_anchors(o,normalization,primitive_spec) if profile in ('primitive_v4','primitive_goal_v5') else make_anchors(o,normalization,count=count) for o in observations])
     return (torch.as_tensor(np.concatenate([e.depth for e in encoded]),device=device),
             torch.as_tensor(np.concatenate([e.state for e in encoded]),device=device),
             torch.as_tensor(anchors,dtype=torch.float32,device=device))
@@ -111,18 +123,23 @@ def evaluate(model,samples,cache,count,device):
                 selected_violation_fraction={name:float(np.mean(values)) for name,values in selected_violations.items()})
 
 
-def train(config,dataset_path,run_dir,*,resume=None):
+def train(config,dataset_path,run_dir,*,resume=None,warm_start=None):
+    if resume is not None and warm_start is not None:raise ValueError('resume and warm_start are mutually exclusive')
     if config.device.startswith('cuda') and not torch.cuda.is_available():raise ValueError('requested CUDA is unavailable')
     run=Path(run_dir);run.mkdir(parents=True,exist_ok=False)
     torch.set_num_threads(config.threads);torch.manual_seed(config.seed);np.random.seed(config.seed);random.seed(config.seed)
     data=PlanningDataset(dataset_path,split='train');validation=PlanningDataset(dataset_path,split='validation')
-    samples=subset(data,config.train_samples);val_samples=subset(validation,config.validation_samples)
-    cache=OracleCache(data,config.peak_weight,config.self_clearance);val_cache=OracleCache(validation,config.peak_weight,config.self_clearance)
+    samples=subset(data,config.train_samples,families=config.families);val_samples=subset(validation,config.validation_samples,families=config.families)
+    cache=OracleCache(data,config.peak_weight,config.self_clearance,config.goal_stop_weight,config.goal_stop_distance,config.collision_model);val_cache=OracleCache(validation,config.peak_weight,config.self_clearance,config.goal_stop_weight,config.goal_stop_distance,config.collision_model)
     first_oracle=cache.get(samples[0][1]);robot=first_oracle.robot
     normalization=Normalization(tuple(robot.limits.joint_lower),tuple(robot.limits.joint_upper))
     mode='cost' if config.candidate_count==1 else 'ranking'
-    cls=PrimitivePlannerNet if config.profile=='primitive_v4' else WholeBodyPlannerNet
+    cls={'direct_v3':WholeBodyPlannerNet,'primitive_v4':PrimitivePlannerNet,'primitive_goal_v5':GoalPrimitivePlannerNet}[config.profile]
     model=cls(normalization,score_mode=mode,width=config.width,depth_spec=data.spec).to(config.device)
+    if warm_start is not None:
+        model,metadata=load_checkpoint(warm_start,device=config.device,expected_robot_hash=data.manifest['robot_sha256'],expected_depth_spec=data.spec)
+        if metadata['profile']!=config.profile or metadata['candidate_count']!=config.candidate_count or model.width!=config.width or model.score_mode!=mode:raise ValueError('warm-start architecture/score mismatch')
+        if metadata.get('gripper_gap')!=data.manifest['gripper_gap']:raise ValueError('warm-start gripper mismatch')
     optimizer=torch.optim.AdamW(model.parameters(),lr=config.learning_rate,weight_decay=.0001)
     start_step=0;rng=np.random.default_rng(config.seed)
     if resume is not None:
@@ -131,7 +148,8 @@ def train(config,dataset_path,run_dir,*,resume=None):
         if metadata['candidate_count']!=config.candidate_count or model.width!=config.width:raise ValueError('resume architecture mismatch')
         previous=metadata['training_config']
         for name,value in asdict(config).items():
-            if name not in ('steps','evaluation_interval','threads','device') and previous.get(name,'direct_v3' if name=='profile' else None)!=value:
+            previous_value=tuple(previous.get(name,())) if name=='families' else previous.get(name,{'profile':'direct_v3','goal_stop_weight':0.,'goal_stop_distance':1.5,'collision_model':'planning_spheres'}.get(name))
+            if name not in ('steps','evaluation_interval','threads','device') and previous_value!=value:
                 raise ValueError(f'resume training setting mismatch: {name}')
         if metadata.get('dataset_path')!=str(Path(dataset_path).resolve()) or metadata.get('gripper_gap')!=data.manifest['gripper_gap']:
             raise ValueError('resume dataset/gripper mismatch')
@@ -144,7 +162,9 @@ def train(config,dataset_path,run_dir,*,resume=None):
     else:
         calibration=[]
         for obs,priv in samples[:8]:
-            calibration.extend(cache.get(priv).evaluate(obs,primitive_anchors(obs,normalization) if config.profile=='primitive_v4' else make_anchors(obs,normalization,count=config.candidate_count)).costs)
+            model.eval()
+            with torch.inference_mode():baseline=model(*tensors([obs],normalization,config.candidate_count,config.device,config.profile,getattr(model,'spec',None))).parameters[0].cpu().numpy()
+            calibration.extend(cache.get(priv).evaluate(obs,baseline).costs)
         cost_scale=calibrate_cost_scale(calibration)
     initial=evaluate(model,samples,cache,config.candidate_count,config.device)
     started=time.perf_counter();history=[];best_validation=(float('inf'),float('inf'))
@@ -200,7 +220,7 @@ def train(config,dataset_path,run_dir,*,resume=None):
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config',required=True);parser.add_argument('--dataset',required=True);parser.add_argument('--run-dir',required=True)
-    parser.add_argument('--resume');args=parser.parse_args()
-    print(json.dumps(train(load_training_config(args.config),args.dataset,args.run_dir,resume=args.resume),indent=2))
+    parser.add_argument('--resume');parser.add_argument('--warm-start');args=parser.parse_args()
+    print(json.dumps(train(load_training_config(args.config),args.dataset,args.run_dir,resume=args.resume,warm_start=args.warm_start),indent=2))
 
 if __name__=='__main__':main()

@@ -49,7 +49,7 @@ class PlanningDataset:
                 xml_paths.add(xml);xml_hashes.add(identity);shard_paths.add(shard)
                 if identity!=scene['xml_sha256'] or file_hash(shard)!=scene['shard_sha256']:
                     raise ValueError('dataset file checksum mismatch')
-                if self.manifest.get('profile') in ('coupled_v3','portal_v4'):
+                if self.manifest.get('profile') in ('coupled_v3','portal_v4','curriculum_v5'):
                     for resource in ('source_numeric','source_diagnostics'):
                         source=_inside(self.path,scene[resource])
                         if file_hash(source)!=scene[resource+'_sha256']:
@@ -67,6 +67,8 @@ class PlanningDataset:
             if file_hash(robot)!=self.manifest['robot_sha256']:raise ValueError('robot model checksum mismatch')
         except (KeyError,OSError,TypeError,EOFError,json.JSONDecodeError) as exc:
             raise ValueError(f'invalid or incomplete dataset: {exc}') from exc
+
+    def family_at(self,index):return self._records[index][0]['family']
 
     def __len__(self):return len(self._records)
     def __getitem__(self,index):

@@ -26,7 +26,7 @@ class PrimitivePlannerNet(nn.Module):
         self.mode_embedding=nn.Embedding(3,8)
         self.head=nn.Sequential(nn.Conv2d(200,128,1),nn.ReLU(),nn.Conv2d(128,128,1),nn.ReLU())
         self.parameter_head=nn.Conv2d(128,34,1);self.score_head=nn.Conv2d(128,1,1)
-        nn.init.zeros_(self.parameter_head.weight);nn.init.zeros_(self.parameter_head.bias)
+        # Keep Conv2d initialization: free terminal outputs must not start identically zero.
         angles,rotations,xy=geometry(self.depth_spec,self.spec)
         for name,value in {'lower':normalization.joint_lower,'upper':normalization.joint_upper,
             'camera_rotation':self.depth_spec.camera_extrinsics[:3,:3],
@@ -81,4 +81,4 @@ class PrimitivePlannerNet(nn.Module):
         raw=torch.stack(outputs,dim=-1).permute(0,2,3,4,1).reshape(batch,27,34)
         score=torch.stack(scores,dim=-1).reshape(batch,27)
         if self.score_mode=='cost':score=nn.functional.softplus(score)
-        return NetworkOutput(self.decode(raw,state,anchors),score)
+        return NetworkOutput(self.decode(raw,state,anchors),score,raw)

@@ -21,6 +21,7 @@ class ResidualBlock(nn.Module):
 class NetworkOutput:
     parameters: torch.Tensor
     scores: torch.Tensor
+    raw_parameters: torch.Tensor | None = None
 
 
 def camera_feature_grid(xy,input_shape,feature_shape):
