@@ -10,7 +10,7 @@ wind: none
 yopo:
   checkpoint: ../../runs/yopo_whole_body/p4_portal_forest_seed23_v1/best_100
   device: cpu
-  speed_scale: 1.3  # shorten predicted durations and scale tail derivatives; re-solve from actual head
+  speed_scale: 1.0  # baseline timing; 1.3 amplified jerk in the current checkpoint
   gripper_tolerance: 0.002  # fixed command; measured soft-equality servo deviation, metres
 whole_body:
   replan_dt: 0.2

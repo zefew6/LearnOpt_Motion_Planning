@@ -8,7 +8,7 @@ Launch from the repository root:
 
 This task opens the MuJoCo viewer before submitting the first plan. Green shows
 the selected base trajectory; pale gray shows five diverse alternative candidates,
-orange the selected arm grasp-frame path, purple the preceding selected path,
+orange the selected arm grasp-frame path (not another base candidate), purple the preceding selected path,
 and blue actual base motion. Alternatives are a diagnostic subset of all 27
 candidates, not collision-certified paths. The console prints the selected
 candidate index, horizon, candidate positional spread and actual speed. The
@@ -47,7 +47,7 @@ slightly deviate from its command: this YAML explicitly allows 2 mm through
 default tolerance is 0.5 mm, and all tolerances are bounded by 5 mm.
 
 `yopo.speed_scale` is a deployment adjustment, default 1.0 and bounded to
-0.5–2.0. This preset uses 1.3. It divides predicted piece durations by the
+0.5–2.0. This preset uses 1.0 after the shape/jerk investigation. It divides predicted piece durations by the
 factor (clipped to the decoder's 0.1–3.0 s bounds), scales predicted terminal
 velocities/accelerations, and re-solves MINCO from the unchanged actual start
 PVA. It increases commanded physical motion rather than viewer playback speed.
@@ -134,3 +134,40 @@ The updated graphical entry point was launched on the desktop.
 Speed adjustment and actual-head continuity, configuration, runner, depth and
 online tracking checks passed (48 focused tests); real graphical execution also
 exercised the multi-candidate and grasp-frame overlay.
+
+
+## Candidate repetition and curved grasp path investigation
+
+The current checkpoint is a small pilot (72 training examples, best at step
+100), not a demonstrated long-task solution. On the factory start observation:
+
+- All 27 analytic anchor terminal positions are identical; the spatial fan is
+  formed by intermediate waypoints. Predicted terminal x standard deviation is
+  only 0.00066 m (lateral/vertical 0.047/0.038 m).
+- Replacing depth with all no-return pixels changes intermediate xyz parameters
+  by at most 0.046 m and retains selected index 4. This probe establishes limited
+  output response on this observation, not that the depth branch is unused.
+- Two thirds of intermediate xyz residual logits have magnitude above 3, where
+  tanh is nearly saturated. A short 1.5 m goal also retains index 4 and about
+  63% saturation; long-goal distribution mismatch is not the sole explanation.
+- The actual 22.9 m goal becomes an input of 45.8 under the current 0.5 m
+  normalization, versus 3.0 for a 1.5 m goal. The anchor travel distance itself
+  is capped at 1.5 m, so this mismatch does not extend the local horizon.
+- At stationary start, the selected curve's peak jerk rises from 3.55 to
+  7.81 m/s³ when factor 1.3 is applied. Its geometry at stationary start stays
+  unchanged; the factor magnifies its derivatives. With moving actual heads,
+  re-solving can also alter geometry. The default was restored to 1.0.
+
+MINCO gives continuous piecewise curves, but continuity alone does not establish
+reasonable geometry, collision avoidance, or smooth reference handoffs. The
+orange grasp-frame path combines base motion with arm FK; it can turn back even
+when the base path does not. It is a model-predicted path, not an authored
+end-effector objective. Start jerk/body-rate consistency is a soft training
+penalty; it is not enforced as an exact boundary condition at every replan.
+
+Required follow-up before calling this a working planner: redesign diverse
+terminal state primitives with a shared training/deployment representation;
+verify cost/score behavior and residual saturation on held-out depth changes;
+retrain with a substantially broader set of independent current-state samples;
+and validate base/arm geometry, jerk and handoff errors in online actual-physics
+runs. Showing diverse anchor priors is not evidence of learned visual planning.
