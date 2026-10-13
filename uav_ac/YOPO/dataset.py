@@ -49,6 +49,11 @@ class PlanningDataset:
                 xml_paths.add(xml);xml_hashes.add(identity);shard_paths.add(shard)
                 if identity!=scene['xml_sha256'] or file_hash(shard)!=scene['shard_sha256']:
                     raise ValueError('dataset file checksum mismatch')
+                if self.manifest.get('profile')=='coupled_v3':
+                    for resource in ('source_numeric','source_diagnostics'):
+                        source=_inside(self.path,scene[resource])
+                        if file_hash(source)!=scene[resource+'_sha256']:
+                            raise ValueError('source witness checksum mismatch')
                 if split is not None and split!=scene['split']:continue
                 with np.load(shard,allow_pickle=False) as data:
                     if set(data.files)!=set(fields):raise ValueError('shard fields do not match observation schema')

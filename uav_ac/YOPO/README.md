@@ -159,3 +159,56 @@ cannot eliminate actual attitude/model discrepancies. Physical closed-loop
 execution belongs to P5. Zero sampled weighted penalties are only a proxy metric.
 Use `MUJOCO_GL=egl` before Python for offscreen dataset/integration verification
 on machines without a working display. Source comparisons are in [SOURCE.md](SOURCE.md).
+
+## Motion-only coupled corridor/bamboo prototype
+
+`coupled_v3` adds lower obstacles of different heights and front gaps of different
+widths. Corridor sides, a physical ceiling and an explicit base altitude band
+prevent unrestricted climbing. Bamboo is represented by physical cylinders of
+varying height/radius, with low central obstacles and high paired trunks. No
+payload, grasp/contact objective or gripper action is included.
+
+```bash
+MUJOCO_GL=egl .venv/bin/python -m uav_ac.YOPO.generate \
+  --config configs/yopo_coupled_dataset.yaml \
+  --run-dir runs/yopo_whole_body/my_coupled_data
+```
+
+The default bounded prototype is six physical XML scenes, 24 observations each:
+one corridor and one bamboo layout in each train/validation/test split. Each
+layout has two source modes: a down-hanging start requiring height reduction,
+and a laterally extended start requiring width reduction. These are authored
+six-piece MINCO references using the existing eight-dimensional whole-body
+trajectory and flatness interfaces, **not optimized planner demonstrations**.
+They supply independent state observations, not expert trajectory labels.
+
+Every source is independently checked by the existing aerial-manipulator dense
+validator (nominal dt .025 s plus refinement/joint extrema), .05 m environmental
+clearance, zero added self-clearance and physical constraints. Freezing the arm
+at its actual initial configuration while retaining the entire base trajectory
+must cause physical collision, with the base geometry clear. The two modes must
+collectively produce both lower-obstacle and front-gap collision witnesses.
+This demonstrates coupling along those base routes, not global impossibility
+of every fixed-arm detour or continuous collision certification.
+
+The unchanged schema2 observation interface feeds existing `direct_v3` training;
+source segments do not change the network's two-piece decoder. Snapshots are
+stratified across approach, traversal and restoration; old `snapshot_min/max`
+settings apply only to rolling_v2. The coupled source schedule is authored and
+fixed, and frames from the same source/layout never cross splits. Numeric
+source coefficients and exact-check diagnostics are separate privileged,
+checksummed resources under `dataset/sources/`; they are not network inputs.
+A rejected source raises a diagnostic and leaves the partial run for inspection.
+
+The verified 144-frame run is `runs/yopo_whole_body/coupled_corridor_bamboo_v2`.
+Its `inspection/` contains scene/arm counterfactual figures, true stored depth,
+a segmentation-based critical-object visibility audit and a reproducible script.
+Only explanatory scene overviews hide ceilings/sidewalls; sensor depth retains
+all physical geometry and self-occlusion. All 48 approach frames show both lower
+and front obstacles. Visibility at every later frame is not guaranteed.
+
+This is a limited first prototype: narrow variations around two templates,
+small endpoint-joint variation and an authored speed/fold schedule. It has not
+been used for retraining or physical flight. Review candidate expression range,
+speed bounds and arm-template coverage before expecting the P3/P4 smoke models
+to solve it. See [coupled dataset acceptance](COUPLED_DATA_REPORT.md).

@@ -38,7 +38,7 @@ class DatasetConfig:
             val=getattr(self,name)
             if isinstance(val,bool) or not isinstance(val,int) or val<(0 if name=='seed' else 1):
                 raise ValueError(f'{name} must be a valid integer')
-        if self.profile not in ('stationary_v1','rolling_v2'):
+        if self.profile not in ('stationary_v1','rolling_v2','coupled_v3'):
             raise ValueError('unknown dataset profile')
         if not np.isfinite([self.snapshot_min,self.snapshot_max]).all() or not 0<self.snapshot_min<self.snapshot_max<3:
             raise ValueError('snapshot bounds must lie within the source trajectory')
@@ -47,6 +47,8 @@ class DatasetConfig:
             raise ValueError('split_counts must be positive train/validation/test counts summing to scene_count')
         if not np.isfinite(self.gripper_gap) or not .02<=self.gripper_gap<=.07:
             raise ValueError('invalid gripper gap')
+        if self.profile=='coupled_v3' and (self.samples_per_scene<6 or any(v%2 for v in counts)):
+            raise ValueError('coupled_v3 requires >=6 samples per scene and even scene counts in each split')
         object.__setattr__(self,'split_counts',counts)
 
     def as_mapping(self):

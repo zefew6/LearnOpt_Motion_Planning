@@ -1,0 +1,6 @@
+profile: coupled_v3
+seed: 31
+scene_count: 6
+samples_per_scene: 24
+split_counts: [2, 2, 2]
+gripper_gap: 0.06
