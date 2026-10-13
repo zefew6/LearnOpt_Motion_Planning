@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[2]
 MODEL_DIRECTORY = Path(__file__).resolve().parents[1] / "simulation" / "models"
 DEFAULT_CONFIG = ROOT / "configs" / "flight" / "flight.yaml"
 PLANNERS = {"none", "mini_snap", "gcopter", "gcs", "bmtp",
-            "aerial_manipulator_minco", "end2end"}
+            "aerial_manipulator_minco", "yopo"}
 CONTROLLERS = {"cascaded", "mpc", "rl"}
 TASKS = {"trajectory_tracking", "gate_racing", "aerial_pick_place", "whole_body_planning"}
 
@@ -63,7 +63,7 @@ def load_config(path: str | Path = DEFAULT_CONFIG) -> dict:
         "task", "scene", "planner", "controller", "speed", "control_dt", "wind",
         "visualize", "follow_camera", "duration", "rl", "cascaded", "bmtp", "gcopter",
         "gcs", "mpc", "wind_options", "pick_place", "aerial_manipulator_minco",
-        "end2end", "whole_body",
+        "yopo", "whole_body",
     }
     if config.get("task", "trajectory_tracking") != "aerial_pick_place":
         flight_options.add("seed")
@@ -107,12 +107,12 @@ def load_config(path: str | Path = DEFAULT_CONFIG) -> dict:
             raise ValueError(
                 "aerial pick/place XML requires planning_bounds and pick/place numerics")
     elif config['task']=='whole_body_planning':
-        if config['planner']!='end2end' or config['controller']!='cascaded' or config.get('wind','none')!='none':
-            raise ValueError('whole_body_planning requires end2end/cascaded and wind:none')
+        if config['planner']!='yopo' or config['controller']!='cascaded' or config.get('wind','none')!='none':
+            raise ValueError('whole_body_planning requires yopo/cascaded and wind:none')
     elif config["planner"] == "none":
         raise ValueError("planner: none is only valid for task: gate_racing")
-    if config['planner']=='end2end' and config['task']!='whole_body_planning':
-        raise ValueError('end2end planner requires whole_body_planning task')
+    if config['planner']=='yopo' and config['task']!='whole_body_planning':
+        raise ValueError('yopo planner requires whole_body_planning task')
     config.setdefault("speed", 3.0)
     config.setdefault("duration", 20.0)
     _positive(config["duration"], "duration")
@@ -197,7 +197,7 @@ def load_config(path: str | Path = DEFAULT_CONFIG) -> dict:
         _positive(config["control_dt"], "control_dt")
     from .whole_body_config import WholeBodySettings,validate_whole_body
     WholeBodySettings.from_mapping(config.setdefault('whole_body',{}))
-    model=config.setdefault('end2end',{})
-    _only(model,{'checkpoint','device','gripper_tolerance'},'end2end')
+    model=config.setdefault('yopo',{})
+    _only(model,{'checkpoint','device','gripper_tolerance'},'yopo')
     if config['task']=='whole_body_planning':validate_whole_body(config,path)
     return config

@@ -25,9 +25,9 @@ def run_whole_body_planning(config):
     settings=WholeBodySettings.from_mapping(config['whole_body'])
     torch.set_num_threads(settings.threads)
     physical=Path(__file__).resolve().parents[1]/'simulation/model/aerial_manipulator.xml'
-    planner=End2EndPlanner(config['end2end']['checkpoint'],device=config['end2end']['device'],
+    planner=End2EndPlanner(config['yopo']['checkpoint'],device=config['yopo']['device'],
                           expected_robot_hash=hashlib.sha256(physical.read_bytes()).hexdigest(),
-                          gripper_tolerance=config['end2end']['gripper_tolerance'])
+                          gripper_tolerance=config['yopo']['gripper_tolerance'])
     CascadedConfig(**config['cascaded']).apply_to(simulation.quad)
     controller=AerialManipulatorController(CascadedController(simulation.quad.g,simulation.quad.dt),simulation.robot,simulation.quad)
     runtime={}

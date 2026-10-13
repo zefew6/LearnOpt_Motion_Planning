@@ -3,7 +3,7 @@
 Launch from the repository root:
 
 ```bash
-.venv/bin/python -m uav_ac.main --config configs/flight/whole_body_online.yaml
+.venv/bin/python -m uav_ac.main --config configs/flight/yopo_like_wbp.yaml
 ```
 
 This task opens the MuJoCo viewer before submitting the first plan. Green shows
@@ -19,7 +19,7 @@ A graphical desktop/OpenGL and the YAML-selected local checkpoint are required.
 in `tasks/whole_body_reaching.py`. Existing neural modeling/decoding stays in
 `planning/end2end`; dataset generation and training stay in `YOPO`.
 
-The task selects `planner: end2end`, `controller: cascaded`, and `wind: none`.
+The task selects `planner: yopo`, `controller: cascaded`, and `wind: none`.
 The whole-body adapter adds inverse-dynamics arm tracking to cascaded base
 control. Its feedback and integral period equal the XML physics timestep;
 reference sampling follows YAML `control_dt` (default 10 ms). No robot resets
@@ -29,10 +29,14 @@ Scene geometry and start/goal live in `simulation/models/whole_body_dense_outdoo
 XML `whole_body_start` and `whole_body_goal` are
 `[x,y,z,yaw,q1,q2,q3,q4]` in NED/radians. `whole_body_gripper` fixes the commanded
 opening; no manipulation action or object target is present. `planning_bounds`
-sets the task workspace. The outdoor scene spans about 12 m and combines finite
-walls with stepped openings, varied-height trunks/crowns and low obstacles.
+sets the task workspace. The scene covers about 24 × 12 m, with 154 distributed trunks (0.9–3.9 m
+high), crowns, five industrial machine/frame remains and five varied-height
+low stumps. Four ruined walls each contain five openings, including stepped
+openings. The base height workspace spans 0.8–3.4 m. A winding route retains
+whole-body clearance across the scene; obstacle generation does not concentrate
+all dense geometry into a few clusters. XML is the source of scene geometry.
 
-`end2end.checkpoint` resolves relative to the YAML; `device` selects CPU/CUDA.
+`yopo.checkpoint` resolves relative to the YAML; `device` selects CPU/CUDA.
 Checkpoint camera/robot contracts are checked. The physical gripper servo may
 slightly deviate from its command: this YAML explicitly allows 2 mm through
 `gripper_tolerance`; observations retain the actual measured gap. The planner's
@@ -76,27 +80,25 @@ thread; closing/resetting does not wait for it, and its result is discarded.
 
 ## Current validation and limitations
 
-An authored eight-piece, stop-at-knot trajectory through the three openings was
-validated offline with the existing whole-body evaluator: dense sampling at
-25 ms passed with no collision or limit violation, minimum world distance
-0.092 m and minimum self distance 0.060 m. This witness is a geometry/kinematics
-feasibility check, not a controller-tracked success or an optimizer comparison,
-and is never supplied to the neural planner.
+The enlarged scene has a ten-piece, stop-at-knot whole-body witness tested in
+`tests/integration/test_whole_body_online.py`. Its NED route alternates between
+wall openings and folds the arm above low obstacles. It is an offline
+geometry/kinematics feasibility check, not a controller-tracked success or an
+optimizer comparison, and is never supplied to the neural planner.
 
-The current `p4_portal_forest_seed23_v1/best_100` checkpoint has not solved this
-long task. A real-physics diagnostic accepted 10 online plans over 1.87 s and
-failed on an actual workspace violation, without collision. Maximum base
-tracking error was 3.46 mm and joint tracking error 0.00461 rad. The final goal
-starts 11.4 m away, beyond the short-range training distribution; this result
-exposes a planning/generalization limitation. Further training or an explicitly
-designed navigation interface is needed before claiming end-to-end arrival.
-The benchmark deliberately reports that failure rather than declaring success.
+The existing `p4_portal_forest_seed23_v1/best_100` checkpoint was smoke-tested
+for 5 simulated seconds on this enlarged scene: 25 plans accepted, no collision,
+maximum base tracking error 3.50 mm and joint error 0.00454 rad. The diagnostic
+ended at its configured 5 s limit; this does not establish full-task arrival.
+The goal is initially 22.9 m away, beyond the short-range training distribution.
+Normal interactive runs allow 180 s and display terminal success/failure.
+A desktop run of the enlarged scene continued to 13.52 s and reported a
+physical collision; the current checkpoint still does not solve the benchmark.
 
-The graphical entry point was also launched successfully on the desktop outside
-the filesystem sandbox: live planning/tracking and the immediate failure message
-were observed. The sandboxed launch cannot connect to DISPLAY `:1`.
+The previous smaller scene's full unit/integration test run had 728 passed,
+2 skipped and three pre-existing failures (gate-racing timing and two fake-viewer
+cycle/reset expectations). Those unrelated behaviors were not changed here.
 
-Verification: focused online/config/depth/end2end tests passed (38). The broader
-unit/integration run had 728 passed, 2 skipped and the same three pre-existing
-failures: gate-racing control-period expectation and two fake-viewer cycle/reset
-expectations. No unrelated controller or viewer behavior was changed to mask them.
+For the enlarged scene and `yopo` selector, the focused runner/end2end/depth/online
+checks passed (46 tests), and the dense whole-body witness test passed separately.
+The updated graphical entry point was launched on the desktop.

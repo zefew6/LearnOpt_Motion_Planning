@@ -13,8 +13,8 @@ def config_file(tmp_path):
     n=Normalization((-2.8,-2.2,-2.4,-2.4),(2.8,2.2,2.4,2.4))
     model=WholeBodyPlannerNet(n,score_mode='ranking',width=4)
     checkpoint=tmp_path/'policy';save_checkpoint(checkpoint,model,{'depth_spec':DepthSpec().as_mapping(),'candidate_count':27,'gripper_gap':.06})
-    values=yaml.safe_load(Path('configs/flight/whole_body_online.yaml').read_text())
-    values['end2end']['checkpoint']=str(checkpoint)
+    values=yaml.safe_load(Path('configs/flight/yopo_like_wbp.yaml').read_text())
+    values['yopo']['checkpoint']=str(checkpoint)
     path=tmp_path/'config.yaml';path.write_text(yaml.safe_dump(values))
     return path,values
 
@@ -23,8 +23,8 @@ def test_whole_body_config_and_main_dispatch(monkeypatch,tmp_path):
     from uav_ac import main
     from uav_ac.runners import whole_body_planning
     path,_=config_file(tmp_path);config=load_config(path)
-    assert config['task']=='whole_body_planning' and config['planner']=='end2end'
-    assert Path(config['end2end']['checkpoint']).is_dir()
+    assert config['task']=='whole_body_planning' and config['planner']=='yopo'
+    assert Path(config['yopo']['checkpoint']).is_dir()
     seen=[];monkeypatch.setattr(whole_body_planning,'run_whole_body_planning',lambda c:seen.append(c) or {'state':'test'})
     assert main.run(config)=={'state':'test'} and seen==[config]
 
@@ -61,3 +61,9 @@ def test_viewer_precedes_planning_and_feedback_uses_physics_period(monkeypatch,t
     monkeypatch.setattr(runner.MujocoSimulation,'run_interactive',viewer)
     result=runner.run_whole_body_planning(config)
     assert result['failure_reason']=='viewer_closed'
+
+
+def test_retired_end2end_selector_is_rejected(tmp_path):
+    path,values=config_file(tmp_path)
+    values['planner']='end2end';path.write_text(yaml.safe_dump(values))
+    with pytest.raises(ValueError,match='planner'):load_config(path)

@@ -98,11 +98,11 @@ def test_outdoor_benchmark_has_a_collision_free_whole_body_witness():
     from uav_ac.YOPO.privileged import PrivilegedEvaluator
     from uav_ac.planning.trajectory.aerial_manipulator_minco.config import AerialManipulatorMINCOConfig
     sim=MujocoSimulation('uav_ac/simulation/models/whole_body_dense_outdoor.xml',planning_path_capacity=0,record_actual_trajectory=False)
-    states=np.zeros((9,8))
-    states[:,0]=[.1,1.05,3,4.5,6,7.5,9,10.9,11.5]
-    states[:,1]=[0,0,.25,0,-.3,0,.2,0,0];states[:,2]=-1.65
+    states=np.zeros((11,8))
+    states[:,0]=[.1,1.3,4,6.5,9,11.5,14,16.5,19,21.5,23]
+    states[:,1]=[0,.35,1.1,0,-1.1,0,1.1,0,-1.1,-.5,0];states[:,2]=-1.9
     states[1:-1,4:]=[0,-1.6,1.9,-.3];states[-1,4:]=[0,.15,-.2,.1]
-    durations=np.array([4.,4.,3.,3.,3.,3.,3.,4.])
+    durations=np.full(10,4.)
     coefficients=[]
     for i,dt in enumerate(durations):
         head=np.vstack((states[i],np.zeros((2,8))));tail=np.vstack((states[i+1],np.zeros((2,8))))
@@ -112,4 +112,4 @@ def test_outdoor_benchmark_has_a_collision_free_whole_body_witness():
     config=replace(AerialManipulatorMINCOConfig(),esdf_resolution=.06,esdf_discretization_margin=.105,self_clearance=0.)
     evaluator=PrivilegedEvaluator.from_simulation(sim,config=config).evaluator
     passed,_,violation,_=evaluator.dense_validate(trajectory)
-    assert passed and violation==0 and not evaluator.last_validation_metrics['collision_detected']
+    assert passed and violation==0 and not evaluator.last_validation_metrics['collision_detected'], (violation,evaluator.last_validation_metrics)

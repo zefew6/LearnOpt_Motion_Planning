@@ -217,11 +217,11 @@ The live whole-body reaching benchmark opens the viewer before planning and trac
 neural trajectories with the aerial-manipulator controller in MuJoCo:
 
 ```bash
-.venv/bin/python -m uav_ac.main --config configs/flight/whole_body_online.yaml
+.venv/bin/python -m uav_ac.main --config configs/flight/yopo_like_wbp.yaml
 ```
 
 It requires the local checkpoint named in the YAML. The outdoor scene contains
-three stepped wall openings, trees, bamboo and low obstacles. Each planning tick
+four ruined walls with twenty openings, distributed trees, industrial remains and varied low obstacles. Each planning tick
 uses one current depth frame and actual robot state to reach the XML-owned 8-D
 final goal. See [online benchmark details](uav_ac/tasks/WHOLE_BODY_ONLINE.md)
 for timing, settings and current model limitations.

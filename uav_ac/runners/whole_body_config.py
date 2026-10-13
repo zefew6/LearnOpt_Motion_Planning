@@ -58,14 +58,14 @@ def validate_whole_body(config,path):
     for value,base,label in ((config['control_dt'],physics_dt,'control_dt'),(settings.replan_dt,config['control_dt'],'replan_dt')):
         ratio=value/base
         if ratio<1 or not np.isclose(ratio,round(ratio)):raise ValueError(f'{label} must be an integer multiple of its inner period')
-    model=config['end2end']
-    if not isinstance(model,dict) or set(model)-{'checkpoint','device','gripper_tolerance'}:raise ValueError('unknown end2end options')
-    if not isinstance(model.get('checkpoint'),str) or not model['checkpoint']:raise ValueError('end2end.checkpoint is required')
+    model=config['yopo']
+    if not isinstance(model,dict) or set(model)-{'checkpoint','device','gripper_tolerance'}:raise ValueError('unknown yopo options')
+    if not isinstance(model.get('checkpoint'),str) or not model['checkpoint']:raise ValueError('yopo.checkpoint is required')
     checkpoint=(Path(path).parent/model['checkpoint']).resolve()
-    if not all((checkpoint/name).is_file() for name in ('metadata.json','weights.pt')):raise ValueError('missing end2end checkpoint files')
-    if model.get('device','cpu')!='cpu' and not str(model['device']).startswith('cuda'):raise ValueError('invalid end2end.device')
+    if not all((checkpoint/name).is_file() for name in ('metadata.json','weights.pt')):raise ValueError('missing yopo checkpoint files')
+    if model.get('device','cpu')!='cpu' and not str(model['device']).startswith('cuda'):raise ValueError('invalid yopo.device')
     model['checkpoint']=str(checkpoint);model.setdefault('device','cpu')
     tolerance=model.setdefault('gripper_tolerance',.0005)
     if isinstance(tolerance,bool) or not isinstance(tolerance,(int,float)) or not np.isfinite(tolerance) or not 0<=tolerance<=.005:
-        raise ValueError('end2end.gripper_tolerance must lie in [0,0.005] m')
+        raise ValueError('yopo.gripper_tolerance must lie in [0,0.005] m')
     config['whole_body']=asdict(settings)
