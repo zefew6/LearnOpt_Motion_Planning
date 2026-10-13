@@ -20,12 +20,16 @@ class LearnedPlan:
     scores: np.ndarray
     parameters: np.ndarray
     seconds: float
+    observation: object = None
 
 
 class End2EndPlanner:
-    def __init__(self,checkpoint,*,device='cpu',expected_robot_hash=None,gripper_tolerance=GRIPPER_SERVO_TOLERANCE):
+    def __init__(self,checkpoint,*,device='cpu',expected_robot_hash=None,gripper_tolerance=GRIPPER_SERVO_TOLERANCE,speed_scale=1.):
         if isinstance(gripper_tolerance,bool) or not np.isfinite(gripper_tolerance) or not 0<=gripper_tolerance<=.005:
             raise ValueError('gripper tolerance must lie in [0,0.005] m')
+        if isinstance(speed_scale,bool) or not np.isfinite(speed_scale) or not .5<=speed_scale<=2.:
+            raise ValueError('speed_scale must lie in [0.5,2]')
+        self.speed_scale=float(speed_scale)
         self.gripper_tolerance=float(gripper_tolerance)
         self.model,self.metadata=load_checkpoint(checkpoint,device=device,expected_robot_hash=expected_robot_hash)
         self.device=device;self.count=int(self.metadata['candidate_count'])
@@ -44,5 +48,10 @@ class End2EndPlanner:
                           torch.as_tensor(anchors[None],dtype=torch.float32,device=self.device))
         parameters=output.parameters[0].cpu().numpy();scores=output.scores[0].cpu().numpy()
         if not np.isfinite(parameters).all() or not np.isfinite(scores).all():raise FloatingPointError('nonfinite network output')
+        if self.speed_scale!=1.:
+            parameters=parameters.copy()
+            parameters[:,16:24]*=self.speed_scale
+            parameters[:,24:32]*=self.speed_scale**2
+            parameters[:,-2:]=np.clip(parameters[:,-2:]/self.speed_scale,.1,3.)
         index=int(np.argmin(scores) if self.model.score_mode=='cost' else np.argmax(scores))
-        return LearnedPlan(decode_direct(parameters[index],observation),self.count,index,scores,parameters,time.perf_counter()-started)
+        return LearnedPlan(decode_direct(parameters[index],observation),self.count,index,scores,parameters,time.perf_counter()-started,observation)

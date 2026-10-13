@@ -67,3 +67,9 @@ def test_retired_end2end_selector_is_rejected(tmp_path):
     path,values=config_file(tmp_path)
     values['planner']='end2end';path.write_text(yaml.safe_dump(values))
     with pytest.raises(ValueError,match='planner'):load_config(path)
+
+
+def test_invalid_yopo_speed_scale_is_rejected(tmp_path):
+    path,values=config_file(tmp_path)
+    values['yopo']['speed_scale']=True;path.write_text(yaml.safe_dump(values))
+    with pytest.raises(ValueError,match='speed_scale'):load_config(path)

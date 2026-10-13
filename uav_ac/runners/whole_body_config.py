@@ -59,7 +59,7 @@ def validate_whole_body(config,path):
         ratio=value/base
         if ratio<1 or not np.isclose(ratio,round(ratio)):raise ValueError(f'{label} must be an integer multiple of its inner period')
     model=config['yopo']
-    if not isinstance(model,dict) or set(model)-{'checkpoint','device','gripper_tolerance'}:raise ValueError('unknown yopo options')
+    if not isinstance(model,dict) or set(model)-{'checkpoint','device','gripper_tolerance','speed_scale'}:raise ValueError('unknown yopo options')
     if not isinstance(model.get('checkpoint'),str) or not model['checkpoint']:raise ValueError('yopo.checkpoint is required')
     checkpoint=(Path(path).parent/model['checkpoint']).resolve()
     if not all((checkpoint/name).is_file() for name in ('metadata.json','weights.pt')):raise ValueError('missing yopo checkpoint files')
@@ -68,4 +68,7 @@ def validate_whole_body(config,path):
     tolerance=model.setdefault('gripper_tolerance',.0005)
     if isinstance(tolerance,bool) or not isinstance(tolerance,(int,float)) or not np.isfinite(tolerance) or not 0<=tolerance<=.005:
         raise ValueError('yopo.gripper_tolerance must lie in [0,0.005] m')
+    scale=model.setdefault('speed_scale',1.)
+    if isinstance(scale,bool) or not isinstance(scale,(int,float)) or not np.isfinite(scale) or not .5<=scale<=2.:
+        raise ValueError('yopo.speed_scale must lie in [0.5,2]')
     config['whole_body']=asdict(settings)

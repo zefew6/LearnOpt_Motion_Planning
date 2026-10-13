@@ -76,7 +76,7 @@ class WholeBodyReaching:
         self.state='WAITING_PLAN';self.failure_reason=None;self.stopped_at=None;self.terminal=None
         self.terminal_collision=None;self.terminal_saturations=None
         self.request_count=0;self.accepted_count=0;self.latencies=[];self.plan_ages=[];self.depth_latencies=[]
-        self.max_base_error=0.;self.max_joint_error=0.;self.max_rate=0.;self.max_reference_rate_jump=0.
+        self.max_base_speed=0.;self.max_base_error=0.;self.max_joint_error=0.;self.max_rate=0.;self.max_reference_rate_jump=0.
         self.positions=[];self.last_progress_time=simulation.time;self.progress_position=self.robot.configuration[:3].copy()
         self.next_log=0.;self.command_reference=self._hold(self.robot.configuration)
 
@@ -142,6 +142,7 @@ class WholeBodyReaching:
         bounds=self.simulation.space_limits
         if np.any(q[:3]<bounds[0]-.02) or np.any(q[:3]>bounds[1]+.02):
             self._finish('FAILED','actual_workspace_violation');return
+        self.max_base_speed=max(self.max_base_speed,float(np.linalg.norm(v[:3])))
         errors=self._errors(q,v);s=self.settings
         near=errors['position']<=s.position_tolerance and errors['yaw']<=s.yaw_tolerance and errors['joints']<=s.joint_tolerance
         if self.state=='SETTLING' or near:
@@ -174,7 +175,7 @@ class WholeBodyReaching:
         self.max_rate=max(self.max_rate,float(np.max(abs(v[6:10]))));self.positions.append(q[:3].copy())
         if base_error>s.tracking_error_limit:self._finish('FAILED','tracking_diverged');return
         if now>=self.next_log:
-            print(f'Whole-body online: t={now:.2f}s state={self.state} replans={self.accepted_count} goal_error={errors["position"]:.2f}m tracking={base_error:.3f}m',flush=True)
+            print(f'Whole-body online: t={now:.2f}s state={self.state} replans={self.accepted_count} goal_error={errors["position"]:.2f}m tracking={base_error:.3f}m speed={np.linalg.norm(v[:3]):.2f}m/s',flush=True)
             self.next_log=now+s.log_dt
 
     def result(self):
@@ -182,7 +183,7 @@ class WholeBodyReaching:
         return {'state':self.state,'success':self.state=='REACHED','failure_reason':self.failure_reason,
                 'collision':self.simulation.collision_detected if self.terminal_collision is None else self.terminal_collision,'simulation_time':self.stopped_at if self.stopped_at is not None else self.simulation.time,
                 'replan_requests':self.request_count,'accepted_plans':self.accepted_count,'goal_errors':self._errors(q,v),
-                'maximum_base_tracking_error_m':self.max_base_error,'maximum_joint_tracking_error_rad':self.max_joint_error,
+                'maximum_actual_base_speed_mps':self.max_base_speed,'maximum_base_tracking_error_m':self.max_base_error,'maximum_joint_tracking_error_rad':self.max_joint_error,
                 'maximum_actual_joint_rate':self.max_rate,'maximum_handoff_body_rate_difference':self.max_reference_rate_jump,
                 'mean_planning_wall_seconds':float(np.mean(self.latencies)) if self.latencies else None,
                 'max_plan_age_sim_seconds':max(self.plan_ages,default=0.),'controller_saturation_steps':self.controller.saturation_count if self.terminal_saturations is None else self.terminal_saturations,

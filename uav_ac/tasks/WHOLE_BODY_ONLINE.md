@@ -7,7 +7,11 @@ Launch from the repository root:
 ```
 
 This task opens the MuJoCo viewer before submitting the first plan. Green shows
-its current selected local trajectory; blue shows actual robot motion. The
+the selected base trajectory; pale gray shows five diverse alternative candidates,
+orange the selected arm grasp-frame path, purple the preceding selected path,
+and blue actual base motion. Alternatives are a diagnostic subset of all 27
+candidates, not collision-certified paths. The console prints the selected
+candidate index, horizon, candidate positional spread and actual speed. The
 viewer remains open at success/failure, and the terminal immediately prints the
 outcome. Closing the viewer ends the task. Normal viewer runs write no artifacts.
 A graphical desktop/OpenGL and the YAML-selected local checkpoint are required.
@@ -41,6 +45,28 @@ Checkpoint camera/robot contracts are checked. The physical gripper servo may
 slightly deviate from its command: this YAML explicitly allows 2 mm through
 `gripper_tolerance`; observations retain the actual measured gap. The planner's
 default tolerance is 0.5 mm, and all tolerances are bounded by 5 mm.
+
+`yopo.speed_scale` is a deployment adjustment, default 1.0 and bounded to
+0.5–2.0. This preset uses 1.3. It divides predicted piece durations by the
+factor (clipped to the decoder's 0.1–3.0 s bounds), scales predicted terminal
+velocities/accelerations, and re-solves MINCO from the unchanged actual start
+PVA. It increases commanded physical motion rather than viewer playback speed.
+The original network ranking is retained; this is not speed-conditioned training
+or a new collision/dynamics certificate. Nonzero actual start derivatives mean
+the resulting path need not be a uniform time-rescaling of the original curve.
+
+A 5 s real-physics smoke test with factor 1.3 progressed about 2.13 m toward the
+goal, versus about 1.59 m at factor 1.0. Peak actual base speed was 0.58 m/s;
+25 replans were accepted, without collision during this short check. Maximum
+base tracking error increased from 3.50 to 4.73 mm and joint error to 0.00931 rad.
+
+At factor 1.0 the first 3 s always selected candidate 4. The candidates themselves
+were distinct (initial intermediate lateral/vertical standard deviations about
+0.28/0.21 m, with differing arm waypoints). Replacing the depth frame with all
+no-return pixels changed parameters by up to 0.188 in their mixed physical
+units but did not change the selected index. This is a sensitivity probe, not
+proof of adequate visual obstacle avoidance. The overlay exposes the current
+ranking preference without introducing a map-based fallback.
 
 `whole_body` options (defaults in `runners/whole_body_config.py`):
 
@@ -87,13 +113,15 @@ geometry/kinematics feasibility check, not a controller-tracked success or an
 optimizer comparison, and is never supplied to the neural planner.
 
 The existing `p4_portal_forest_seed23_v1/best_100` checkpoint was smoke-tested
-for 5 simulated seconds on this enlarged scene: 25 plans accepted, no collision,
+at speed factor 1.0 for 5 simulated seconds on this enlarged scene: 25 plans accepted, no collision,
 maximum base tracking error 3.50 mm and joint error 0.00454 rad. The diagnostic
 ended at its configured 5 s limit; this does not establish full-task arrival.
 The goal is initially 22.9 m away, beyond the short-range training distribution.
 Normal interactive runs allow 180 s and display terminal success/failure.
 A desktop run of the enlarged scene continued to 13.52 s and reported a
-physical collision; the current checkpoint still does not solve the benchmark.
+physical collision. With factor 1.3 and the candidate overlay, the desktop run
+reported collision at 10.19 s; the current checkpoint still does not solve the
+benchmark. Faster timing improves motion speed, not the learned avoidance quality.
 
 The previous smaller scene's full unit/integration test run had 728 passed,
 2 skipped and three pre-existing failures (gate-racing timing and two fake-viewer
@@ -102,3 +130,7 @@ cycle/reset expectations). Those unrelated behaviors were not changed here.
 For the enlarged scene and `yopo` selector, the focused runner/end2end/depth/online
 checks passed (46 tests), and the dense whole-body witness test passed separately.
 The updated graphical entry point was launched on the desktop.
+
+Speed adjustment and actual-head continuity, configuration, runner, depth and
+online tracking checks passed (48 focused tests); real graphical execution also
+exercised the multi-candidate and grasp-frame overlay.

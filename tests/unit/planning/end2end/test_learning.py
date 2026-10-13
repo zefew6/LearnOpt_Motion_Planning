@@ -79,3 +79,18 @@ def test_fixed_gripper_policy_accepts_small_measured_servo_error(tmp_path):
     changed=o.configuration.copy();changed[11]+=.0001
     prediction=End2EndPlanner(tmp_path/'policy').plan(replace(o,configuration=changed))
     assert prediction.trajectory is not None
+
+
+def test_speed_scaling_keeps_actual_head_and_candidate_selection(tmp_path):
+    from uav_ac.planning.end2end.planner import End2EndPlanner
+    o=obs();net=WholeBodyPlannerNet(norm(),score_mode='ranking')
+    path=tmp_path/'policy'
+    save_checkpoint(path,net,{'depth_spec':o.depth_spec.as_mapping(),'candidate_count':27,'gripper_gap':float(o.configuration[11])})
+    normal=End2EndPlanner(path).plan(o);faster=End2EndPlanner(path,speed_scale=1.3).plan(o)
+    assert normal.selected_index==faster.selected_index
+    assert np.allclose(normal.parameters[:,:16],faster.parameters[:,:16])
+    assert faster.trajectory.total_time==pytest.approx(normal.trajectory.total_time/1.3)
+    for d in range(3):assert np.allclose(faster.trajectory.evaluate(0,d),o.start_pva[d],atol=1e-7)
+    assert faster.observation is o
+    for value in (True,0.,2.1,float('nan')):
+        with pytest.raises(ValueError,match='speed_scale'):End2EndPlanner(path,speed_scale=value)

@@ -198,6 +198,6 @@ def load_config(path: str | Path = DEFAULT_CONFIG) -> dict:
     from .whole_body_config import WholeBodySettings,validate_whole_body
     WholeBodySettings.from_mapping(config.setdefault('whole_body',{}))
     model=config.setdefault('yopo',{})
-    _only(model,{'checkpoint','device','gripper_tolerance'},'yopo')
+    _only(model,{'checkpoint','device','gripper_tolerance','speed_scale'},'yopo')
     if config['task']=='whole_body_planning':validate_whole_body(config,path)
     return config
