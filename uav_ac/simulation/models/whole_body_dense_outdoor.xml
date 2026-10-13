@@ -1,0 +1,111 @@
+<mujoco model="whole_body_dense_outdoor">
+  <compiler angle="radian" autolimits="true" />
+  <default>
+    <default class="quadrotor_parts">
+      <geom contype="1" conaffinity="1" />
+    </default>
+  </default>
+  <option timestep="0.001" gravity="0 0 -9.81" integrator="Euler" />
+  <size nuser_site="1" />
+  <statistic center="5.8 0 1.2" extent="7" />
+  <custom>
+    <numeric name="planning_bounds" data="-.6 -2.7 -1.78 12.2 2.7 -1.50" />
+    <numeric name="flight_limits" data="3 2 8 12 0.7" />
+    <numeric name="whole_body_start" data=".1 0 -1.65 0 0 0 0 0" />
+    <numeric name="whole_body_goal" data="11.5 0 -1.65 0 0 .15 -.2 .1" />
+    <numeric name="whole_body_gripper" data=".06" />
+  </custom>
+  <visual>
+    <global azimuth="135" elevation="-25" />
+    <map znear=".0001" zfar="100" />
+    <quality offsamples="4" />
+  </visual>
+  <asset>
+    <texture name="ground_grid" type="2d" builtin="checker" width="512" height="512" rgb1="0.55 0.55 0.55" rgb2="0.35 0.35 0.35" />
+    <material name="ground" texture="ground_grid" texrepeat="8 8" texuniform="true" reflectance="0.1" />
+  </asset>
+  <worldbody>
+    <light name="sun" pos="2.5 0 8" dir="-0.3 0.2 -1" directional="true" />
+    <geom name="ground" type="plane" size="16 6 0.1" material="ground" />
+    <body name="quadrotor" pos=".1 0 1.65" childclass="quadrotor_parts">
+      <include file="../model/aerial_manipulator.xml" />
+      <camera name="yopo_depth" pos=".13 0 0" xyaxes="0 -1 0 0 0 1" sensorsize="2 2" resolution="160 96" focalpixel="80 83.1384387633" />
+    </body>
+    <site name="start" pos=".1 0 1.65" size=".06" rgba=".1 .8 .9 1" />
+    <site name="goal" pos="11.5 0 1.65" size=".06" rgba=".8 .2 .9 1" />
+    <geom name="obstacle_wall_0_bottom" type="box" pos="3.0 0.0 0.565" size="0.16 3.0 0.565" rgba=".5 .58 .65 1" />
+    <geom name="obstacle_wall_0_top" type="box" pos="3.0 0.0 2.3499999999999996" size="0.16 3.0 0.44999999999999996" rgba=".5 .58 .65 1" />
+    <geom name="obstacle_wall_0_left_low" type="box" pos="3.0 -1.8399999999999999 1.515" size="0.16 1.1600000000000001 0.385" rgba=".5 .58 .65 1" />
+    <geom name="obstacle_wall_0_right_low" type="box" pos="3.0 1.59 1.515" size="0.16 1.41 0.385" rgba=".5 .58 .65 1" />
+    <geom name="obstacle_wall_1_bottom" type="box" pos="6.0 0.0 0.565" size="0.16 3.0 0.565" rgba=".5 .58 .65 1" />
+    <geom name="obstacle_wall_1_top" type="box" pos="6.0 0.0 2.3499999999999996" size="0.16 3.0 0.44999999999999996" rgba=".5 .58 .65 1" />
+    <geom name="obstacle_wall_1_left_low" type="box" pos="6.0 -1.45 1.2999999999999998" size="0.16 1.55 0.17000000000000004" rgba=".5 .58 .65 1" />
+    <geom name="obstacle_wall_1_right_low" type="box" pos="6.0 1.8 1.2999999999999998" size="0.16 1.2 0.17000000000000004" rgba=".5 .58 .65 1" />
+    <geom name="obstacle_wall_1_left_high" type="box" pos="6.0 -1.57 1.685" size="0.16 1.43 0.21499999999999997" rgba=".5 .58 .65 1" />
+    <geom name="obstacle_wall_1_right_high" type="box" pos="6.0 1.87 1.685" size="0.16 1.13 0.21499999999999997" rgba=".5 .58 .65 1" />
+    <geom name="obstacle_wall_2_bottom" type="box" pos="9.0 0.0 0.565" size="0.16 3.0 0.565" rgba=".5 .58 .65 1" />
+    <geom name="obstacle_wall_2_top" type="box" pos="9.0 0.0 2.3499999999999996" size="0.16 3.0 0.44999999999999996" rgba=".5 .58 .65 1" />
+    <geom name="obstacle_wall_2_left_low" type="box" pos="9.0 -1.7 1.2999999999999998" size="0.16 1.3 0.17000000000000004" rgba=".5 .58 .65 1" />
+    <geom name="obstacle_wall_2_right_low" type="box" pos="9.0 1.55 1.2999999999999998" size="0.16 1.45 0.17000000000000004" rgba=".5 .58 .65 1" />
+    <geom name="obstacle_wall_2_left_high" type="box" pos="9.0 -1.81 1.685" size="0.16 1.19 0.21499999999999997" rgba=".5 .58 .65 1" />
+    <geom name="obstacle_wall_2_right_high" type="box" pos="9.0 1.6099999999999999 1.685" size="0.16 1.3900000000000001 0.21499999999999997" rgba=".5 .58 .65 1" />
+    <geom name="obstacle_low_tree_0" type="cylinder" pos="1.5 0 0.5396318094644096" size=".16 0.5396318094644096" rgba=".4 .3 .17 1" />
+    <geom name="obstacle_tree_0_0" type="cylinder" pos="1.2454245593241755 -1.2853880605782884 1.3351571463422027" size="0.14 1.3351571463422027" rgba=".27 .45 .2 1" />
+    <geom name="obstacle_crown_0_0" type="sphere" pos="1.2454245593241755 -1.2853880605782884 2.6703142926844055" size=".20" rgba=".18 .35 .16 1" />
+    <geom name="obstacle_tree_0_1" type="cylinder" pos="0.9852091842463747 1.1518259978660932 1.2046971097075958" size="0.065 1.2046971097075958" rgba=".27 .45 .2 1" />
+    <geom name="obstacle_tree_0_2" type="cylinder" pos="1.8776992052858201 -1.0733193586365373 1.0732383317772816" size="0.065 1.0732383317772816" rgba=".27 .45 .2 1" />
+    <geom name="obstacle_tree_0_3" type="cylinder" pos="1.0640103512736527 0.92672943591998 0.8029085906289294" size="0.14 0.8029085906289294" rgba=".27 .45 .2 1" />
+    <geom name="obstacle_crown_0_3" type="sphere" pos="1.0640103512736527 0.92672943591998 1.6058171812578588" size=".20" rgba=".18 .35 .16 1" />
+    <geom name="obstacle_tree_0_4" type="cylinder" pos="1.0776038461194273 -1.9886816436311172 0.5286009050937399" size="0.065 0.5286009050937399" rgba=".27 .45 .2 1" />
+    <geom name="obstacle_tree_0_5" type="cylinder" pos="1.3070607041350017 2.0355863674480945 1.1560312141477482" size="0.065 1.1560312141477482" rgba=".27 .45 .2 1" />
+    <geom name="obstacle_tree_0_6" type="cylinder" pos="1.9864131018084934 -0.9837789056600873 0.3654953277193159" size="0.14 0.3654953277193159" rgba=".27 .45 .2 1" />
+    <geom name="obstacle_crown_0_6" type="sphere" pos="1.9864131018084934 -0.9837789056600873 0.7309906554386318" size=".20" rgba=".18 .35 .16 1" />
+    <geom name="obstacle_tree_0_7" type="cylinder" pos="1.0315855576828534 1.041103368514877 1.026557164650088" size="0.065 1.026557164650088" rgba=".27 .45 .2 1" />
+    <geom name="obstacle_low_tree_1" type="cylinder" pos="4.5 0 0.5595709580456844" size=".16 0.5595709580456844" rgba=".4 .3 .17 1" />
+    <geom name="obstacle_tree_1_0" type="cylinder" pos="4.385951660039876 -0.930380021490173 1.2217734474970943" size="0.14 1.2217734474970943" rgba=".27 .45 .2 1" />
+    <geom name="obstacle_crown_1_0" type="sphere" pos="4.385951660039876 -0.930380021490173 2.4435468949941885" size=".20" rgba=".18 .35 .16 1" />
+    <geom name="obstacle_tree_1_1" type="cylinder" pos="4.329281528328612 0.896343782148493 0.7472272080485263" size="0.065 0.7472272080485263" rgba=".27 .45 .2 1" />
+    <geom name="obstacle_tree_1_2" type="cylinder" pos="4.969398989774286 -1.4379133016721304 1.1744921892524471" size="0.065 1.1744921892524471" rgba=".27 .45 .2 1" />
+    <geom name="obstacle_tree_1_3" type="cylinder" pos="4.0031343715569045 2.3850737710327508 0.7881488332184455" size="0.14 0.7881488332184455" rgba=".27 .45 .2 1" />
+    <geom name="obstacle_crown_1_3" type="sphere" pos="4.0031343715569045 2.3850737710327508 1.576297666436891" size=".20" rgba=".18 .35 .16 1" />
+    <geom name="obstacle_tree_1_4" type="cylinder" pos="4.7072586341883005 -1.9503443854359022 1.2858032811554483" size="0.065 1.2858032811554483" rgba=".27 .45 .2 1" />
+    <geom name="obstacle_tree_1_5" type="cylinder" pos="4.1272422979427885 1.667709578293155 0.7125963683180815" size="0.065 0.7125963683180815" rgba=".27 .45 .2 1" />
+    <geom name="obstacle_tree_1_6" type="cylinder" pos="4.035811141044341 -1.0682462162155637 1.307470278456576" size="0.14 1.307470278456576" rgba=".27 .45 .2 1" />
+    <geom name="obstacle_crown_1_6" type="sphere" pos="4.035811141044341 -1.0682462162155637 2.614940556913152" size=".20" rgba=".18 .35 .16 1" />
+    <geom name="obstacle_tree_1_7" type="cylinder" pos="4.26069825396571 1.606521510060733 1.0068321852768998" size="0.065 1.0068321852768998" rgba=".27 .45 .2 1" />
+    <geom name="obstacle_low_tree_2" type="cylinder" pos="7.5 0 0.5360235757800824" size=".16 0.5360235757800824" rgba=".4 .3 .17 1" />
+    <geom name="obstacle_tree_2_0" type="cylinder" pos="7.139262312264732 -2.377909885798034 0.682126788330652" size="0.14 0.682126788330652" rgba=".27 .45 .2 1" />
+    <geom name="obstacle_crown_2_0" type="sphere" pos="7.139262312264732 -2.377909885798034 1.364253576661304" size=".20" rgba=".18 .35 .16 1" />
+    <geom name="obstacle_tree_2_1" type="cylinder" pos="7.679434127544797 1.1959382045338622 0.46944922001336675" size="0.065 0.46944922001336675" rgba=".27 .45 .2 1" />
+    <geom name="obstacle_tree_2_2" type="cylinder" pos="7.613234931804486 -2.099037994655027 0.7909164568008564" size="0.065 0.7909164568008564" rgba=".27 .45 .2 1" />
+    <geom name="obstacle_tree_2_3" type="cylinder" pos="6.991399847113797 1.5195106440326984 0.8744137638577975" size="0.14 0.8744137638577975" rgba=".27 .45 .2 1" />
+    <geom name="obstacle_crown_2_3" type="sphere" pos="6.991399847113797 1.5195106440326984 1.748827527715595" size=".20" rgba=".18 .35 .16 1" />
+    <geom name="obstacle_tree_2_4" type="cylinder" pos="7.928118562149399 -1.439007302125952 0.8197465845242282" size="0.065 0.8197465845242282" rgba=".27 .45 .2 1" />
+    <geom name="obstacle_tree_2_5" type="cylinder" pos="7.982364010708274 1.1461084269172783 0.5501878408011233" size="0.065 0.5501878408011233" rgba=".27 .45 .2 1" />
+    <geom name="obstacle_tree_2_6" type="cylinder" pos="7.611034147502186 -2.0298033533053452 1.1966579494992602" size="0.14 1.1966579494992602" rgba=".27 .45 .2 1" />
+    <geom name="obstacle_crown_2_6" type="sphere" pos="7.611034147502186 -2.0298033533053452 2.3933158989985204" size=".20" rgba=".18 .35 .16 1" />
+    <geom name="obstacle_tree_2_7" type="cylinder" pos="7.908046859456974 1.8203468053774459 0.7435214659515774" size="0.065 0.7435214659515774" rgba=".27 .45 .2 1" />
+    <geom name="obstacle_low_tree_3" type="cylinder" pos="10.5 0 0.5350980692000555" size=".16 0.5350980692000555" rgba=".4 .3 .17 1" />
+    <geom name="obstacle_tree_3_0" type="cylinder" pos="10.981049381791069 -1.7226110178148648 0.38222704259093454" size="0.14 0.38222704259093454" rgba=".27 .45 .2 1" />
+    <geom name="obstacle_crown_3_0" type="sphere" pos="10.981049381791069 -1.7226110178148648 0.7644540851818691" size=".20" rgba=".18 .35 .16 1" />
+    <geom name="obstacle_tree_3_1" type="cylinder" pos="11.038394128753069 1.7312480943812414 0.9558144622902753" size="0.065 0.9558144622902753" rgba=".27 .45 .2 1" />
+    <geom name="obstacle_tree_3_2" type="cylinder" pos="10.193013453329659 -2.1536803122351644 1.0230083140091242" size="0.065 1.0230083140091242" rgba=".27 .45 .2 1" />
+    <geom name="obstacle_tree_3_3" type="cylinder" pos="10.498680874894893 2.3163322271335387 1.1999728024171512" size="0.14 1.1999728024171512" rgba=".27 .45 .2 1" />
+    <geom name="obstacle_crown_3_3" type="sphere" pos="10.498680874894893 2.3163322271335387 2.3999456048343024" size=".20" rgba=".18 .35 .16 1" />
+    <geom name="obstacle_tree_3_4" type="cylinder" pos="10.110001535546422 -1.7445869899458968 0.5768868050615563" size="0.065 0.5768868050615563" rgba=".27 .45 .2 1" />
+    <geom name="obstacle_tree_3_5" type="cylinder" pos="10.281044709526926 1.3458025669125058 0.5910791555322448" size="0.065 0.5910791555322448" rgba=".27 .45 .2 1" />
+    <geom name="obstacle_tree_3_6" type="cylinder" pos="9.966392074670496 -1.6244147738551042 1.3231200964298382" size="0.14 1.3231200964298382" rgba=".27 .45 .2 1" />
+    <geom name="obstacle_crown_3_6" type="sphere" pos="9.966392074670496 -1.6244147738551042 2.6462401928596764" size=".20" rgba=".18 .35 .16 1" />
+    <geom name="obstacle_tree_3_7" type="cylinder" pos="10.985350042407108 2.28653211906403 1.1484772657222733" size="0.065 1.1484772657222733" rgba=".27 .45 .2 1" />
+  </worldbody>
+  <actuator>
+    <motor name="arm_motor_0" joint="arm_joint_0" ctrlrange="-0.8 0.8" ctrllimited="true" />
+    <motor name="arm_motor_1" joint="arm_joint_1" ctrlrange="-0.8 0.8" ctrllimited="true" />
+    <motor name="arm_motor_2" joint="arm_joint_2" ctrlrange="-0.6 0.6" ctrllimited="true" />
+    <motor name="arm_motor_3" joint="arm_joint_3" ctrlrange="-0.4 0.4" ctrllimited="true" />
+    <position name="gripper_position" joint="gripper_left_joint" kp="120" kv="3" ctrlrange="0 0.025" ctrllimited="true" forcerange="-2 2" forcelimited="true" />
+  </actuator>
+  <equality>
+    <joint name="gripper_finger_sync" joint1="gripper_right_joint" joint2="gripper_left_joint" polycoef="0 1 0 0 0" />
+  </equality>
+</mujoco>

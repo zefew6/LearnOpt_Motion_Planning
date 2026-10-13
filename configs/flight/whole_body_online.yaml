@@ -1,0 +1,17 @@
+task: whole_body_planning
+scene: whole_body_dense_outdoor
+planner: end2end
+controller: cascaded
+control_dt: 0.01
+duration: 120.0
+visualize: true
+follow_camera: true
+wind: none
+end2end:
+  checkpoint: ../../runs/yopo_whole_body/p4_portal_forest_seed23_v1/best_100
+  device: cpu
+  gripper_tolerance: 0.002  # fixed command; measured soft-equality servo deviation, metres
+whole_body:
+  replan_dt: 0.2
+  planning_timeout: 1.0
+  max_plan_age: 0.5

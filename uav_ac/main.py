@@ -29,6 +29,9 @@ def run(config: dict) -> np.ndarray | dict:
     if task == "aerial_pick_place":
         from uav_ac.runners.aerial_pick_place import run_aerial_pick_place
         return run_aerial_pick_place(config)
+    if task == 'whole_body_planning':
+        from uav_ac.runners.whole_body_planning import run_whole_body_planning
+        return run_whole_body_planning(config)
 
     from uav_ac.runners.trajectory_tracking import run_trajectory_tracking
     return run_trajectory_tracking(config)

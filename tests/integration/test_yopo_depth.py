@@ -94,3 +94,19 @@ def test_robot_probe_named_camera_center_distance():
     with IdealDepthObserver(sim.model,sim.data) as observer:
         depth,mask=observer.observe()
         assert mask[48,80] and depth[48,80]==pytest.approx(2.,abs=.02)
+
+
+def test_current_joint_pose_is_forwarded_only_in_render_copy():
+    model=mujoco.MjModel.from_xml_string('''<mujoco><visual><map znear=".0001" zfar="100"/></visual>
+    <worldbody><body name="sensor"><joint type="slide" axis="1 0 0"/>
+    <geom type="sphere" size=".01" mass=".1"/>
+    <camera name="depth" xyaxes="0 -1 0 0 0 1" sensorsize="2 2" resolution="160 96" focalpixel="80 83.1384387633"/>
+    </body><geom type="box" pos="2.05 0 0" size=".05 5 5"/></worldbody></mujoco>''')
+    data=mujoco.MjData(model);mujoco.mj_forward(model,data)
+    data.qpos[0]=.5
+    old_camera=data.cam_xpos.copy()
+    with IdealDepthObserver(model,data,camera_name='depth') as observer:
+        depth,_=observer.observe()
+        assert depth[48,80]==pytest.approx(1.5,abs=.02)
+    assert np.array_equal(data.cam_xpos,old_camera)
+    assert data.qpos[0]==.5

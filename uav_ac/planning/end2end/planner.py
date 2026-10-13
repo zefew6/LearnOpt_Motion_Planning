@@ -8,6 +8,9 @@ from .encoding import encode_observation
 from .anchors import make_anchors
 from .direct import decode_direct
 
+# The fixed opening is a servo target; retain the measured state within 0.5 mm.
+GRIPPER_SERVO_TOLERANCE = .0005
+
 
 @dataclass
 class LearnedPlan:
@@ -20,7 +23,10 @@ class LearnedPlan:
 
 
 class End2EndPlanner:
-    def __init__(self,checkpoint,*,device='cpu',expected_robot_hash=None):
+    def __init__(self,checkpoint,*,device='cpu',expected_robot_hash=None,gripper_tolerance=GRIPPER_SERVO_TOLERANCE):
+        if isinstance(gripper_tolerance,bool) or not np.isfinite(gripper_tolerance) or not 0<=gripper_tolerance<=.005:
+            raise ValueError('gripper tolerance must lie in [0,0.005] m')
+        self.gripper_tolerance=float(gripper_tolerance)
         self.model,self.metadata=load_checkpoint(checkpoint,device=device,expected_robot_hash=expected_robot_hash)
         self.device=device;self.count=int(self.metadata['candidate_count'])
         if self.count not in (1,27):raise ValueError('unsupported candidate count')
@@ -30,7 +36,7 @@ class End2EndPlanner:
         started=time.perf_counter()
         if observation.depth_spec.as_mapping()!=self.metadata['depth_spec']:
             raise ValueError('observation depth calibration mismatch')
-        if 'gripper_gap' not in self.metadata or not np.isclose(observation.configuration[11],self.metadata['gripper_gap'],rtol=0.,atol=1e-8):
+        if 'gripper_gap' not in self.metadata or not np.isclose(observation.configuration[11],self.metadata['gripper_gap'],rtol=0.,atol=self.gripper_tolerance):
             raise ValueError('observation gripper opening mismatch')
         n=self.model.normalization;e=encode_observation(observation,n)
         anchors=make_anchors(observation,n,count=self.count)

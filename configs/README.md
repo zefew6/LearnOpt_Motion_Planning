@@ -5,7 +5,7 @@ flight, RL, planner and YOPO schemas remain independent.
 
 | Directory | Purpose | Examples |
 | --- | --- | --- |
-| [flight/](flight/) | Interactive flight and trained-policy viewing | `flight_quickstart.yaml`, `flight.yaml`, `aerial_manipulator_workcell.yaml` |
+| [flight/](flight/) | Interactive flight and trained-policy viewing | `flight_quickstart.yaml`, `flight.yaml`, `aerial_manipulator_workcell.yaml`, `whole_body_online.yaml` |
 | [planning/](planning/) | Standalone planner experiments | `bmtp.yaml` |
 | [rl/](rl/) | PPO/ACMPC training and trajectory-bank settings | `ppo_trajectory.yaml`, `acmpc_gate_racing.yaml` |
 | [yopo/dataset/](yopo/dataset/) | Whole-body depth dataset generation | `yopo_whole_body.yaml`, `yopo_coupled_dataset.yaml`, `yopo_portal_dataset.yaml` |

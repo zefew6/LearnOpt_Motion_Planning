@@ -69,3 +69,13 @@ def test_camera_rays_sample_stride32_feature_centers():
     grid=camera_feature_grid(xy,(96,160),(3,5))
     assert torch.allclose(grid[0,0],torch.zeros(2),atol=1e-6)
     assert torch.allclose(grid[0,1],torch.tensor([.2421875,.484375]),atol=1e-6)
+
+
+def test_fixed_gripper_policy_accepts_small_measured_servo_error(tmp_path):
+    from dataclasses import replace
+    from uav_ac.planning.end2end.planner import End2EndPlanner
+    o=obs();net=WholeBodyPlannerNet(norm())
+    save_checkpoint(tmp_path/'policy',net,{'depth_spec':o.depth_spec.as_mapping(),'candidate_count':1,'gripper_gap':float(o.configuration[11])})
+    changed=o.configuration.copy();changed[11]+=.0001
+    prediction=End2EndPlanner(tmp_path/'policy').plan(replace(o,configuration=changed))
+    assert prediction.trajectory is not None

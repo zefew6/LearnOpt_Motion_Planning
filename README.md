@@ -213,6 +213,20 @@ The aerial-manipulator workcell demo uses its own scene, task settings, and
 ```
 
 
+The live whole-body reaching benchmark opens the viewer before planning and tracks
+neural trajectories with the aerial-manipulator controller in MuJoCo:
+
+```bash
+.venv/bin/python -m uav_ac.main --config configs/flight/whole_body_online.yaml
+```
+
+It requires the local checkpoint named in the YAML. The outdoor scene contains
+three stepped wall openings, trees, bamboo and low obstacles. Each planning tick
+uses one current depth frame and actual robot state to reach the XML-owned 8-D
+final goal. See [online benchmark details](uav_ac/tasks/WHOLE_BODY_ONLINE.md)
+for timing, settings and current model limitations.
+
+
 ## Optional MPC and RL workflows
 
 ### acados MPC

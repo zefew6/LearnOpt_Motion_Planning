@@ -53,6 +53,7 @@ class IdealDepthObserver:
     def observe(self):
         if self.renderer is None: raise RuntimeError('observer is closed')
         mujoco.mj_copyData(self._render_data,self._render_model,self.data)
+        mujoco.mj_forward(self._render_model,self._render_data)
         self.renderer.update_scene(self._render_data,camera=self.camera_id,scene_option=self.options)
         raw=self.renderer.render().copy()
         valid=np.isfinite(raw)&(raw>0)&(raw<self.spec.far_m)&(raw<self.far_clip*(1.-1e-5))

@@ -62,6 +62,11 @@ RL training and evaluation dispatch through the explicit registry in `uav_ac/rl/
 
 - Planner values: `none` for gate racing, `mini_snap`, `gcopter`, `gcs`, `bmtp`, and the task-owned
   `aerial_manipulator_minco` planner for `aerial_pick_place`.
+- The `whole_body_planning` task uses `planner: end2end`, `controller: cascaded`,
+  and `wind: none`; `end2end` and `whole_body` YAML blocks configure checkpoint
+  inference and online replanning. XML owns its eight-value start/goal and fixed
+  gripper command. It opens the viewer before planning and tracks neural local
+  trajectories through actual physics; see [task details](uav_ac/tasks/WHOLE_BODY_ONLINE.md).
 - Controller values: `cascaded`, `mpc`, `rl`.
 - Common optional values: `speed`, `control_dt`, `wind`, `visualize`, and `seed`.
 - `bmtp`, `gcopter`, `gcs`, `cascaded`, `mpc`, `rl`, and `wind_options` may coexist as presets. Runtime reads only the selected planner, controller, and wind block; BMTP always renders its selected initialization and optimized trajectory.
