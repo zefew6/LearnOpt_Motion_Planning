@@ -2,7 +2,7 @@
 
 Run: `runs/yopo_whole_body/p4_portal_forest_seed23_v1`.
 Dataset: `wall_portals_forest_v4/dataset` (9 layouts,216 snapshots,3 layouts per
-split). Config: `configs/yopo_portal_train.yaml`. No source/network/loss code
+split). Config: `configs/yopo/train/yopo_portal_train.yaml`. No source/network/loss code
 changed; fresh width16 network,27 candidates,200 AdamW steps,batch1,CPU,seed23,
 peak weight1,self clearance0,no augmentation. All72 train frames were eligible;
 200 random draws visited71 of them. The 12-frame validation subset selects the

@@ -24,8 +24,8 @@ def test_legacy_training_exports_shared_implementation():
     assert legacy._validate_training_config is training._validate_training_config
     assert legacy.DEFAULT_CONFIG_PATH == training.DEFAULT_CONFIG_PATH
     assert training.DEFAULT_CONFIG_PATH.name == "ppo_trajectory.yaml"
-    assert training.DEFAULT_CONFIG_PATH.parent.name == "configs"
-    assert training.DEFAULT_CONFIG_PATH == Path(legacy.__file__).resolve().parents[3] / "configs" / "ppo_trajectory.yaml"
+    assert training.DEFAULT_CONFIG_PATH.parent.name == "rl"
+    assert training.DEFAULT_CONFIG_PATH == Path(legacy.__file__).resolve().parents[3] / "configs" / "rl" / "ppo_trajectory.yaml"
 
 
 def test_settings_reject_config_path_before_creating_artifacts(tmp_path):

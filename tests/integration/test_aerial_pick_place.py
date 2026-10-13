@@ -6,7 +6,7 @@ from uav_ac.main import load_config, run
 
 
 def test_aerial_manipulator_task_plans_and_executes_headless():
-    config = load_config("configs/aerial_manipulator_workcell.yaml")
+    config = load_config("configs/flight/aerial_manipulator_workcell.yaml")
     config["visualize"] = False
     config["pick_place"]["record_joint_trace"] = True
     result = run(config)
@@ -78,7 +78,7 @@ def test_xml_only_scene_layout_runs_same_headless_pipeline(tmp_path, primitives)
     xml = xml.replace("</worldbody>", f"{primitives}\n</worldbody>", 1)
     scene_path = tmp_path / "scene_primitives.xml"
     scene_path.write_text(xml, encoding="utf-8")
-    config = load_config("configs/aerial_manipulator_workcell.yaml")
+    config = load_config("configs/flight/aerial_manipulator_workcell.yaml")
     config["scene"] = str(scene_path)
     config["visualize"] = False
     result = run(config)

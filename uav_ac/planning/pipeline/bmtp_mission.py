@@ -10,7 +10,7 @@ from ..trajectory.bmtp import BMTPConfig, BMTPLimits, BMTPPlanner, BMTPTrajector
 from ..trajectory.bmtp.collision import box, collisions, offset
 
 
-DEFAULT_BMTP_CONFIG = Path(__file__).resolve().parents[3] / "configs" / "bmtp.yaml"
+DEFAULT_BMTP_CONFIG = Path(__file__).resolve().parents[3] / "configs" / "planning" / "bmtp.yaml"
 
 
 def load_bmtp_settings(path: str | Path = DEFAULT_BMTP_CONFIG) -> dict:

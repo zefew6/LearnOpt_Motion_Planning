@@ -35,7 +35,7 @@ Keep CLI dispatch short. Put interactive orchestration in `runners`, reusable pl
 Interactive planning and flight:
 
 ```bash
-.venv/bin/python -m uav_ac.main --config configs/flight_quickstart.yaml
+.venv/bin/python -m uav_ac.main --config configs/flight/flight_quickstart.yaml
 ```
 
 `uav_ac.main` exposes `load_config`, `run`, and `main`. Controller construction lives in `uav_ac.control.factory.build_controller`; trajectory planning lives in `uav_ac.planning.pipeline.flight.plan_trajectory`. Simulator-independent planner APIs remain under `uav_ac.planning.trajectory`.
@@ -44,11 +44,11 @@ Trajectory-bank preparation and RL training:
 
 ```bash
 uv run python -m uav_ac.rl.training \
-  --config configs/ppo_trajectory.yaml \
+  --config configs/rl/ppo_trajectory.yaml \
   --run-dir runs/ppo_trajectory/<run-id> --prepare-only
 
 uv run python -m uav_ac.rl.training \
-  --config configs/acmpc_trajectory.yaml \
+  --config configs/rl/acmpc_trajectory.yaml \
   --run-dir runs/acmpc_trajectory/<run-id>
 ```
 
@@ -58,7 +58,7 @@ RL training and evaluation dispatch through the explicit registry in `uav_ac/rl/
 
 ## Flight configuration contract
 
-`configs/flight.yaml` has three required selectors: `scene`, `planner`, and `controller`. Scene names resolve only within `uav_ac/simulation/models/`; adding a scene requires adding an XML file, not another YAML descriptor.
+`configs/flight/flight.yaml` has three required selectors: `scene`, `planner`, and `controller`. Scene names resolve only within `uav_ac/simulation/models/`; adding a scene requires adding an XML file, not another YAML descriptor.
 
 - Planner values: `none` for gate racing, `mini_snap`, `gcopter`, `gcs`, `bmtp`, and the task-owned
   `aerial_manipulator_minco` planner for `aerial_pick_place`.
@@ -69,7 +69,7 @@ RL training and evaluation dispatch through the explicit registry in `uav_ac/rl/
 
 Reject duplicate keys, unknown settings, missing XML/selected-checkpoint files, and control periods that are not integer multiples of the XML timestep. A planner may validate required scene metadata, but it must never replace the selected scene.
 
-Training configuration remains independent. `configs/ppo_trajectory.yaml` and `configs/acmpc_trajectory.yaml` may contain bank, wind, PPO, and differentiable-MPC settings that are not valid in `flight.yaml`.
+Training configuration remains independent. `configs/rl/ppo_trajectory.yaml` and `configs/rl/acmpc_trajectory.yaml` may contain bank, wind, PPO, and differentiable-MPC settings that are not valid in `flight.yaml`.
 
 ## Numerical and serialization contracts
 
@@ -121,7 +121,7 @@ For a first viewer run, use the tracked configuration that needs neither acados
 nor an RL checkpoint:
 
 ```bash
-.venv/bin/python -m uav_ac.main --config configs/flight_quickstart.yaml
+.venv/bin/python -m uav_ac.main --config configs/flight/flight_quickstart.yaml
 ```
 
 It selects the lab-course scene, minimum-snap planning, and cascaded control.
@@ -136,7 +136,7 @@ Before running another configuration:
    scene/checkpoint paths, and options. This does not verify graphics or acados.
 2. For `controller: mpc`, follow [README MPC setup](README.md#acados-mpc), check
    `ACADOS_SOURCE_DIR` and shared-library visibility, and verify importing
-   `AcadosOcpSolver` in `.venv`. The default `configs/flight.yaml` selects MPC.
+   `AcadosOcpSolver` in `.venv`. The default `configs/flight/flight.yaml` selects MPC.
    Solver construction still needs code generation/compilation on a cache miss;
    import success alone does not prove solver availability.
 3. For `controller: rl`, require an existing compatible `.zip` checkpoint and

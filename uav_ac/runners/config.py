@@ -14,7 +14,7 @@ from uav_ac.simulation.wind_disturb import GustingCrosswind
 
 ROOT = Path(__file__).resolve().parents[2]
 MODEL_DIRECTORY = Path(__file__).resolve().parents[1] / "simulation" / "models"
-DEFAULT_CONFIG = ROOT / "configs" / "flight.yaml"
+DEFAULT_CONFIG = ROOT / "configs" / "flight" / "flight.yaml"
 PLANNERS = {"none", "mini_snap", "gcopter", "gcs", "bmtp",
             "aerial_manipulator_minco"}
 CONTROLLERS = {"cascaded", "mpc", "rl"}

@@ -7,7 +7,7 @@ is fixed; no grasp, payload or contact objective was introduced.
 
 ## Deliverable
 
-Config `configs/yopo_portal_dataset.yaml`, profile `portal_v4`, seed61.
+Config `configs/yopo/dataset/yopo_portal_dataset.yaml`, profile `portal_v4`, seed61.
 Acceptance run `runs/yopo_whole_body/wall_portals_forest_v4`:9 physical layouts,
 216 independent source snapshots, 72 per train/validation/test split. Each split
 has rectangle, stepped and two-offset-wall families. Each layout has down-hanging

@@ -96,5 +96,5 @@ bmtp:
 
 # RL preset; read only when controller: rl.
 rl:
-  checkpoint: ../runs/ppo_trajectory/multitraj01/best_model.zip
+  checkpoint: ../../runs/ppo_trajectory/multitraj01/best_model.zip
   device: cuda

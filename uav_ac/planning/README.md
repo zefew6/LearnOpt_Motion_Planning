@@ -183,7 +183,7 @@ independently of MINCO; each seed runs in a fresh process by default.
 Run the selected workcell configuration with:
 
 ```bash
-.venv/bin/python -m uav_ac.main --config configs/aerial_manipulator_workcell.yaml
+.venv/bin/python -m uav_ac.main --config configs/flight/aerial_manipulator_workcell.yaml
 ```
 
 Set `visualize: true` to open the existing MuJoCo viewer. The V1 payload is a
@@ -261,7 +261,7 @@ samples = result.trajectory.sample(0.01)
 ```
 
 The interactive entry selects `scene: bmtp_village` and `planner: bmtp` in
-`configs/flight.yaml`; its optional `bmtp:` section controls the initial route,
+`configs/flight/flight.yaml`; its optional `bmtp:` section controls the initial route,
 segment count, clearance, and solver overrides. To reproduce the multi-initialization experiment and export `summary.png`,
 `summary.svg`, `convergence.png`, `outcomes.png`, `iterations.gif`, JSON, and
 NPZ records:

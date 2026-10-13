@@ -15,7 +15,7 @@ DEFAULT_SEED = 42
 DEFAULT_STEPS_PER_ACTION = 10
 EVALUATION_INTERVAL = 100_000
 CHECKPOINT_INTERVAL = 250_000
-DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[4] / "configs" / "ppo_trajectory.yaml"
+DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[4] / "configs" / "rl" / "ppo_trajectory.yaml"
 
 
 DEFAULT_TRAINING_CONFIG: dict[str, Any] = deep_merge(COMMON_TRAINING_DEFAULTS, {

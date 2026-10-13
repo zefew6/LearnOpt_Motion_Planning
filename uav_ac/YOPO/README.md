@@ -6,7 +6,7 @@ Run from the repository root with the existing Python 3.13 environment:
 
 ```bash
 .venv/bin/python -m uav_ac.YOPO.generate \
-  --config configs/yopo_whole_body.yaml \
+  --config configs/yopo/dataset/yopo_whole_body.yaml \
   --run-dir runs/yopo_whole_body/my_dataset
 ```
 
@@ -125,10 +125,10 @@ preserved. Default smoke configurations use no augmentation to isolate learning.
 Run from the repository root with a prepared dataset:
 
 ```bash
-.venv/bin/python -m uav_ac.YOPO.training --config configs/yopo_p3.yaml \
+.venv/bin/python -m uav_ac.YOPO.training --config configs/yopo/train/yopo_p3.yaml \
   --dataset runs/yopo_whole_body/p2_rolling_v2_verified/dataset \
   --run-dir runs/yopo_whole_body/my_p3
-.venv/bin/python -m uav_ac.YOPO.training --config configs/yopo_p4.yaml \
+.venv/bin/python -m uav_ac.YOPO.training --config configs/yopo/train/yopo_p4.yaml \
   --dataset runs/yopo_whole_body/p2_rolling_v2_verified/dataset \
   --run-dir runs/yopo_whole_body/my_p4
 .venv/bin/python -m uav_ac.YOPO.evaluation \
@@ -170,7 +170,7 @@ payload, grasp/contact objective or gripper action is included.
 
 ```bash
 MUJOCO_GL=egl .venv/bin/python -m uav_ac.YOPO.generate \
-  --config configs/yopo_coupled_dataset.yaml \
+  --config configs/yopo/dataset/yopo_coupled_dataset.yaml \
   --run-dir runs/yopo_whole_body/my_coupled_data
 ```
 
@@ -230,7 +230,7 @@ meshes or visual-only decorations. Robot dimensions and physics remain unchanged
 
 ```bash
 MUJOCO_GL=egl .venv/bin/python -m uav_ac.YOPO.generate \
-  --config configs/yopo_portal_dataset.yaml \
+  --config configs/yopo/dataset/yopo_portal_dataset.yaml \
   --run-dir runs/yopo_whole_body/my_portal_data
 ```
 
@@ -258,13 +258,13 @@ There is no guarantee that every obstacle is visible from every snapshot.
 See [portal/forest acceptance](PORTAL_DATA_REPORT.md) for evidence and limitations.
 
 First bounded training on the portal/forest prototype uses
-`configs/yopo_portal_train.yaml`: existing width16 network,27 candidates, all72
+`configs/yopo/train/yopo_portal_train.yaml`: existing width16 network,27 candidates, all72
 eligible train frames,12 validation frames,200 steps with batch1,CPU, no state/
 goal augmentation. It starts from fresh weights; old models/runs are preserved.
 Use a new run directory:
 
 ```bash
-.venv/bin/python -m uav_ac.YOPO.training --config configs/yopo_portal_train.yaml \
+.venv/bin/python -m uav_ac.YOPO.training --config configs/yopo/train/yopo_portal_train.yaml \
   --dataset runs/yopo_whole_body/wall_portals_forest_v4/dataset \
   --run-dir runs/yopo_whole_body/my_portal_training
 ```

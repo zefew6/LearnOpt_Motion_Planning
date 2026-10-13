@@ -205,7 +205,7 @@ def timing(settings, run_dir):
 
 def main():
     parser = argparse.ArgumentParser(__doc__)
-    parser.add_argument("--config",default="configs/acmpc_trajectory.yaml")
+    parser.add_argument("--config",default="configs/rl/acmpc_trajectory.yaml")
     parser.add_argument("--run-dir",type=Path,required=True)
     parser.add_argument("--mode",choices=("preflight","compare","timing"),default="preflight")
     parser.add_argument("--device",default="cpu")

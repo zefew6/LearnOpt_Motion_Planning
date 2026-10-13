@@ -1,6 +1,6 @@
 # PPO trajectory-tracking training configuration.
 # Run from the repository root with:
-#   uv run python -m uav_ac.rl.training --config configs/ppo_trajectory.yaml
+#   uv run python -m uav_ac.rl.training --config configs/rl/ppo_trajectory.yaml
 
 task: trajectory_tracking
 seed: 42

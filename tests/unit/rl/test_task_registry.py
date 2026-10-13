@@ -43,8 +43,8 @@ def test_invalid_registry_target_is_rejected(monkeypatch):
 
 
 def test_shipped_configs_select_explicit_tasks():
-    assert training.load_training_config("configs/ppo_trajectory.yaml")["task"] == "trajectory_tracking"
-    assert training.load_training_config("configs/ppo_gate_racing.yaml")["task"] == "gate_racing"
+    assert training.load_training_config("configs/rl/ppo_trajectory.yaml")["task"] == "trajectory_tracking"
+    assert training.load_training_config("configs/rl/ppo_gate_racing.yaml")["task"] == "gate_racing"
 
 
 def test_legacy_evaluation_exports_unified_entrypoint():

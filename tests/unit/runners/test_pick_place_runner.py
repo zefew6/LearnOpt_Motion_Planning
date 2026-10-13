@@ -5,7 +5,7 @@ from uav_ac.runners import aerial_pick_place as runner
 
 
 def test_early_planning_failure_includes_map_initialization_time(monkeypatch):
-    config = load_config('configs/aerial_manipulator_workcell.yaml')
+    config = load_config('configs/flight/aerial_manipulator_workcell.yaml')
     config['visualize'] = False
 
     def fail_plan(**kwargs):
@@ -23,7 +23,7 @@ def test_early_planning_failure_includes_map_initialization_time(monkeypatch):
 
 
 def test_map_initialization_failure_returns_failed_task_result(monkeypatch):
-    config = load_config('configs/aerial_manipulator_workcell.yaml')
+    config = load_config('configs/flight/aerial_manipulator_workcell.yaml')
     config['visualize'] = False
 
     def fail_initialization(*args, **kwargs):

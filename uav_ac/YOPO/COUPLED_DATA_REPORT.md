@@ -8,7 +8,7 @@ observation/deployment contracts remain unchanged.
 
 ## Delivered data
 
-- Config: `configs/yopo_coupled_dataset.yaml`; profile `coupled_v3`, seed31.
+- Config: `configs/yopo/dataset/yopo_coupled_dataset.yaml`; profile `coupled_v3`, seed31.
 - Run: `runs/yopo_whole_body/coupled_corridor_bamboo_v2`.
 - Six physical scene layouts, 144 snapshots; 48 per train/validation/test split.
 - Each split contains one corridor and one bamboo scene. Each layout contains

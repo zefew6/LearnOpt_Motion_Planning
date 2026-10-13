@@ -16,9 +16,9 @@ checkpoints are incompatible: keep old runs and start a new run directory.
 Run from the repository root with the existing Python 3.13 environment:
 
 ```bash
-.venv/bin/python -m uav_ac.rl.training --config configs/ppo_gate_racing.yaml --run-dir runs/gate_racing/mlp_random_v3
-.venv/bin/python -m uav_ac.rl.training --config configs/acmpc_gate_racing.yaml --run-dir runs/gate_racing/acmpc_random_v3
-.venv/bin/python -m uav_ac.rl.training --config configs/acmpc_gate_racing.yaml --run-dir runs/gate_racing/acmpc_random_v3 --resume runs/gate_racing/acmpc_random_v3/final_model.zip --total-timesteps 1000000
+.venv/bin/python -m uav_ac.rl.training --config configs/rl/ppo_gate_racing.yaml --run-dir runs/gate_racing/mlp_random_v3
+.venv/bin/python -m uav_ac.rl.training --config configs/rl/acmpc_gate_racing.yaml --run-dir runs/gate_racing/acmpc_random_v3
+.venv/bin/python -m uav_ac.rl.training --config configs/rl/acmpc_gate_racing.yaml --run-dir runs/gate_racing/acmpc_random_v3 --resume runs/gate_racing/acmpc_random_v3/final_model.zip --total-timesteps 1000000
 .venv/bin/python -m uav_ac.rl.evaluate runs/gate_racing/acmpc_random_v3 --mode metrics --episodes 20
 .venv/bin/python -m uav_ac.rl.evaluate runs/gate_racing/acmpc_random_v3 --mode metrics --episodes 1 --seed 17
 .venv/bin/python -m uav_ac.rl.evaluate runs/gate_racing/acmpc_random_v3 --mode interactive --seed 17

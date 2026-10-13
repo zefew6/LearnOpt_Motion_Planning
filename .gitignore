@@ -49,6 +49,8 @@ dist/
 
 # External projects and integrations
 rl/
+!configs/rl/
+!configs/rl/**
 !uav_ac/rl/
 !uav_ac/rl/**
 uav_ac/rl/__pycache__/

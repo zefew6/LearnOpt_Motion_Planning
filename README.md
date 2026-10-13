@@ -150,16 +150,16 @@ Install [uv](https://docs.astral.sh/uv/) and use a graphical desktop for the MuJ
 
 ```bash
 uv sync --python 3.13
-.venv/bin/python -m uav_ac.main --config configs/flight_quickstart.yaml
+.venv/bin/python -m uav_ac.main --config configs/flight/flight_quickstart.yaml
 ```
 
 This first-run configuration uses the lab-course scene, minimum-snap planning,
 and cascaded control; it needs neither acados nor a trained checkpoint. The viewer
 opens with the planned trajectory and runs the simulation; close it to exit.
-`configs/flight.yaml` is the configurable MPC example and requires the
+`configs/flight/flight.yaml` is the configurable MPC example and requires the
 [acados setup](#acados-mpc) below.
 
-Set `scene`, `planner`, and `controller` in `configs/flight.yaml`. Installation
+Set `scene`, `planner`, and `controller` in `configs/flight/flight.yaml`. Installation
 builds optional Cython planning extensions when a C compiler is available;
 Python/NumPy fallbacks are available otherwise. Generated files are local build
 products and do not need to be downloaded or committed. See the
@@ -168,7 +168,7 @@ rebuilding, and [acados MPC setup](#acados-mpc) if using `controller: mpc`.
 
 ## Flight configuration
 
-`scene` names an XML file under `uav_ac/simulation/models/`, with or without the `.xml` suffix. Standard trajectory flights omit `task` (defaulting to `trajectory_tracking`). Reference-free gate-racing deployment uses `task: gate_racing`, `scene: gate_racing`, `planner: none`, and `controller: rl`; see [flight_gate_racing.yaml](configs/flight_gate_racing.yaml).
+`scene` names an XML file under `uav_ac/simulation/models/`, with or without the `.xml` suffix. Standard trajectory flights omit `task` (defaulting to `trajectory_tracking`). Reference-free gate-racing deployment uses `task: gate_racing`, `scene: gate_racing`, `planner: none`, and `controller: rl`; see [flight_gate_racing.yaml](configs/flight/flight_gate_racing.yaml).
 
 Reusable MuJoCo robot models live under `uav_ac/simulation/model/`; rotor
 actuation defaults live with the quadrotor dynamics under `uav_ac/robot/`.
@@ -182,7 +182,7 @@ step, and flight limits.
 | `wind` | `none`, `fixed_gust` | Add `wind_options` only to override fixed-gust defaults |
 | `visualize` | `true`, `false` | Shows corridor geometry; BMTP always shows its dashed initialization and solid result |
 
-Planner/controller-specific blocks can coexist as presets; only the block belonging to the selected planner or controller is used. `configs/flight.yaml` includes complete presets for `gcopter`, `gcs`, `bmtp`, `cascaded`, `mpc`, and `rl`. For example:
+Planner/controller-specific blocks can coexist as presets; only the block belonging to the selected planner or controller is used. `configs/flight/flight.yaml` includes complete presets for `gcopter`, `gcs`, `bmtp`, `cascaded`, `mpc`, and `rl`. For example:
 
 ```yaml
 scene: bmtp_village
@@ -200,7 +200,7 @@ Use `scene: gcs_building` with `planner: gcs`. `gcopter:` and `gcs:` can overrid
 To open a trained reference-free gate-racing policy in the native viewer:
 
 ```bash
-.venv/bin/python -m uav_ac.main --config configs/flight_gate_racing.yaml
+.venv/bin/python -m uav_ac.main --config configs/flight/flight_gate_racing.yaml
 ```
 
 This path uses `planner: none`; the policy observes the next gates directly and drives normalized thrust/body moments. It does not construct a trajectory or invoke GCOPTER.
@@ -209,7 +209,7 @@ The aerial-manipulator workcell demo uses its own scene, task settings, and
 8-D whole-body planner while retaining the existing flight entry point:
 
 ```bash
-.venv/bin/python -m uav_ac.main --config configs/aerial_manipulator_workcell.yaml
+.venv/bin/python -m uav_ac.main --config configs/flight/aerial_manipulator_workcell.yaml
 ```
 
 
@@ -226,7 +226,7 @@ uv pip install -e "$ACADOS_SOURCE_DIR/interfaces/acados_template"
 .venv/bin/python -c "from acados_template import AcadosOcpSolver"
 ```
 
-Replace `/path/to/acados` with your installation path. The controller generates and compiles its solver on first use, then reuses matching cached output in `c_generated_code/`. These generated files are not shipped in Git and are independent of the planning Cython build. Select the controller in `configs/flight.yaml`:
+Replace `/path/to/acados` with your installation path. The controller generates and compiles its solver on first use, then reuses matching cached output in `c_generated_code/`. These generated files are not shipped in Git and are independent of the planning Cython build. Select the controller in `configs/flight/flight.yaml`:
 
 ```yaml
 controller: mpc
@@ -242,7 +242,7 @@ Trajectory banks and checkpoints under `runs/` are local artifacts and are **not
 First prepare a trajectory bank. The default configuration generates 200 training, 20 validation, and 20 test trajectories in the open-field scene and validates them with acados MPC:
 
 ```bash
-.venv/bin/python -m uav_ac.rl.training --config configs/ppo_trajectory.yaml \
+.venv/bin/python -m uav_ac.rl.training --config configs/rl/ppo_trajectory.yaml \
   --run-dir runs/ppo_trajectory/multitraj01 --prepare-only
 ```
 
@@ -250,11 +250,11 @@ Generation can take substantial time. Train ACMPC with its independent training 
 
 ```bash
 .venv/bin/python -m uav_ac.rl.training \
-  --config configs/acmpc_trajectory.yaml \
+  --config configs/rl/acmpc_trajectory.yaml \
   --run-dir runs/acmpc_trajectory/multitraj01
 ```
 
-Edit `configs/acmpc_trajectory.yaml` for its trajectory bank, device, MPC, PPO, wind, and training scale. Use `configs/ppo_trajectory.yaml` for the MLP baseline.
+Edit `configs/rl/acmpc_trajectory.yaml` for its trajectory bank, device, MPC, PPO, wind, and training scale. Use `configs/rl/ppo_trajectory.yaml` for the MLP baseline.
 
 To deploy either an MLP or ACMPC policy, let `main` plan the reference and select the explicit checkpoint:
 
@@ -263,7 +263,7 @@ scene: open_field
 planner: gcopter
 controller: rl
 rl:
-  checkpoint: ../runs/acmpc_trajectory/multitraj01/best_model.zip
+  checkpoint: ../../runs/acmpc_trajectory/multitraj01/best_model.zip
   device: cuda
 ```
 
@@ -281,11 +281,12 @@ See [AGENTS.md](AGENTS.md) for contributor guidance, module contracts, and cover
 
 ```text
 configs/
-├── flight.yaml               Short interactive-flight configuration
-├── flight_gate_racing.yaml   Gate-racing policy viewer configuration
-├── ppo_trajectory.yaml       MLP training and trajectory-bank settings
-├── acmpc_trajectory.yaml     ACMPC training settings
-└── bmtp.yaml                 Standalone BMTP experiment settings
+├── flight/                   Interactive flight and policy deployment
+├── planning/                 Standalone planner experiments
+├── rl/                       PPO / ACMPC training
+└── yopo/
+    ├── dataset/              Whole-body depth dataset generation
+    └── train/                Guidance-learning training experiments
 uav_ac/
 ├── main.py                   CLI and interactive task dispatch
 ├── runners/                  Flight configuration and interactive task workflows

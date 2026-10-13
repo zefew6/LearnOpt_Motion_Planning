@@ -6,7 +6,7 @@ from uav_ac.planning.trajectory.aerial_manipulator_minco.flatness import yaw_qua
 from uav_ac.simulation.mujoco_sim import MujocoSimulation
 
 
-CONFIG = "configs/aerial_manipulator_workcell.yaml"
+CONFIG = "configs/flight/aerial_manipulator_workcell.yaml"
 
 
 def _configuration(state, gap):

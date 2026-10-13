@@ -82,7 +82,7 @@ def _minco_summary(rows):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", default="configs/aerial_manipulator_workcell.yaml")
+    parser.add_argument("--config", default="configs/flight/aerial_manipulator_workcell.yaml")
     parser.add_argument("--repeats", type=int, default=20)
     parser.add_argument("--search-only", action="store_true",
                         help="measure both RRT searches without MINCO optimization")

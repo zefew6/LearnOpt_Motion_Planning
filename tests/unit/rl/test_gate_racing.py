@@ -102,7 +102,7 @@ def test_invalid_settings(change):
 
 
 def test_config_contract_and_timing(tmp_path):
-    settings = load_training_config("configs/acmpc_gate_racing.yaml")
+    settings = load_training_config("configs/rl/acmpc_gate_racing.yaml")
     assert "trajectory_bank_path" not in settings
     env = make_environment(settings)
     metadata = {"task":"gate_racing", "settings":settings, "contract":contract(settings, env)}

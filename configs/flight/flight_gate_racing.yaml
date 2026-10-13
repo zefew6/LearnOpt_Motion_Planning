@@ -10,5 +10,5 @@ follow_camera: true
 seed: 8
 
 rl:
-  checkpoint: ../runs/gate_racing/mlp_random_v3/best_model.zip
+  checkpoint: ../../runs/gate_racing/mlp_random_v3/best_model.zip
   device: cpu

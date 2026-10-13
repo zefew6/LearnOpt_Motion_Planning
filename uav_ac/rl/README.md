@@ -15,11 +15,11 @@ Start with the checked-in smoke configuration:
 
 ```bash
 .venv/bin/python -m uav_ac.rl.training \
-  --config configs/ppo_gate_racing.yaml \
+  --config configs/rl/ppo_gate_racing.yaml \
   --run-dir runs/gate_racing/mlp_smoke
 ```
 
-For a real training run, copy `configs/ppo_gate_racing.yaml` to a separate
+For a real training run, copy `configs/rl/ppo_gate_racing.yaml` to a separate
 large-run YAML and increase `total_timesteps`, for example:
 
 ```yaml
@@ -39,7 +39,7 @@ Then launch it with a new run directory:
 
 ```bash
 .venv/bin/python -m uav_ac.rl.training \
-  --config configs/ppo_gate_racing_large.yaml \
+  --config configs/rl/ppo_gate_racing_large.yaml \
   --run-dir runs/gate_racing/mlp_large_seed42
 ```
 
@@ -47,7 +47,7 @@ Use separate run directories for different random seeds:
 
 ```bash
 .venv/bin/python -m uav_ac.rl.training \
-  --config configs/ppo_gate_racing_large.yaml \
+  --config configs/rl/ppo_gate_racing_large.yaml \
   --run-dir runs/gate_racing/mlp_large_seed43 \
   --seed 43
 ```
@@ -64,7 +64,7 @@ When a run directory already contains artifacts, pass `--resume`. The value of
 
 ```bash
 .venv/bin/python -m uav_ac.rl.training \
-  --config configs/ppo_gate_racing_large.yaml \
+  --config configs/rl/ppo_gate_racing_large.yaml \
   --run-dir runs/gate_racing/mlp_large_seed42 \
   --resume runs/gate_racing/mlp_large_seed42/final_model.zip \
   --total-timesteps 9000000
@@ -106,12 +106,12 @@ evaluation module needs to be selected manually.
 
 ## Deploy through `main.py`
 
-Edit `configs/flight_gate_racing.yaml` so that `rl.checkpoint` points to the
+Edit `configs/flight/flight_gate_racing.yaml` so that `rl.checkpoint` points to the
 desired `best_model.zip`, then run:
 
 ```bash
 .venv/bin/python -m uav_ac.main \
-  --config configs/flight_gate_racing.yaml
+  --config configs/flight/flight_gate_racing.yaml
 ```
 
 The gate-racing deployment uses `planner: none`. It opens the native MuJoCo
@@ -125,7 +125,7 @@ scene: open_field
 planner: gcopter
 controller: rl
 rl:
-  checkpoint: ../runs/ppo_trajectory/multitraj01/best_model.zip
+  checkpoint: ../../runs/ppo_trajectory/multitraj01/best_model.zip
   device: cuda
 ```
 
@@ -135,7 +135,7 @@ After the MLP baseline is stable, train the gate-racing ACMPC policy with:
 
 ```bash
 .venv/bin/python -m uav_ac.rl.training \
-  --config configs/acmpc_gate_racing.yaml \
+  --config configs/rl/acmpc_gate_racing.yaml \
   --run-dir runs/gate_racing/acmpc_large_seed42
 ```
 
