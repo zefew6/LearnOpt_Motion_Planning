@@ -2,7 +2,7 @@ from tests.yopo_scenes import scene_path
 import numpy as np
 import mujoco
 import pytest
-from uav_ac.planning.end2end.contracts import DepthSpec
+from uav_ac.yopo.contracts import DepthSpec
 from uav_ac.simulation.depth_observation import IdealDepthObserver
 
 

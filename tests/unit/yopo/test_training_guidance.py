@@ -3,16 +3,17 @@ import runpy
 import numpy as np
 import pytest
 import torch
-from uav_ac.YOPO.learning import DirectEvaluator, ranking_loss, augment_observation
-from uav_ac.YOPO.losses import guidance_costs
-from uav_ac.planning.end2end.anchors import make_anchors
-from uav_ac.planning.end2end.encoding import Normalization
+from uav_ac.yopo.training.legacy import DirectEvaluator
+from uav_ac.yopo.training.losses import ranking_loss, augment_observation
+from uav_ac.yopo.training.losses import guidance_costs
+from uav_ac.yopo.model.primitives import make_anchors
+from uav_ac.yopo.model.encoding import Normalization
 from uav_ac.simulation.mujoco_sim import MujocoSimulation
 
 
 @pytest.mark.parametrize('peak_weight',[0.,1.])
 def test_direct_guidance_time_and_boundary_gradients(peak_weight):
-    o=runpy.run_path('tests/unit/planning/end2end/test_rolling.py')['moving_observation']()
+    o=runpy.run_path('tests/unit/yopo/model/test_rolling.py')['moving_observation']()
     sim=MujocoSimulation(scene_path('free'),planning_path_capacity=0,record_actual_trajectory=False)
     n=Normalization(tuple(sim.robot.limits.joint_lower),tuple(sim.robot.limits.joint_upper))
     oracle=DirectEvaluator.from_simulation(sim);z=make_anchors(o,n,count=1)[0]
@@ -36,7 +37,7 @@ def test_ranking_prefers_safe_candidate_and_detaches_labels():
 
 
 def test_augmentation_preserves_observed_image_and_robot_pose():
-    o=runpy.run_path('tests/unit/planning/end2end/test_rolling.py')['moving_observation']()
+    o=runpy.run_path('tests/unit/yopo/model/test_rolling.py')['moving_observation']()
     n=Normalization((-2.8,-2.2,-2.4,-2.4),(2.8,2.2,2.4,2.4))
     changed=augment_observation(o,np.random.default_rng(2),n,goal_std=.1,velocity_std=.05)
     assert np.array_equal(o.depth_m,changed.depth_m) and np.array_equal(o.configuration,changed.configuration)
@@ -46,7 +47,7 @@ def test_augmentation_preserves_observed_image_and_robot_pose():
 
 def test_training_proxy_clearance_allows_authored_tangent_connections():
     from dataclasses import replace
-    from uav_ac.YOPO.training import TrainingConfig
+    from uav_ac.yopo.training.runner import TrainingConfig
     from uav_ac.planning.trajectory.aerial_manipulator_minco.config import AerialManipulatorMINCOConfig
     case=runpy.run_path('tests/unit/yopo/test_guidance_gradient.py')
     sim,o,_=case['setup_case']();n=Normalization(tuple(sim.robot.limits.joint_lower),tuple(sim.robot.limits.joint_upper))
@@ -58,14 +59,14 @@ def test_training_proxy_clearance_allows_authored_tangent_connections():
 
 
 def test_checkpoint_selection_prioritizes_constraint_validity():
-    from uav_ac.YOPO.training import checkpoint_priority
+    from uav_ac.yopo.training.runner import checkpoint_priority
     safe={'selected_valid_fraction':1.,'selected_cost':1000.}
     unsafe={'selected_valid_fraction':0.,'selected_cost':10.}
     assert checkpoint_priority(safe)<checkpoint_priority(unsafe)
 
 
 def test_curriculum_family_selection_and_training_configuration():
-    from uav_ac.YOPO.training import TrainingConfig,subset
+    from uav_ac.yopo.training.runner import TrainingConfig, subset
     class Data:
         def __len__(self):return 4
         def family_at(self,i):return ('free','obstacle','low','wall')[i]
@@ -77,7 +78,7 @@ def test_curriculum_family_selection_and_training_configuration():
 
 def test_near_goal_stopping_cost_and_gradient():
     from dataclasses import replace
-    o=runpy.run_path('tests/unit/planning/end2end/test_rolling.py')['moving_observation']()
+    o=runpy.run_path('tests/unit/yopo/model/test_rolling.py')['moving_observation']()
     goal=o.goal.copy();goal[0]=o.configuration[0]+.5;o=replace(o,goal=goal)
     sim=MujocoSimulation(scene_path('free'),planning_path_capacity=0,record_actual_trajectory=False)
     n=Normalization(tuple(sim.robot.limits.joint_lower),tuple(sim.robot.limits.joint_upper));z=make_anchors(o,n,count=1)[0]

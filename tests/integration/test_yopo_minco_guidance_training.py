@@ -1,12 +1,12 @@
 from dataclasses import replace
 import numpy as np
 import pytest
-from uav_ac.YOPO.training import TrainingConfig,train,OracleCache
-from uav_ac.YOPO.config import DatasetConfig
-from uav_ac.YOPO.generate import generate_dataset
-from uav_ac.YOPO.dataset import PlanningDataset
-from uav_ac.planning.end2end.checkpoint import load_checkpoint
-from uav_ac.planning.end2end.planner import End2EndPlanner
+from uav_ac.yopo.training.runner import TrainingConfig, train, OracleCache
+from uav_ac.yopo.data.config import DatasetConfig
+from uav_ac.yopo.data.generate import generate_dataset
+from uav_ac.yopo.data.dataset import PlanningDataset
+from uav_ac.yopo.model.checkpoint import load_checkpoint
+from uav_ac.yopo.deployment import YopoPlanner
 
 
 def test_new_guidance_training_checkpoint_resume_and_actual_state_decode(tmp_path):
@@ -18,7 +18,7 @@ def test_new_guidance_training_checkpoint_resume_and_actual_state_decode(tmp_pat
     assert metadata['training_config']['guidance_profile']=='yopo_minco_v1'
     assert metadata['training_config']['goal_stop_weight']==0.
     assert metadata['training_config']['guidance']==config.guidance
-    data=PlanningDataset(dataset,split='validation');obs,priv=data[0];plan=End2EndPlanner(checkpoint).plan(obs)
+    data=PlanningDataset(dataset,split='validation');obs,priv=data[0];plan=YopoPlanner(checkpoint).plan(obs)
     assert plan.selected_index==np.argmax(plan.scores)
     for d in range(3):assert np.allclose(plan.trajectory.evaluate(0,d),obs.start_pva[d])
     cache=OracleCache(data,0.,guidance_profile='yopo_minco_v1',guidance=config.guidance)
@@ -36,14 +36,14 @@ def test_parallel_guidance_matches_serial_with_coarse_auxiliary_map(tmp_path):
     import torch
     from concurrent.futures import ProcessPoolExecutor
     import multiprocessing
-    from uav_ac.YOPO.training import _initialize_guidance_worker,_evaluate_guidance_worker
-    from uav_ac.YOPO.losses import guidance_costs_from_result
+    from uav_ac.yopo.training.runner import _initialize_guidance_worker, _evaluate_guidance_worker
+    from uav_ac.yopo.training.losses import guidance_costs_from_result
     generate_dataset(DatasetConfig(profile='rolling_v2',scene_count=3,samples_per_scene=1,split_counts=(1,1,1)),tmp_path/'data')
     data=PlanningDataset(tmp_path/'data/dataset',split='train')
     obs,priv=data[0]
     config=TrainingConfig(guidance_profile='yopo_minco_v1',collision_model='exact_geometry',oracle_map_resolution=.2,guidance_workers=2)
-    from uav_ac.planning.end2end.anchors import make_anchors
-    from uav_ac.planning.end2end.encoding import Normalization
+    from uav_ac.yopo.model.primitives import make_anchors
+    from uav_ac.yopo.model.encoding import Normalization
     oracle=OracleCache(data,0.,guidance_profile=config.guidance_profile,guidance=config.guidance).get(priv)
     parameters=make_anchors(obs,Normalization(tuple(oracle.robot.limits.joint_lower),tuple(oracle.robot.limits.joint_upper)),count=1)
     fine=OracleCache(data,0.,guidance_profile=config.guidance_profile,guidance=config.guidance).get(priv).evaluate(obs,parameters)
@@ -77,7 +77,7 @@ def test_torch_esdf_cuda_train_resume_and_deploy(tmp_path):
     assert metadata['training_config']['collision_model']=='esdf_spheres'
     assert metadata['training_config']['guidance_backend']=='torch_esdf'
     obs,_=PlanningDataset(data,split='validation')[0]
-    plan=End2EndPlanner(tmp_path/'cuda/latest',device='cuda:0').plan(obs)
+    plan=YopoPlanner(tmp_path/'cuda/latest',device='cuda:0').plan(obs)
     for d in range(3):assert np.allclose(plan.trajectory.evaluate(0,d),obs.start_pva[d])
     resumed=train(replace(cfg,steps=3),data,tmp_path/'resume-cuda',resume=tmp_path/'cuda/latest')
     assert resumed['resumed_from_step']==2

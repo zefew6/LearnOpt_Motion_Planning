@@ -20,10 +20,10 @@ Quickstart flight:
 Current portal/forest dataset and first training recipe:
 
 ```bash
-MUJOCO_GL=egl .venv/bin/python -m uav_ac.YOPO.generate \
+MUJOCO_GL=egl .venv/bin/python -m uav_ac.yopo.data.generate \
   --config configs/yopo/dataset/yopo_portal_dataset.yaml \
   --run-dir runs/yopo_whole_body/my_portal_data
-.venv/bin/python -m uav_ac.YOPO.training \
+.venv/bin/python -m uav_ac.yopo.training.runner \
   --config configs/yopo/train/yopo_portal_train.yaml \
   --dataset runs/yopo_whole_body/my_portal_data/dataset \
   --run-dir runs/yopo_whole_body/my_portal_training

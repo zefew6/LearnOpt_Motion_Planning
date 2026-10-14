@@ -1,7 +1,7 @@
 import numpy as np
-from uav_ac.YOPO.config import DatasetConfig
-from uav_ac.YOPO.generate import generate_dataset
-from uav_ac.YOPO.dataset import PlanningDataset
+from uav_ac.yopo.data.config import DatasetConfig
+from uav_ac.yopo.data.generate import generate_dataset
+from uav_ac.yopo.data.dataset import PlanningDataset
 from uav_ac.simulation.mujoco_sim import MujocoSimulation
 from uav_ac.simulation.depth_observation import IdealDepthObserver
 

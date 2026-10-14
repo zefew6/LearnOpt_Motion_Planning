@@ -1,9 +1,9 @@
 import json
 import xml.etree.ElementTree as ET
 import numpy as np
-from uav_ac.YOPO.config import DatasetConfig
-from uav_ac.YOPO.generate import generate_dataset
-from uav_ac.YOPO.dataset import PlanningDataset
+from uav_ac.yopo.data.config import DatasetConfig
+from uav_ac.yopo.data.generate import generate_dataset
+from uav_ac.yopo.data.dataset import PlanningDataset
 
 
 def test_portal_data_covers_each_wall_volume_and_preserves_schema(tmp_path):

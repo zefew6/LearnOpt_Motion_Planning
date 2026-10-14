@@ -3,16 +3,16 @@ import hashlib
 from pathlib import Path
 import numpy as np
 import torch
-from uav_ac.control import CascadedController,CascadedConfig
+from uav_ac.control import CascadedController, CascadedConfig
 from uav_ac.control.aerial_manipulator_controller import AerialManipulatorController
 from uav_ac.robot.aerial_manipulator import AerialManipulator
 from uav_ac.simulation.mujoco_sim import MujocoSimulation
 from uav_ac.simulation.depth_observation import IdealDepthObserver
-from uav_ac.planning.end2end.planner import End2EndPlanner
-from uav_ac.planning.end2end.direct import decode_direct
+from uav_ac.yopo.deployment import YopoPlanner
+from uav_ac.yopo.trajectory.minco import decode_direct
 from uav_ac.planning.trajectory.aerial_manipulator_minco.flatness import recover_state
 from uav_ac.tasks.whole_body_reaching import WholeBodyReaching
-from .whole_body_config import WholeBodySettings,benchmark_endpoints
+from uav_ac.runners.whole_body_config import WholeBodySettings, benchmark_endpoints
 
 
 def run_whole_body_planning(config):
@@ -26,7 +26,7 @@ def run_whole_body_planning(config):
     settings=WholeBodySettings.from_mapping(config['whole_body'])
     torch.set_num_threads(settings.threads)
     physical=Path(__file__).resolve().parents[1]/'simulation/model/aerial_manipulator.xml'
-    planner=End2EndPlanner(config['yopo']['checkpoint'],device=config['yopo']['device'],
+    planner=YopoPlanner(config['yopo']['checkpoint'],device=config['yopo']['device'],
                           expected_robot_hash=hashlib.sha256(physical.read_bytes()).hexdigest(),
                           gripper_tolerance=config['yopo']['gripper_tolerance'],speed_scale=config['yopo']['speed_scale'])
     CascadedConfig(**config['cascaded']).apply_to(simulation.quad)

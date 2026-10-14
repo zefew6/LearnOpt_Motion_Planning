@@ -5,8 +5,8 @@ from threading import Thread
 import time
 import numpy as np
 from scipy.spatial.transform import Rotation
-from uav_ac.planning.end2end.contracts import PlannerObservation
-from uav_ac.planning.end2end.encoding import wrap
+from uav_ac.yopo.contracts import PlannerObservation
+from uav_ac.yopo.model.encoding import wrap
 from uav_ac.planning.trajectory.aerial_manipulator_minco.flatness import recover_state
 from uav_ac.robot.aerial_manipulator import AerialManipulatorReference
 

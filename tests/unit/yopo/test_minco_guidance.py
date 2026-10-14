@@ -6,7 +6,7 @@ import torch
 
 
 def test_goal_matches_official_parallel_perpendicular_huber_and_collision_detach():
-    from uav_ac.YOPO.minco_guidance import goal_cost_gradient, MincoGuidanceConfig
+    from uav_ac.yopo.training.guidance import goal_cost_gradient, MincoGuidanceConfig
     cfg=MincoGuidanceConfig();head=np.zeros(8);goal=np.array([2.,1.,-.5,.3,.2,-.3,.4,-.1]);tail=np.array([.6,.7,-.3,-.1,.1,.2,-.2,.2])
     value,gradient=goal_cost_gradient(head,tail,goal,cfg)
     x=torch.tensor(tail,dtype=torch.float64,requires_grad=True);g=torch.tensor(goal);direction=g[:3]/torch.linalg.vector_norm(g[:3]);e=x[:3]-g[:3]
@@ -19,7 +19,7 @@ def test_goal_matches_official_parallel_perpendicular_huber_and_collision_detach
 
 
 def test_focused_safety_uses_last_safe_sample_and_margin_cost_is_not_collision():
-    from uav_ac.YOPO.minco_guidance import focused_safety
+    from uav_ac.yopo.training.guidance import focused_safety
     cost=np.array([.2,.5,100.,200.]);contacts=np.array([False,False,True,True])
     value,weight,collided=focused_safety(cost,contacts,beta=4.)
     assert collided and value==.5 and np.array_equal(weight,[0,1,0,0])
@@ -28,7 +28,7 @@ def test_focused_safety_uses_last_safe_sample_and_margin_cost_is_not_collision()
 
 
 def test_curvature_cap_detaches_geometry_but_full_derivative_remains_auditable():
-    from uav_ac.YOPO.minco_guidance import curvature_cost_gradient
+    from uav_ac.yopo.training.guidance import curvature_cost_gradient
     v=np.array([2.,.1,0]);a=np.array([.2,3.,.1])
     value,guide,detached=curvature_cost_gradient(v,a,3.,3.,.8)
     assert value>0 and np.array_equal(guide[1],np.zeros(3))
@@ -41,7 +41,7 @@ def test_curvature_cap_detaches_geometry_but_full_derivative_remains_auditable()
 
 def case(scene='free'):
     from uav_ac.simulation.mujoco_sim import MujocoSimulation
-    from uav_ac.planning.end2end.contracts import PlannerObservation
+    from uav_ac.yopo.contracts import PlannerObservation
     from uav_ac.planning.trajectory.aerial_manipulator_minco.flatness import recover_state
     sim=MujocoSimulation(scene_path(scene),planning_path_capacity=0,record_actual_trajectory=False)
     pva=np.zeros((3,8));pva[0,:3]=[0,0,-1.8];q,v=recover_state(np.vstack((pva,np.zeros((1,8)))),.06);sim.robot.reset(q,v)
@@ -52,7 +52,7 @@ def case(scene='free'):
 
 
 def test_whole_body_collision_blocks_goal_without_stopping_or_gyro_matching():
-    from uav_ac.YOPO.minco_guidance import MincoGuidanceEvaluator,MincoGuidanceConfig
+    from uav_ac.yopo.training.guidance import MincoGuidanceEvaluator, MincoGuidanceConfig
     sim,o,z=case('wall');z[8]=2.7;settings=MincoGuidanceConfig(curvature_weight=0.)
     oracle=MincoGuidanceEvaluator.from_simulation(sim,guidance=settings)
     before=(sim.robot.configuration.copy(),sim.robot.velocity.copy(),sim.data.time)
@@ -70,7 +70,7 @@ def test_whole_body_collision_blocks_goal_without_stopping_or_gyro_matching():
 
 
 def test_minco_guidance_all_34_parameter_pullbacks_match_finite_difference():
-    from uav_ac.YOPO.minco_guidance import MincoGuidanceEvaluator,MincoGuidanceConfig
+    from uav_ac.yopo.training.guidance import MincoGuidanceEvaluator, MincoGuidanceConfig
     sim,o,z=case();z=z.copy();z[:3]=[1.4,.06,-.02];z[8:11]=[2.4,.08,.03];z[3:8]=[.02,.03,-.06,.1,-.03];z[11:16]=[.02,.03,-.06,.1,-.03]
     oracle=MincoGuidanceEvaluator.from_simulation(sim,guidance=MincoGuidanceConfig(curvature_weight=0.))
     r=oracle.evaluate(o,z[None]);assert not r.collided[0]
@@ -81,31 +81,31 @@ def test_minco_guidance_all_34_parameter_pullbacks_match_finite_difference():
 
 
 def test_new_recipe_rejects_stopping_and_duplicate_peak_and_unknown_guidance():
-    from uav_ac.YOPO.training import TrainingConfig
+    from uav_ac.yopo.training.runner import TrainingConfig
     TrainingConfig(guidance_profile='yopo_minco_v1',collision_model='exact_geometry')
     for kwargs in ({'goal_stop_weight':1.},{'peak_weight':1.},{'guidance':{'not_a_weight':1.}}):
         with pytest.raises(ValueError):TrainingConfig(guidance_profile='yopo_minco_v1',collision_model='exact_geometry',**kwargs)
 
 
 def test_curved_minco_full_cost_fd_and_surrogate_backward_are_distinct_and_correct():
-    from uav_ac.YOPO.minco_guidance import MincoGuidanceEvaluator,MincoGuidanceConfig
-    from uav_ac.YOPO.audit import audit_candidates
+    from uav_ac.yopo.training.guidance import MincoGuidanceEvaluator, MincoGuidanceConfig
+    from uav_ac.yopo.validation.audit import audit_candidates
     sim,o,z=case();z[:3]=[1.1,.7,.03];z[8:11]=[2.4,.6,.02];z[16:19]=[2.4,-.3,.1];z[24:27]=[.1,.3,.1];z[-2:]=[.7,.8]
     oracle=MincoGuidanceEvaluator.from_simulation(sim,guidance=MincoGuidanceConfig())
     result=oracle.evaluate(o,z[None]);assert result.components['curvature'][0]>0
     assert np.linalg.norm(result.detached_gradients)>0
     report=audit_candidates(o,oracle,z[None],[0],epsilon=1e-5,tolerance=5e-4)
     assert report['passed'],report['candidates'][0]['max_relative_gradient_error']
-    from uav_ac.YOPO.losses import guidance_costs
+    from uav_ac.yopo.training.losses import guidance_costs
     tensor=torch.tensor(z[None],requires_grad=True);guidance_costs(tensor,o,oracle).sum().backward()
     assert np.allclose(tensor.grad.numpy(),result.free_gradients)
 
 
 def test_zero_feasibility_weight_does_not_hide_physical_violations_in_metrics():
-    from uav_ac.YOPO.minco_guidance import MincoGuidanceEvaluator,MincoGuidanceConfig
-    from uav_ac.YOPO.training import evaluate
-    from uav_ac.planning.end2end.network import NetworkOutput
-    from uav_ac.planning.end2end.encoding import Normalization
+    from uav_ac.yopo.training.guidance import MincoGuidanceEvaluator, MincoGuidanceConfig
+    from uav_ac.yopo.training.runner import evaluate
+    from uav_ac.yopo.model.network import NetworkOutput
+    from uav_ac.yopo.model.encoding import Normalization
     sim,o,z=case();z[-2:]=.4
     oracle=MincoGuidanceEvaluator.from_simulation(sim,guidance=MincoGuidanceConfig(feasibility_weight=0.))
     r=oracle.evaluate(o,z[None]);assert not r.collided[0] and r.components['physical'][0]==0 and r.violations[0]>0
@@ -121,8 +121,8 @@ def test_zero_feasibility_weight_does_not_hide_physical_violations_in_metrics():
 
 
 def test_acceleration_energy_is_exact_polynomial_integral():
-    from uav_ac.YOPO.minco_guidance import MincoGuidanceEvaluator,MincoGuidanceConfig
-    from uav_ac.planning.end2end.direct import world_problem
+    from uav_ac.yopo.training.guidance import MincoGuidanceEvaluator, MincoGuidanceConfig
+    from uav_ac.yopo.trajectory.minco import world_problem
     sim,o,z=case();z[:3]=[1.1,.2,.03];z[8:11]=[2.4,.3,.02];z[-2:]=[.9,1.1]
     oracle=MincoGuidanceEvaluator.from_simulation(sim,guidance=MincoGuidanceConfig())
     result=oracle.evaluate(o,z[None]);minco,points,times,_,_=world_problem(z,o);coeff,_=minco.solve(points,times);coeff=coeff.reshape(2,6,8)

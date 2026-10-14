@@ -24,8 +24,9 @@ A graphical desktop/OpenGL and the YAML-selected local checkpoint are required.
 
 `main.py` dispatches `task: whole_body_planning` to
 `runners/whole_body_planning.py`; task execution and actual-state sampling belong
-in `tasks/whole_body_reaching.py`. Existing neural modeling/decoding stays in
-`planning/end2end`; dataset generation and training stay in `YOPO`.
+in `tasks/whole_body_reaching.py`. Neural modeling, decoding and deployment live in `yopo/model`,
+`yopo/trajectory` and `yopo/deployment.py`; data and training live in
+`yopo/data` and `yopo/training`.
 
 The task selects `planner: yopo`, `controller: cascaded`, and `wind: none`.
 The whole-body adapter adds inverse-dynamics arm tracking to cascaded base

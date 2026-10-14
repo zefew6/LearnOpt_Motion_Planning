@@ -21,7 +21,7 @@ Built on [Mdhvince/UAV-Autonomous-control](https://github.com/Mdhvince/UAV-Auton
 The flight CLI supports trajectory tracking; the RL training/evaluation entrypoints also support gate racing without a planner or trajectory bank. Implementation details and experiment workflows are documented in the [planning library guide](uav_ac/planning/README.md), [robot guide](uav_ac/robot/README.md), [RL workflow guide](uav_ac/rl/README.md), [gate racing guide](docs/gate_racing.md), and [contributor guide](AGENTS.md).
 
 Aerial-manipulator depth-to-whole-body guidance learning has an independent
-[YOPO dataset, training and map-free prediction workflow](uav_ac/YOPO/README.md).
+[YOPO dataset, training and map-free prediction workflow](uav_ac/yopo/README.md).
 Its P3/P4 stages provide offline learning and candidate selection; physical
 closed-loop integration remains a separate stage.
 
@@ -228,8 +228,8 @@ for timing, settings and current model limitations. The single YOPO preset uses
 CUDA inference and the `primitive_goal_v5` checkpoint `best_17000` from the
 fixed-map CUDA training run. It is selected for online testing based on offline
 validation; online navigation success has not yet been established. See the
-[primitive-frame design](uav_ac/planning/end2end/PRIMITIVE_V4.md) and
-[CUDA training recipe](uav_ac/YOPO/CUDA_TRAINING.md).
+[primitive-frame design](docs/yopo/PRIMITIVE_V4.md) and
+[CUDA training recipe](docs/yopo/CUDA_TRAINING.md).
 
 
 ## Optional MPC and RL workflows

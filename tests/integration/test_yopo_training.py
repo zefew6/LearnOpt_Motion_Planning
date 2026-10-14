@@ -1,11 +1,11 @@
 import json
 import numpy as np
-from uav_ac.YOPO.config import DatasetConfig
-from uav_ac.YOPO.generate import generate_dataset
-from uav_ac.YOPO.training import TrainingConfig,train
-from uav_ac.planning.end2end.checkpoint import load_checkpoint
-from uav_ac.planning.end2end.planner import End2EndPlanner
-from uav_ac.YOPO.dataset import PlanningDataset
+from uav_ac.yopo.data.config import DatasetConfig
+from uav_ac.yopo.data.generate import generate_dataset
+from uav_ac.yopo.training.runner import TrainingConfig, train
+from uav_ac.yopo.model.checkpoint import load_checkpoint
+from uav_ac.yopo.deployment import YopoPlanner
+from uav_ac.yopo.data.dataset import PlanningDataset
 
 
 def test_train_save_resume_and_map_free_prediction(tmp_path):
@@ -15,11 +15,11 @@ def test_train_save_resume_and_map_free_prediction(tmp_path):
     assert np.isfinite(result['final_train_cost'])
     checkpoint=tmp_path/'train'/'last';model,metadata=load_checkpoint(checkpoint)
     assert metadata['candidate_count']==1
-    from uav_ac.YOPO.evaluation import compare
+    from uav_ac.yopo.validation.evaluation import compare
     metrics=compare(dataset,[checkpoint],samples=1)['models'][str(checkpoint)]
     assert metrics['selected_cost']==metrics['random_cost']
     observation,_=PlanningDataset(dataset,split='train')[0]
-    planner=End2EndPlanner(checkpoint);prediction=planner.plan(observation)
+    planner=YopoPlanner(checkpoint);prediction=planner.plan(observation)
     assert prediction.trajectory is not None and prediction.candidate_count==1
     resumed=train(TrainingConfig(steps=3,train_samples=2,validation_samples=1,batch_size=1,width=4),dataset,
                   tmp_path/'resume',resume=checkpoint)
@@ -44,7 +44,7 @@ def test_ranking_training_and_gripper_contract(tmp_path):
     result=train(config,dataset,tmp_path/'train')
     assert result['candidate_count']==27 and np.isfinite(result['validation']['selected_cost'])
     observation,_=PlanningDataset(dataset,split='validation')[0]
-    planner=End2EndPlanner(tmp_path/'train'/'last')
+    planner=YopoPlanner(tmp_path/'train'/'last')
     prediction=planner.plan(observation)
     assert prediction.candidate_count==27
     assert prediction.selected_index==int(np.argmax(prediction.scores))
@@ -64,7 +64,7 @@ def test_primitive_training_save_load_deploy_and_profile_resume_guard(tmp_path):
     model,meta=load_checkpoint(tmp_path/'primitive'/'last')
     assert meta['profile']=='primitive_v4'
     o,_=PlanningDataset(root/'dataset',split='validation')[0]
-    output=End2EndPlanner(tmp_path/'primitive'/'last').plan(o)
+    output=YopoPlanner(tmp_path/'primitive'/'last').plan(o)
     assert output.candidate_count==27 and np.isfinite(output.parameters).all()
     from dataclasses import replace
     with pytest.raises(ValueError,match='resume profile'):
@@ -75,9 +75,9 @@ def test_primitive_resume_keeps_saved_observation_normalization(tmp_path,monkeyp
     from dataclasses import replace
     import shutil
     import torch
-    from uav_ac.YOPO import training
-    from uav_ac.planning.end2end.primitive_network import PrimitivePlannerNet
-    from uav_ac.planning.end2end.checkpoint import save_checkpoint
+    from uav_ac.yopo.training import runner as training
+    from uav_ac.yopo.model.network import PrimitivePlannerNet
+    from uav_ac.yopo.model.checkpoint import save_checkpoint
     root=tmp_path/'data'
     generate_dataset(DatasetConfig(profile='rolling_v2',scene_count=3,samples_per_scene=1,split_counts=(1,1,1)),root)
     config=TrainingConfig(profile='primitive_v4',steps=1,train_samples=1,validation_samples=1,batch_size=1,width=4,candidate_count=27)

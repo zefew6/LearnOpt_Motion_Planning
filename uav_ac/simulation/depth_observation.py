@@ -2,7 +2,7 @@
 from copy import copy
 import mujoco
 import numpy as np
-from uav_ac.planning.end2end.contracts import DepthSpec
+from uav_ac.yopo.contracts import DepthSpec
 
 
 class IdealDepthObserver:

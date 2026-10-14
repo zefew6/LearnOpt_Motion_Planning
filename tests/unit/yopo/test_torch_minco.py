@@ -4,7 +4,7 @@ from uav_ac.planning.trajectory.gcopter.minco import MINCOQuintic
 
 
 def test_batched_torch_minco_matches_coefficients_and_gradient():
-    from uav_ac.YOPO.torch_minco import solve_minco,states,energy
+    from uav_ac.yopo.trajectory.torch import solve_minco, states, energy
     rng=np.random.default_rng(6)
     head=torch.tensor(rng.normal(size=(2,3,8)),dtype=torch.float64)
     tail=torch.tensor(rng.normal(size=(2,3,8)),dtype=torch.float64)

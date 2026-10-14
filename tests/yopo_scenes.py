@@ -2,7 +2,7 @@
 from functools import lru_cache
 from pathlib import Path
 import tempfile
-from uav_ac.YOPO.simple_scenes import write_debug_scene
+from uav_ac.yopo.data.scenes import write_debug_scene
 
 
 @lru_cache(maxsize=4)

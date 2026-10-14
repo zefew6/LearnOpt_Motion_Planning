@@ -1,7 +1,7 @@
 from dataclasses import replace
 import numpy as np
 import pytest
-from uav_ac.YOPO.training import TrainingConfig, subset
+from uav_ac.yopo.training.runner import TrainingConfig, subset
 
 
 def test_scaling_config_and_lazy_full_subset():
@@ -16,7 +16,7 @@ def test_scaling_config_and_lazy_full_subset():
     d=Dataset();samples=subset(d,c.train_samples)
     assert len(samples)==21 and d.reads==0
     assert samples[17]==17 and d.reads==1
-    from uav_ac.YOPO.training import learning_rate_at, batch_indices
+    from uav_ac.yopo.training.runner import learning_rate_at, batch_indices
     assert learning_rate_at(c,0)==pytest.approx(c.learning_rate/10)
     assert learning_rate_at(c,c.steps-1)==pytest.approx(c.learning_rate*.1)
     rng=np.random.default_rng(4)

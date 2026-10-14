@@ -21,6 +21,7 @@ config YAML → main.py → task runner → XML scene / planner / controller →
 | `uav_ac/robot/` | Quadrotor and articulated aerial-manipulator dynamics, state, and actuation interfaces |
 | `uav_ac/simulation/model/` | Quadrotor, aerial-manipulator, and GCS MJCF models |
 | `uav_ac/simulation/models/` | Complete XML scenes, initial vehicle poses, waypoints, bounds, and planner guide sites |
+| `uav_ac/yopo/` | Whole-body YOPO model, trajectories, deployment, datasets, training and validation |
 | `uav_ac/planning/` | Geometry, search, corridors, trajectory algorithms, and mission conversion |
 | `uav_ac/control/` | Cascaded/MPC/RL controllers and trajectory scheduling |
 | `uav_ac/rl/tasks/` | Task-owned configuration, environments, training, and evaluation |

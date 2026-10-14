@@ -1,12 +1,12 @@
 import xml.etree.ElementTree as ET
 import numpy as np
 import pytest
-from uav_ac.YOPO.config import DatasetConfig
-from uav_ac.planning.end2end.contracts import DepthSpec
+from uav_ac.yopo.data.config import DatasetConfig
+from uav_ac.yopo.contracts import DepthSpec
 
 
 def test_coupled_profile_and_scene_geometry(tmp_path):
-    from uav_ac.YOPO.coupled_scenes import write_coupled_scene
+    from uav_ac.yopo.data.legacy import write_coupled_scene
     config=DatasetConfig(profile='coupled_v3',scene_count=6,samples_per_scene=6,split_counts=(2,2,2))
     assert config.profile=='coupled_v3'
     for i,family in enumerate(('coupled_corridor','coupled_bamboo')):
@@ -23,8 +23,8 @@ def test_coupled_profile_and_scene_geometry(tmp_path):
 
 
 def test_coupled_reference_is_safe_but_frozen_arm_hits_lower_obstacles(tmp_path):
-    from uav_ac.YOPO.coupled_scenes import write_coupled_scene
-    from uav_ac.YOPO.coupled_sampling import build_validated_sources
+    from uav_ac.yopo.data.legacy import write_coupled_scene
+    from uav_ac.yopo.data.legacy import build_validated_sources
     from uav_ac.simulation.mujoco_sim import MujocoSimulation
     _,_,path=write_coupled_scene(tmp_path,0,19,DepthSpec())
     sim=MujocoSimulation(path,planning_path_capacity=0,record_actual_trajectory=False)
@@ -40,8 +40,8 @@ def test_coupled_reference_is_safe_but_frozen_arm_hits_lower_obstacles(tmp_path)
 
 @pytest.mark.parametrize('index',[0,1])
 def test_both_lower_and_front_obstacles_constrain_arm_shape(tmp_path,index):
-    from uav_ac.YOPO.coupled_scenes import write_coupled_scene
-    from uav_ac.YOPO.coupled_sampling import build_validated_sources
+    from uav_ac.yopo.data.legacy import write_coupled_scene
+    from uav_ac.yopo.data.legacy import build_validated_sources
     from uav_ac.simulation.mujoco_sim import MujocoSimulation
     _,_,path=write_coupled_scene(tmp_path,index,31+index*1009,DepthSpec())
     sim=MujocoSimulation(path,planning_path_capacity=0,record_actual_trajectory=False)
