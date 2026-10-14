@@ -5,7 +5,7 @@
 
 # Python environments, caches and test reports
 docs/superpowers/
-/docs/yopo/experiments/
+/docs/yopo/
 venv/
 tools/
 .venv/

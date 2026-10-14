@@ -67,7 +67,7 @@ RL training and evaluation dispatch through the explicit registry in `uav_ac/rl/
   and `wind: none`; `yopo` and `whole_body` YAML blocks configure checkpoint
   inference and online replanning. XML owns its eight-value start/goal and fixed
   gripper command. It opens the viewer before planning and tracks neural local
-  trajectories through actual physics; see [task details](uav_ac/tasks/WHOLE_BODY_ONLINE.md).
+  trajectories through actual physics; see [task details](uav_ac/yopo/README.md#online).
 - Controller values: `cascaded`, `mpc`, `rl`.
 - Common optional values: `speed`, `control_dt`, `wind`, `visualize`, and `seed`.
 - `bmtp`, `gcopter`, `gcs`, `cascaded`, `mpc`, `rl`, and `wind_options` may coexist as presets. Runtime reads only the selected planner, controller, and wind block; BMTP always renders its selected initialization and optimized trajectory.

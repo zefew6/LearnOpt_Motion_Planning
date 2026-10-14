@@ -18,7 +18,7 @@ Built on [Mdhvince/UAV-Autonomous-control](https://github.com/Mdhvince/UAV-Auton
 - [x] Add an aerial manipulator platform for research on whole-body motion planning and control
 - [ ] Implement diffusion-based motion planning
 
-The flight CLI supports trajectory tracking; the RL training/evaluation entrypoints also support gate racing without a planner or trajectory bank. Implementation details and experiment workflows are documented in the [planning library guide](uav_ac/planning/README.md), [robot guide](uav_ac/robot/README.md), [RL workflow guide](uav_ac/rl/README.md), [gate racing guide](docs/gate_racing.md), and [contributor guide](AGENTS.md).
+The flight CLI supports trajectory tracking; the RL training/evaluation entrypoints also support gate racing without a planner or trajectory bank. Implementation details and experiment workflows are documented in the [planning library guide](uav_ac/planning/README.md), [robot guide](uav_ac/robot/README.md), [RL workflow guide](uav_ac/rl/README.md), [gate racing guide](uav_ac/rl/README.md#gate-racing-details), and [contributor guide](AGENTS.md).
 
 Aerial-manipulator depth-to-whole-body guidance learning has an independent
 [YOPO dataset, training and map-free prediction workflow](uav_ac/yopo/README.md).
@@ -223,13 +223,13 @@ neural trajectories with the aerial-manipulator controller in MuJoCo:
 It requires the local checkpoint named in the YAML. The outdoor scene contains
 282 distributed bamboo poles of varying height, with a winding passable corridor. Each planning tick
 uses one current depth frame and actual robot state to reach the XML-owned 8-D
-final goal. See [online benchmark details](uav_ac/tasks/WHOLE_BODY_ONLINE.md)
+final goal. See [online benchmark details](uav_ac/yopo/README.md#online)
 for timing, settings and current model limitations. The single YOPO preset uses
 CUDA inference and the `primitive_goal_v5` checkpoint `best_17000` from the
 fixed-map CUDA training run. It is selected for online testing based on offline
 validation; online navigation success has not yet been established. See the
-[primitive-frame design](docs/yopo/PRIMITIVE_V4.md) and
-[CUDA training recipe](docs/yopo/CUDA_TRAINING.md).
+[primitive-frame design](uav_ac/yopo/README.md#primitives) and
+[CUDA training recipe](uav_ac/yopo/README.md#cuda-training).
 
 
 ## Optional MPC and RL workflows
