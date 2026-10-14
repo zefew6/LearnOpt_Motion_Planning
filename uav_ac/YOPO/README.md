@@ -280,3 +280,5 @@ calibrated 3×3 camera-cell primitive grid, three arm modes per cell, primitive-
 alignment and independent terminal prediction. Select it through
 `configs/yopo/train/yopo_primitive_pilot.yaml`; its experimental flight preset is
 `configs/flight/yopo_primitive_wbp.yaml`. Legacy weights and datasets are preserved.
+
+Formal CUDA training with fixed large maps and independent initial states: [recipe and recovery](CUDA_TRAINING.md).

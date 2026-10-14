@@ -1,0 +1,8 @@
+# Fixed forest/factory geometry per scene; independent current-state frames.
+profile: fixed_dense_v6
+seed: 47
+scene_count: 10
+split_counts: [7, 2, 1]
+samples_per_scene: 2000
+max_attempts_per_sample: 500
+gripper_gap: 0.06

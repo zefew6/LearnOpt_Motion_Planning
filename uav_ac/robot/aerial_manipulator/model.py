@@ -747,7 +747,9 @@ class AerialManipulatorModel:
             name = _name(self.model, mujoco.mjtObj.mjOBJ_GEOM, geom_id)
             center = S @ data.geom_xpos[geom_id]
             rotation = (S @ data.geom_xmat[geom_id].reshape(3, 3) @ S)
-            geom_type = self.model.geom_type[geom_id]
+            # Tuple membership compares enum values from the left; convert the
+            # NumPy scalar so MuJoCo capsule/cylinder enums compare correctly.
+            geom_type = int(self.model.geom_type[geom_id])
             size = self.model.geom_size[geom_id]
             if geom_type == mujoco.mjtGeom.mjGEOM_BOX:
                 half_extent = np.abs(rotation) @ size[:3]
@@ -810,6 +812,27 @@ class AerialManipulatorModel:
             result.append(dict(name=name, body=_name(self.model, mujoco.mjtObj.mjOBJ_BODY, body),
                                center=center, radius=radius))
         return tuple(sorted(result, key=lambda item: item['name']))
+
+    def kinematic_description(self):
+        """Public fixed-body/joint tree in FRD for differentiable FK backends."""
+        bodies=[];arm={int(j):i for i,j in enumerate(self.arm_joints)}
+        grip={int(j) for j in self.gripper_joints}
+        for body in sorted(self._descendant_bodies):
+            name=_name(self.model,mujoco.mjtObj.mjOBJ_BODY,body)
+            if body==self.base:
+                bodies.append(dict(name=name,parent=None));continue
+            parent=_name(self.model,mujoco.mjtObj.mjOBJ_BODY,int(self.model.body_parentid[body]))
+            matrix=np.empty(9);mujoco.mju_quat2Mat(matrix,self.model.body_quat[body])
+            joints=[]
+            for j in range(int(self.model.body_jntadr[body]),int(self.model.body_jntadr[body])+int(self.model.body_jntnum[body])):
+                if j not in arm and j not in grip:raise ValueError('unsupported joint in aerial-manipulator FK tree')
+                joints.append(dict(index=arm.get(j,4),kind='hinge' if j in arm else 'slide',
+                    axis=S@self.model.jnt_axis[j],pivot=S@self.model.jnt_pos[j],
+                    reference=float(self.model.qpos0[self.model.jnt_qposadr[j]])))
+            if len(joints)>1:raise ValueError('differentiable FK requires one joint per body')
+            bodies.append(dict(name=name,parent=parent,position=S@self.model.body_pos[body],
+                rotation=S@matrix.reshape(3,3)@S,joints=joints))
+        return dict(bodies=bodies,gripper_min=GAP_MIN)
 
     def collision_geometries(self):
         """Describe active robot collision geoms using public names and local poses."""

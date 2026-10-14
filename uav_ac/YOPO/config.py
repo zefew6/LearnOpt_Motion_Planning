@@ -38,7 +38,7 @@ class DatasetConfig:
             val=getattr(self,name)
             if isinstance(val,bool) or not isinstance(val,int) or val<(0 if name=='seed' else 1):
                 raise ValueError(f'{name} must be a valid integer')
-        if self.profile not in ('stationary_v1','rolling_v2','coupled_v3','portal_v4','curriculum_v5'):
+        if self.profile not in ('stationary_v1','rolling_v2','coupled_v3','portal_v4','curriculum_v5','fixed_dense_v6'):
             raise ValueError('unknown dataset profile')
         if not np.isfinite([self.snapshot_min,self.snapshot_max]).all() or not 0<self.snapshot_min<self.snapshot_max<3:
             raise ValueError('snapshot bounds must lie within the source trajectory')

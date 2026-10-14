@@ -69,7 +69,7 @@ def test_curriculum_family_selection_and_training_configuration():
         def __len__(self):return 4
         def family_at(self,i):return ('free','obstacle','low','wall')[i]
         def __getitem__(self,i):return i
-    assert subset(Data(),10,families=('free','low'))==[0,2]
+    assert list(subset(Data(),10,families=('free','low')))==[0,2]
     assert TrainingConfig(families=('free',)).families==('free',)
     with pytest.raises(ValueError,match='famil'):TrainingConfig(families=('bogus',))
 

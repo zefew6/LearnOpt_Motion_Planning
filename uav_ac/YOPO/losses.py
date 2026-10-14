@@ -36,3 +36,20 @@ def calibrate_cost_scale(costs):
 def guidance_costs(parameters,obs,oracle,*,scale=1.):
     if not np.isfinite(scale) or scale<=0:raise ValueError('cost scale must be positive')
     return _Guidance.apply(parameters,obs,oracle,float(scale))
+
+
+class _PrecomputedGuidance(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx,parameters,result,scale):
+        gradient=torch.as_tensor(result.free_gradients,dtype=parameters.dtype,device=parameters.device)/scale
+        ctx.save_for_backward(gradient)
+        return torch.as_tensor(result.costs,dtype=parameters.dtype,device=parameters.device)/scale
+    @staticmethod
+    def backward(ctx,grad_output):
+        gradient,=ctx.saved_tensors
+        return gradient*grad_output[:,None],None,None
+
+
+def guidance_costs_from_result(parameters,result,*,scale=1.):
+    if not np.isfinite(scale) or scale<=0:raise ValueError('cost scale must be positive')
+    return _PrecomputedGuidance.apply(parameters,result,float(scale))

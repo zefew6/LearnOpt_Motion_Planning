@@ -20,7 +20,13 @@ def generate_dataset(config,output_dir):
         seed=config.seed+i*1009
         coupled=config.profile in ('coupled_v3','portal_v4','curriculum_v5')
         source_metadata={}
-        if coupled:
+        if config.profile=='fixed_dense_v6':
+            from .fixed_dense import write_fixed_dense_scene,sample_fixed_dense_scene
+            from uav_ac.simulation.mujoco_sim import MujocoSimulation
+            scene_id,family,path=write_fixed_dense_scene(scenes_dir,i,seed,config.depth)
+            sim=MujocoSimulation(path,planning_path_capacity=0,record_actual_trajectory=False)
+            samples,rejected=sample_fixed_dense_scene(sim,config,seed+1,path)
+        elif coupled:
             from .coupled_scenes import write_coupled_scene
             from .coupled_sampling import sample_coupled_scene
             from uav_ac.simulation.mujoco_sim import MujocoSimulation
@@ -50,10 +56,11 @@ def generate_dataset(config,output_dir):
             samples,rejected=sample_scene(path,config,seed+1)
         shard=shards/f'{scene_id}.npz'
         fields=FIELDS if config.profile=='stationary_v1' else DYNAMIC_FIELDS
-        np.savez_compressed(shard,**{name:np.stack([getattr(obs,name) for obs in samples]) for name in fields})
+        np.savez_compressed(shard,**{name:np.stack([getattr(obs,name) for obs in samples]).astype(np.float32) if name=='depth_m' else np.stack([getattr(obs,name) for obs in samples]) for name in fields})
         scene_entries.append(dict(scene_id=scene_id,family=family,split=split,seed=seed,
             xml=str(path.relative_to(dataset)),xml_sha256=file_hash(path),shard=str(shard.relative_to(dataset)),
             shard_sha256=file_hash(shard),count=len(samples),rejected=rejected,path_validated=coupled,**source_metadata))
+        print(f'generated {scene_id}: {len(samples)} {split} samples',flush=True)
         start_states.extend(obs.start_pva[0] for obs in samples);goal_states.extend(obs.goal for obs in samples)
     dynamic=config.profile!='stationary_v1'
     manifest=dict(schema_version=2 if dynamic else 1,profile=config.profile,sampling_config=config.as_mapping(),seed=config.seed,depth_spec=config.depth.as_mapping(),
@@ -72,6 +79,11 @@ def generate_dataset(config,output_dir):
         manifest_path.write_text(json.dumps(manifest,indent=2)+'\n')
     if config.profile=='curriculum_v5':
         manifest.update(source_profile='offline two-piece feasibility witness; not a training label',interpretation='independent current states; witnesses establish one route only, not universal reachability',derivative_provenance='independent current-state PVA augmentation; no rollout or reference sampling',trajectory_profile='physical MINCO34; network profile selected in training configuration')
+        manifest_path.write_text(json.dumps(manifest,indent=2)+'\n')
+    if config.profile=='fixed_dense_v6':
+        manifest.update(derivative_provenance='independent current-state PVA; no rollout or reference sampling',
+            interpretation='fixed goal, collision-free starts; global reachability unconfirmed',
+            trajectory_profile='physical MINCO34; network profile selected in training configuration')
         manifest_path.write_text(json.dumps(manifest,indent=2)+'\n')
     start_states=np.asarray(start_states);goal_states=np.asarray(goal_states)
     report=dict(samples=len(start_states),scenes=len(scene_entries),seconds=time.perf_counter()-started,

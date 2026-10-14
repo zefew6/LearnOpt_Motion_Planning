@@ -76,6 +76,8 @@ def audit(dataset_path,*,checkpoint=None,samples=3,seed=23,epsilon=1e-6):
     objective={name:settings.get(name,default) for name,default in
         (('peak_weight',1.),('self_clearance',0.),('goal_stop_weight',0.),
          ('goal_stop_distance',1.5),('collision_model','planning_spheres'),('guidance_profile','legacy_direct_v3'),('guidance',{}))}
+    objective['map_resolution']=settings.get('oracle_map_resolution',.02)
+    objective['guidance_backend']=settings.get('guidance_backend','exact_cpu')
     cache=OracleCache(data,**objective)
     robot=cache.get(records[0][1]).robot
     normalization=Normalization(tuple(robot.limits.joint_lower),tuple(robot.limits.joint_upper))
@@ -88,6 +90,9 @@ def audit(dataset_path,*,checkpoint=None,samples=3,seed=23,epsilon=1e-6):
         output=model(*tensors([obs],model.normalization,27,'cpu',model.profile,model.spec))
         z=output.parameters[0].detach().numpy();selected=int(output.scores[0].argmax())
         oracle=cache.get(priv)
+        if cache.backend=='torch_esdf':
+            from .torch_guidance import TorchGuidanceOracle
+            oracle=TorchGuidanceOracle(oracle)
         numeric=audit_candidates(obs,oracle,z,sorted({selected,13,(selected+9)%27}),epsilon=epsilon)
         inputs=tensors([obs],model.normalization,27,'cpu',model.profile,model.spec)
         backward=audit_backward(output,obs,oracle,model,inputs[1],inputs[2],sorted({selected,13,(selected+9)%27}),epsilon=epsilon)
@@ -100,7 +105,7 @@ def audit(dataset_path,*,checkpoint=None,samples=3,seed=23,epsilon=1e-6):
         numeric['passed'] &= backward['passed']
         reports.append(numeric)
     return {'passed':all(r['passed'] for r in reports),'seed':seed,'samples':len(reports),'checkpoint':str(checkpoint) if checkpoint else None,'objective':objective,
-        'reports':reports,'interpretation':'physical-parameter FD and neural backward audit; no collision-feasibility or convergence claim'}
+        'reports':reports,'interpretation':'float64 reference for saved collision representation; physical-parameter FD and neural backward audit; no collision-feasibility or convergence claim'}
 
 
 def main():

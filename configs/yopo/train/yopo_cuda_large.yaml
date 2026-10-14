@@ -1,0 +1,24 @@
+profile: primitive_goal_v5
+guidance_profile: yopo_minco_v1
+collision_model: esdf_spheres
+guidance_backend: torch_esdf
+steps: 30000
+train_samples: 0  # All 14,000 training states; zero means no subset cap.
+train_evaluation_samples: 64
+validation_samples: 128
+batch_size: 16
+candidate_count: 27
+width: 64
+seed: 47
+learning_rate: 0.0003
+warmup_steps: 500
+final_learning_rate_ratio: 0.1
+sampling: shuffle
+device: cuda:0
+threads: 2
+guidance_workers: 0
+oracle_map_resolution: 0.05  # Privileged ESDF for batched CUDA sphere distances.
+evaluation_interval: 500
+checkpoint_interval: 100
+checkpoint_keep: 3
+self_clearance: 0.0

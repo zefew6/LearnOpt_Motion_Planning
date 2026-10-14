@@ -123,6 +123,9 @@ class AerialManipulator:
     def collision_pairs(self, kind="self"):
         return self._model.collision_pairs(kind)
 
+    def kinematic_description(self):
+        return self._model.kinematic_description()
+
     def collision_environment_aabbs(self):
         return self._model.collision_environment_aabbs()
 
