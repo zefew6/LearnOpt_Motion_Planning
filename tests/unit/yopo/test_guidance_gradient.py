@@ -1,3 +1,4 @@
+from tests.yopo_scenes import scene_path
 from pathlib import Path
 import numpy as np
 import pytest
@@ -10,7 +11,7 @@ from uav_ac.YOPO.losses import guidance_loss, score_loss, calibrate_cost_scale
 
 
 def setup_case():
-    sim=MujocoSimulation(Path('uav_ac/simulation/models/yopo_free.xml'),planning_path_capacity=0,record_actual_trajectory=False)
+    sim=MujocoSimulation(scene_path('free'),planning_path_capacity=0,record_actual_trajectory=False)
     q=sim.robot.configuration.copy();q[:3]=[0.,0.,-1.5];q[7:11]=0.;q[11]=.06
     sim.robot.reset(q,np.zeros(11))
     y=np.r_[q[:3],0.,q[7:11]];head=np.vstack((y,np.zeros((2,8))))

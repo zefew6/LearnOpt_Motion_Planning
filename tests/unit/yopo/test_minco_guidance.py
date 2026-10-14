@@ -1,3 +1,4 @@
+from tests.yopo_scenes import scene_path
 from dataclasses import replace
 import numpy as np
 import pytest
@@ -42,7 +43,7 @@ def case(scene='free'):
     from uav_ac.simulation.mujoco_sim import MujocoSimulation
     from uav_ac.planning.end2end.contracts import PlannerObservation
     from uav_ac.planning.trajectory.aerial_manipulator_minco.flatness import recover_state
-    sim=MujocoSimulation(f'uav_ac/simulation/models/yopo_stage_{scene}.xml',planning_path_capacity=0,record_actual_trajectory=False)
+    sim=MujocoSimulation(scene_path(scene),planning_path_capacity=0,record_actual_trajectory=False)
     pva=np.zeros((3,8));pva[0,:3]=[0,0,-1.8];q,v=recover_state(np.vstack((pva,np.zeros((1,8)))),.06);sim.robot.reset(q,v)
     goal=pva[0].copy();goal[0]=3.
     obs=PlannerObservation(np.full((96,160),6.),np.zeros((96,160),bool),q,v,pva,goal)

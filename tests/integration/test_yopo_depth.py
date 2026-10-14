@@ -1,3 +1,4 @@
+from tests.yopo_scenes import scene_path
 import numpy as np
 import mujoco
 import pytest
@@ -87,10 +88,17 @@ def test_body_camera_mount_must_match_declared_optical_extrinsic():
     with pytest.raises(ValueError,match='mount'):IdealDepthObserver(model,data,camera_name='depth')
 
 
-def test_robot_probe_named_camera_center_distance():
+def test_robot_probe_named_camera_center_distance(tmp_path):
     from pathlib import Path
     from uav_ac.simulation.mujoco_sim import MujocoSimulation
-    sim=MujocoSimulation(Path('uav_ac/simulation/models/yopo_depth_probe.xml'),planning_path_capacity=0,record_actual_trajectory=False)
+    import xml.etree.ElementTree as ET
+    # A one-off sensor fixture belongs to this test, not the flight scene list.
+    root=ET.parse(scene_path('free')).getroot()
+    root.find('worldbody/body/include').set('file',str(Path('uav_ac/simulation/model/aerial_manipulator.xml').resolve()))
+    ET.SubElement(root.find('worldbody'),'geom',name='obstacle_probe_wall',type='box',
+        pos='2.18 0 1.5',size='.05 5 5',rgba='.5 .5 .5 1')
+    path=tmp_path/'depth_probe.xml';ET.ElementTree(root).write(path,encoding='unicode')
+    sim=MujocoSimulation(path,planning_path_capacity=0,record_actual_trajectory=False)
     with IdealDepthObserver(sim.model,sim.data) as observer:
         depth,mask=observer.observe()
         assert mask[48,80] and depth[48,80]==pytest.approx(2.,abs=.02)

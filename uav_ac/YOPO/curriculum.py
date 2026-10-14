@@ -22,7 +22,8 @@ def write_curriculum_scene(directory,index,seed,spec):
     model=directory/'model';model.mkdir(exist_ok=True)
     if not (model/'aerial_manipulator.xml').exists():shutil.copyfile(MODEL_ROOT/'model/aerial_manipulator.xml',model/'aerial_manipulator.xml')
     family=FAMILIES[index%4];sid=f'scene_{index:03d}'
-    root=ET.parse(MODEL_ROOT/f'models/yopo_stage_{family}.xml').getroot();root.set('model',sid)
+    from .simple_scenes import stage_scene_root
+    root=stage_scene_root(family,model_root=MODEL_ROOT);root.set('model',sid)
     root.find('worldbody/body/include').set('file','model/aerial_manipulator.xml')
     if not np.allclose(spec.camera_extrinsics,DepthSpec().camera_extrinsics):raise ValueError('curriculum camera mount mismatch')
     camera=root.find('worldbody/body/camera');camera.set('resolution',f'{spec.width} {spec.height}')

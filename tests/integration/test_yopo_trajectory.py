@@ -1,3 +1,4 @@
+from tests.yopo_scenes import scene_path
 from pathlib import Path
 import numpy as np
 from uav_ac.simulation.mujoco_sim import MujocoSimulation
@@ -9,7 +10,7 @@ from uav_ac.YOPO.privileged import PrivilegedEvaluator
 
 
 def test_real_robot_reference_endpoints_and_exact_geometry():
-    sim=MujocoSimulation(Path('uav_ac/simulation/models/yopo_free.xml'),planning_path_capacity=0,record_actual_trajectory=False)
+    sim=MujocoSimulation(scene_path('free'),planning_path_capacity=0,record_actual_trajectory=False)
     q=sim.robot.configuration.copy();q[:3]=[0.,0.,-1.5];q[7:11]=0.;q[11]=.06
     sim.robot.reset(q,np.zeros(11))
     y=np.r_[q[:3],0.,q[7:11]];head=np.vstack((y,np.zeros((2,8))));goal=y.copy();goal[0]=.8

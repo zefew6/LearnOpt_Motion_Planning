@@ -1,3 +1,4 @@
+from tests.yopo_scenes import scene_path
 import runpy
 import numpy as np
 import torch
@@ -89,7 +90,7 @@ def test_guidance_gradient_through_primitive_decode_matches_finite_difference():
     e=encode_primitive(o,n);state=torch.tensor(e.state,dtype=torch.float64)
     anchors=torch.tensor(primitive_anchors(o,n)[None],dtype=torch.float64)
     raw=torch.full((1,27,34),.03,dtype=torch.float64,requires_grad=True)
-    sim=MujocoSimulation('uav_ac/simulation/models/yopo_free.xml',planning_path_capacity=0,record_actual_trajectory=False)
+    sim=MujocoSimulation(scene_path('free'),planning_path_capacity=0,record_actual_trajectory=False)
     oracle=DirectEvaluator.from_simulation(sim)
     z=model.decode(raw,state,anchors)[0,12:13]
     guidance_costs(z,o,oracle).sum().backward()

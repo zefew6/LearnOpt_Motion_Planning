@@ -1,3 +1,4 @@
+from tests.yopo_scenes import scene_path
 from concurrent.futures import Future
 from types import SimpleNamespace
 import numpy as np
@@ -36,7 +37,7 @@ class Planner:
 
 
 def setup(goal_delta):
-    sim=MujocoSimulation('uav_ac/simulation/models/yopo_free.xml',planning_path_capacity=0,record_actual_trajectory=False)
+    sim=MujocoSimulation(scene_path('free'),planning_path_capacity=0,record_actual_trajectory=False)
     start=np.array([0,0,-1.65,0,0,0,0,0.]);q,v=recover_state(np.vstack((start,np.zeros((3,8)))),.06)
     sim.robot.reset(q.copy(),v.copy());goal=start.copy();goal[0]+=goal_delta
     ctrl=AerialManipulatorController(CascadedController(sim.quad.g,sim.quad.dt),sim.robot,sim.quad)

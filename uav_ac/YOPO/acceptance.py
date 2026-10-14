@@ -23,11 +23,20 @@ def gate(result,*,minimum_valid=.9):
 def online_config(checkpoint,family,duration):
     root=Path(__file__).resolve().parents[2]
     values=yaml.safe_load((root/'configs/flight/yopo.yaml').read_text())
-    values.update(scene=f'yopo_stage_{family}',visualize=False,duration=duration)
+    values.update(visualize=False,duration=duration)
     values['yopo']['checkpoint']=str(Path(checkpoint).resolve())
     with tempfile.NamedTemporaryFile(mode='w+',suffix='.yaml') as stream:
         yaml.safe_dump(values,stream);stream.flush()
-        return load_config(stream.name)
+        config=load_config(stream.name)
+        from .simple_scenes import write_debug_scene
+        from uav_ac.runners.whole_body_config import validate_whole_body
+        artifacts=root/'runs/yopo_whole_body/acceptance_scenes';artifacts.mkdir(parents=True,exist_ok=True)
+        directory=Path(tempfile.mkdtemp(prefix='check_',dir=artifacts))
+        config['scene']=str(write_debug_scene(directory,family))
+        # Batch acceptance owns its generated XML; interactive scene selectors
+        # continue to resolve only the named benchmark in simulation/models.
+        validate_whole_body(config,stream.name)
+        return config
 
 
 def check(dataset_path,checkpoint,*,families=('free',),samples_per_family=16,online=True,duration=30.):

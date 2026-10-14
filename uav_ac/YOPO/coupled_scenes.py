@@ -3,7 +3,7 @@ from pathlib import Path
 import shutil
 import xml.etree.ElementTree as ET
 import numpy as np
-from .scene_sampling import MODEL_ROOT
+from .scene_sampling import MODEL_ROOT,legacy_scene_root
 from uav_ac.planning.end2end.contracts import DepthSpec
 
 
@@ -14,7 +14,7 @@ def write_coupled_scene(directory,index,seed,spec):
     models=directory/'model';models.mkdir(exist_ok=True)
     if not (models/'aerial_manipulator.xml').exists():
         shutil.copyfile(MODEL_ROOT/'model'/'aerial_manipulator.xml',models/'aerial_manipulator.xml')
-    root=ET.parse(MODEL_ROOT/'models'/'yopo_free.xml').getroot()
+    root=legacy_scene_root()
     sid=f'scene_{index:03d}';family=('coupled_corridor','coupled_bamboo')[index%2]
     root.set('model',sid)
     root.find('worldbody/body/include').set('file','model/aerial_manipulator.xml')

@@ -11,6 +11,20 @@ from uav_ac.simulation.mujoco_sim import MujocoSimulation
 MODEL_ROOT=Path(__file__).resolve().parents[1]/'simulation'
 
 
+def legacy_scene_root():
+    """Derive a free scene from the benchmark; retain older dataset bounds."""
+    from .simple_scenes import stage_scene_root
+    root=stage_scene_root('free',model_root=MODEL_ROOT)
+    custom=root.find('custom');world=root.find('worldbody')
+    custom.find("numeric[@name='planning_bounds']").set('data','-1.2 -1.6 -2.4 2.8 1.6 -0.75')
+    for numeric in list(custom.findall('numeric')):
+        if numeric.get('name','').startswith('whole_body_'):custom.remove(numeric)
+    for site in list(world.findall('site')):
+        if site.get('name') in ('start','goal'):world.remove(site)
+    world.find('body').set('pos','0 0 1.5')
+    return root
+
+
 def write_scene(directory,index,seed,spec,*,profile='stationary_v1'):
     directory=Path(directory);directory.mkdir(parents=True,exist_ok=True)
     models=directory/'model';models.mkdir(exist_ok=True)
@@ -18,7 +32,13 @@ def write_scene(directory,index,seed,spec,*,profile='stationary_v1'):
     if not robot.exists():shutil.copyfile(MODEL_ROOT/'model'/'aerial_manipulator.xml',robot)
     families=('free','obstacle','corridor','dense') if profile=='rolling_v2' else ('free','obstacle','corridor')
     family=families[index%len(families)]
-    root=ET.parse(MODEL_ROOT/'models'/f"yopo_{'free' if family=='dense' else family}.xml").getroot()
+    root=legacy_scene_root()
+    world=root.find('worldbody')
+    obstacles={'obstacle':(('box',(1.3,.7,1.4),(.2,.25,.4)),),
+        'corridor':(('left',(1.4,-.95,1.3),(.6,.18,1.3)),('right',(1.4,.95,1.3),(.6,.18,1.3)))}
+    for name,position,size in obstacles.get(family,()):
+        ET.SubElement(world,'geom',name='obstacle_'+name,type='box',pos=' '.join(map(str,position)),
+            size=' '.join(map(str,size)),rgba='.5 .5 .6 1')
     scene_id=f'scene_{index:03d}';root.set('model',scene_id)
     root.find("worldbody/body/include").set('file','model/aerial_manipulator.xml')
     camera=root.find("worldbody/body/camera")

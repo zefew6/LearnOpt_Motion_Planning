@@ -1,3 +1,4 @@
+from tests.yopo_scenes import scene_path
 import runpy
 import numpy as np
 import pytest
@@ -12,7 +13,7 @@ from uav_ac.simulation.mujoco_sim import MujocoSimulation
 @pytest.mark.parametrize('peak_weight',[0.,1.])
 def test_direct_guidance_time_and_boundary_gradients(peak_weight):
     o=runpy.run_path('tests/unit/planning/end2end/test_rolling.py')['moving_observation']()
-    sim=MujocoSimulation('uav_ac/simulation/models/yopo_free.xml',planning_path_capacity=0,record_actual_trajectory=False)
+    sim=MujocoSimulation(scene_path('free'),planning_path_capacity=0,record_actual_trajectory=False)
     n=Normalization(tuple(sim.robot.limits.joint_lower),tuple(sim.robot.limits.joint_upper))
     oracle=DirectEvaluator.from_simulation(sim);z=make_anchors(o,n,count=1)[0]
     oracle.peak_weight=peak_weight
@@ -78,7 +79,7 @@ def test_near_goal_stopping_cost_and_gradient():
     from dataclasses import replace
     o=runpy.run_path('tests/unit/planning/end2end/test_rolling.py')['moving_observation']()
     goal=o.goal.copy();goal[0]=o.configuration[0]+.5;o=replace(o,goal=goal)
-    sim=MujocoSimulation('uav_ac/simulation/models/yopo_free.xml',planning_path_capacity=0,record_actual_trajectory=False)
+    sim=MujocoSimulation(scene_path('free'),planning_path_capacity=0,record_actual_trajectory=False)
     n=Normalization(tuple(sim.robot.limits.joint_lower),tuple(sim.robot.limits.joint_upper));z=make_anchors(o,n,count=1)[0]
     oracle=DirectEvaluator.from_simulation(sim,goal_stop_weight=50.,goal_stop_distance=1.5)
     result=oracle.evaluate(o,z[None]);assert result.components['goal_stop'][0]>0
@@ -90,7 +91,7 @@ def test_near_goal_stopping_cost_and_gradient():
 def test_exact_training_geometry_agrees_with_validated_folded_pose():
     from dataclasses import replace
     from uav_ac.planning.trajectory.aerial_manipulator_minco.config import AerialManipulatorMINCOConfig
-    sim=MujocoSimulation('uav_ac/simulation/models/yopo_stage_wall.xml',planning_path_capacity=0,record_actual_trajectory=False)
+    sim=MujocoSimulation(scene_path('wall'),planning_path_capacity=0,record_actual_trajectory=False)
     cfg=replace(AerialManipulatorMINCOConfig(),self_clearance=0.)
     sigma=np.array([1.5,0,-1.8,0,0,-1.6,1.9,-.3]);a=np.zeros(8)
     oracle=DirectEvaluator.from_simulation(sim,config=cfg,collision_model='exact_geometry')
@@ -102,7 +103,7 @@ def test_exact_training_geometry_agrees_with_validated_folded_pose():
 
 def test_exact_environment_collision_gradient_at_penetrating_arm_pose():
     from uav_ac.planning.trajectory.aerial_manipulator_minco.config import AerialManipulatorMINCOConfig
-    sim=MujocoSimulation('uav_ac/simulation/models/yopo_stage_wall.xml',planning_path_capacity=0,record_actual_trajectory=False)
+    sim=MujocoSimulation(scene_path('wall'),planning_path_capacity=0,record_actual_trajectory=False)
     oracle=DirectEvaluator.from_simulation(sim,config=AerialManipulatorMINCOConfig(self_clearance=0.),collision_model='exact_geometry')
     # Avoid the symmetric, nondifferentiable gripper/box contact orientation.
     sigma=np.array([1.451,.023,-1.763,.031,.027,-.81,1.03,-.17])

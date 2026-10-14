@@ -283,3 +283,11 @@ alignment and independent terminal prediction. Select it through
 `best_17000` checkpoint for online testing. Historical weights and datasets are preserved.
 
 Formal CUDA training with fixed large maps and independent initial states: [recipe and recovery](CUDA_TRAINING.md).
+
+Scene ownership: the only interactive YOPO XML is
+`simulation/models/whole_body_dense_outdoor.xml`. Dataset scenes are generated
+into the selected `runs/.../dataset/scenes/` directory. Small free/obstacle/low/wall
+scenes are built by `simple_scenes.py`, rather than shipped as additional XML
+models; acceptance and test scene artifacts live under `runs/yopo_whole_body/`.
+The previous free/obstacle/corridor/depth-probe and stage XML files were removed.
+Existing saved datasets and checkpoints are unchanged.

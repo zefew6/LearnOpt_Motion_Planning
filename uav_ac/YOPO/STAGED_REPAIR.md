@@ -53,7 +53,7 @@ as an online candidate filter.
 
 The families are `free`, `obstacle`, `low` and `wall`. The latter two constrain
 altitude and require arm clearance along the authored feasibility witness.
-Scene templates live in `simulation/models/yopo_stage_*.xml`; generated layouts
+Small scenes are constructed by `YOPO/simple_scenes.py`; generated layouts
 are scene-disjoint. Feasibility witnesses are separate checksummed privileged
 resources, not network inputs or training trajectory labels.
 
