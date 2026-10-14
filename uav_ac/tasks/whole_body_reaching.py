@@ -140,7 +140,10 @@ class WholeBodyReaching:
         q,v,pva,jerk=self.sampler.update(self.robot,now)
         if not np.isfinite(q).all() or not np.isfinite(v).all():self._finish('FAILED','nonfinite_actual_state');return
         bounds=self.simulation.space_limits
-        if np.any(q[:3]<bounds[0]-.02) or np.any(q[:3]>bounds[1]+.02):
+        outside_lower=q[:3]<bounds[0]-.02
+        # NED z decreases with height. Outdoor flight may ignore only the ceiling.
+        outside_lower[2] &= self.settings.enforce_height_ceiling
+        if np.any(outside_lower) or np.any(q[:3]>bounds[1]+.02):
             self._finish('FAILED','actual_workspace_violation');return
         self.max_base_speed=max(self.max_base_speed,float(np.linalg.norm(v[:3])))
         errors=self._errors(q,v);s=self.settings

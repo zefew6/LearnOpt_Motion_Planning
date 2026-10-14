@@ -74,3 +74,14 @@ def test_invalid_yopo_speed_scale_is_rejected(tmp_path):
     path,values=config_file(tmp_path)
     values['yopo']['speed_scale']=True;path.write_text(yaml.safe_dump(values))
     with pytest.raises(ValueError,match='speed_scale'):load_config(path)
+
+
+def test_optional_height_ceiling_contract(tmp_path):
+    from uav_ac.runners.whole_body_config import WholeBodySettings
+    assert WholeBodySettings().enforce_height_ceiling is True
+    path,values=config_file(tmp_path)
+    values['whole_body']['enforce_height_ceiling']=False;path.write_text(yaml.safe_dump(values))
+    assert load_config(path)['whole_body']['enforce_height_ceiling'] is False
+    for invalid in (0,1,'false',None):
+        values['whole_body']['enforce_height_ceiling']=invalid;path.write_text(yaml.safe_dump(values))
+        with pytest.raises(ValueError,match='enforce_height_ceiling'):load_config(path)

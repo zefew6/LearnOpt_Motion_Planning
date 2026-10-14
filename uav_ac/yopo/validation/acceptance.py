@@ -23,6 +23,8 @@ def online_config(checkpoint,family,duration):
     root=Path(__file__).resolve().parents[3]
     values=yaml.safe_load((root/'configs/flight/yopo.yaml').read_text())
     values.update(visualize=False,duration=duration)
+    # Small acceptance scenes retain their bounded workspace contract.
+    values['whole_body']['enforce_height_ceiling']=True
     values['yopo']['checkpoint']=str(Path(checkpoint).resolve())
     with tempfile.NamedTemporaryFile(mode='w+',suffix='.yaml') as stream:
         yaml.safe_dump(values,stream);stream.flush()

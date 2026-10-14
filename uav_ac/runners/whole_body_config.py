@@ -22,9 +22,13 @@ class WholeBodySettings:
     progress_distance: float = .05
     log_dt: float = 1.
     threads: int = 2
+    enforce_height_ceiling: bool = True
 
     def __post_init__(self):
+        if not isinstance(self.enforce_height_ceiling,bool):
+            raise ValueError('whole_body.enforce_height_ceiling must be a boolean')
         for name,value in asdict(self).items():
+            if name=='enforce_height_ceiling':continue
             if isinstance(value,bool) or not isinstance(value,(int,float)) or not np.isfinite(value) or value<=0:
                 raise ValueError(f'whole_body.{name} must be positive and finite')
         if not isinstance(self.threads,int):raise ValueError('whole_body.threads must be an integer')

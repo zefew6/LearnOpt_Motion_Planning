@@ -451,6 +451,13 @@ reference sampling follows YAML `control_dt` (default 10 ms). No robot resets
 occur during motion. Viewer reset reinitializes the episode.
 
 Scene geometry and start/goal live in `simulation/models/yopo_bamboo.xml`.
+The benchmark starts at 1.2 m above ground; the goal remains at 1.9 m.
+The outdoor YAML sets `whole_body.enforce_height_ceiling: false`, so crossing
+the XML planning grid's 3.4 m upper extent does not stop flight. Horizontal
+bounds, the minimum flight height and physical collision checks remain active.
+The existing checkpoint does not receive boundary margins as input. Changing
+this execution setting does not change its original training objective.
+
 XML `whole_body_start` and `whole_body_goal` are
 `[x,y,z,yaw,q1,q2,q3,q4]` in NED/radians. `whole_body_gripper` fixes the commanded
 opening; no manipulation action or object target is present. `planning_bounds`
@@ -479,6 +486,7 @@ the resulting path need not be a uniform time-rescaling of the original curve.
 
 | Setting | Meaning | Default |
 | --- | --- | --- |
+| enforce_height_ceiling | Enforce XML maximum altitude during execution; outdoor preset disables it | true |
 | replan_dt | Simulated interval between single-frame planning requests | 0.2 s |
 | planning_timeout | Maximum wall time per inference | 1 s |
 | max_plan_age | Maximum simulated age of an accepted snapshot | 0.5 s |
@@ -505,7 +513,7 @@ No temporal training input is added by online replanning.
 A single daemon worker performs inference while the controller keeps tracking
 its previous reference. New trajectories are sampled at their snapshot age,
 including the time spent computing them. Stale/late plans, exhausted horizons,
-physical collisions, workspace violations and tracking divergence report explicit
+physical collisions, enabled workspace violations and tracking divergence report explicit
 failure. Success requires the actual full configuration and speeds to settle.
 This is soft real time: Python, rendering and the desktop viewer do not guarantee
 hard deadlines. A timed-out native inference cannot be forcibly killed inside a

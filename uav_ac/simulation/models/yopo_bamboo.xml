@@ -11,7 +11,7 @@
   <custom>
     <numeric name="planning_bounds" data="-.8 -5.8 -3.4 24 5.8 -.8" />
     <numeric name="flight_limits" data="3 2 8 12 0.7" />
-    <numeric name="whole_body_start" data=".1 0 -1.9 0 0 0 0 0" />
+    <numeric name="whole_body_start" data=".1 0 -1.2 0 0 0 0 0" />
     <numeric name="whole_body_goal" data="23 0 -1.9 0 0 .15 -.2 .1" />
     <numeric name="whole_body_gripper" data=".06" />
   </custom>
@@ -27,11 +27,11 @@
   <worldbody>
     <light name="sun" pos="2.5 0 8" dir="-0.3 0.2 -1" directional="true" />
     <geom name="ground" type="plane" size="16 8 .1" material="ground" pos="12 0 0" />
-    <body name="quadrotor" pos=".1 0 1.9" childclass="quadrotor_parts">
+    <body name="quadrotor" pos=".1 0 1.2" childclass="quadrotor_parts">
       <include file="../model/aerial_manipulator.xml" />
       <camera name="yopo_depth" pos=".13 0 0" xyaxes="0 -1 0 0 0 1" sensorsize="2 2" resolution="160 96" focalpixel="80 83.1384387633" />
     </body>
-    <site name="start" pos=".1 0 1.9" size=".06" rgba=".1 .8 .9 1" />
+    <site name="start" pos=".1 0 1.2" size=".06" rgba=".1 .8 .9 1" />
     <site name="goal" pos="23 0 1.9" size=".06" rgba=".8 .2 .9 1" />
     <geom name="obstacle_bamboo_0" type="cylinder" pos="1.40163 -5.30837 1.36819" size="0.05138 1.36819" rgba="0.132 0.318 0.105 1" />
     <geom name="obstacle_bamboo_1" type="cylinder" pos="1.32402 -4.45995 1.64597" size="0.07404 1.64597" rgba="0.152 0.371 0.101 1" />

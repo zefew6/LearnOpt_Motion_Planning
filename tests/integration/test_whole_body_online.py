@@ -103,6 +103,9 @@ def test_bamboo_benchmark_has_a_collision_free_whole_body_witness():
     states[:,0]=[.1,1.3,4,6.5,9,11.5,14,16.5,19,21.5,23]
     states[:,1]=[0,.35,1.1,0,-1.1,0,1.1,0,-1.1,-.5,0];states[:,2]=-1.9
     states[1:-1,4:]=[0,-1.6,1.9,-.3];states[-1,4:]=[0,.15,-.2,.1]
+    from uav_ac.runners.whole_body_config import benchmark_endpoints
+    start,goal,_,_,_=benchmark_endpoints('uav_ac/simulation/models/yopo_bamboo.xml')
+    states[0]=start;states[-1]=goal
     durations=np.full(10,4.)
     coefficients=[]
     for i,dt in enumerate(durations):
@@ -114,3 +117,23 @@ def test_bamboo_benchmark_has_a_collision_free_whole_body_witness():
     evaluator=PrivilegedEvaluator.from_simulation(sim,config=config).evaluator
     passed,_,violation,_=evaluator.dense_validate(trajectory)
     assert passed and violation==0 and not evaluator.last_validation_metrics['collision_detected'], (violation,evaluator.last_validation_metrics)
+
+
+def test_outdoor_ceiling_can_be_disabled_without_disabling_other_bounds():
+    from dataclasses import replace
+    for enforce,height,x,expected_failure in (
+        (True,4.,0.,True), (False,4.,0.,False),
+        (False,.7,0.,True), (False,1.65,5.,True),
+    ):
+        sim,task,planner=setup(.5)
+        task.settings=replace(task.settings,enforce_height_ceiling=enforce)
+        state=np.array([x,0.,-height,0.,0.,0.,0.,0.])
+        q,v=recover_state(np.vstack((state,np.zeros((3,8)))),.06)
+        sim.robot.reset(q.copy(),v.copy())
+        task.command_reference=task._hold(sim.robot.configuration)
+        task.step()
+        if expected_failure:
+            assert task.failure_reason=='actual_workspace_violation'
+        else:
+            assert not task.done and len(planner.observations)==1
+        task.close()

@@ -14,6 +14,7 @@ yopo:
   speed_scale: 1.0
   gripper_tolerance: 0.002  # Measured fixed-gripper servo deviation, metres.
 whole_body:
+  enforce_height_ceiling: false  # Outdoor bamboo: allow flight above the map's planning grid.
   replan_dt: 0.2
   planning_timeout: 1.0
   max_plan_age: 0.5

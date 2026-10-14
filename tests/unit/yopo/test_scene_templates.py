@@ -43,3 +43,13 @@ def test_bamboo_benchmark_has_only_distributed_variable_height_poles():
     assert np.count_nonzero(heights>2.5)>=50
     assert np.ptp(sizes[:,0])>.03
     assert np.allclose(positions[:,2],sizes[:,1])  # Cylinders rest on the ground.
+
+
+def test_bamboo_start_is_lowered_and_matches_rendered_pose():
+    root=ET.parse('uav_ac/simulation/models/yopo_bamboo.xml').getroot()
+    start=np.fromstring(root.find("custom/numeric[@name='whole_body_start']").get('data'),sep=' ')
+    assert np.isclose(start[2],-1.2)
+    # World poses use ENU; the planning endpoint uses NED.
+    position=np.array([start[0],-start[1],-start[2]])
+    for element in ('worldbody/body','worldbody/site[@name="start"]'):
+        assert np.allclose(np.fromstring(root.find(element).get('pos'),sep=' '),position)

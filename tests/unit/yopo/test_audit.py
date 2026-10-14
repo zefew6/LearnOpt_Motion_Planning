@@ -38,6 +38,7 @@ def test_online_config_does_not_require_pilot_checkpoint(tmp_path):
     checkpoint=tmp_path/'checkpoint';checkpoint.mkdir()
     (checkpoint/'metadata.json').write_text('{}');(checkpoint/'weights.pt').write_bytes(b'fixture')
     c=online_config(checkpoint,'free',10.)
+    assert c['whole_body']['enforce_height_ceiling'] is True
     assert c['yopo']['checkpoint']==str(checkpoint)
     assert c['scene'].endswith('yopo_stage_free.xml') and not c['visualize']
 
