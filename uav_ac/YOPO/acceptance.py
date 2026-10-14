@@ -22,7 +22,7 @@ def gate(result,*,minimum_valid=.9):
 
 def online_config(checkpoint,family,duration):
     root=Path(__file__).resolve().parents[2]
-    values=yaml.safe_load((root/'configs/flight/yopo_primitive_wbp.yaml').read_text())
+    values=yaml.safe_load((root/'configs/flight/yopo.yaml').read_text())
     values.update(scene=f'yopo_stage_{family}',visualize=False,duration=duration)
     values['yopo']['checkpoint']=str(Path(checkpoint).resolve())
     with tempfile.NamedTemporaryFile(mode='w+',suffix='.yaml') as stream:

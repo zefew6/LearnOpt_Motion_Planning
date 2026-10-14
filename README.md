@@ -217,17 +217,19 @@ The live whole-body reaching benchmark opens the viewer before planning and trac
 neural trajectories with the aerial-manipulator controller in MuJoCo:
 
 ```bash
-.venv/bin/python -m uav_ac.main --config configs/flight/yopo_like_wbp.yaml
+.venv/bin/python -m uav_ac.main --config configs/flight/yopo.yaml
 ```
 
 It requires the local checkpoint named in the YAML. The outdoor scene contains
 four ruined walls with twenty openings, distributed trees, industrial remains and varied low obstacles. Each planning tick
 uses one current depth frame and actual robot state to reach the XML-owned 8-D
 final goal. See [online benchmark details](uav_ac/tasks/WHOLE_BODY_ONLINE.md)
-for timing, settings and current model limitations. The new
-[3×3 primitive-frame profile](uav_ac/planning/end2end/PRIMITIVE_V4.md) has a separate
-experimental preset, `configs/flight/yopo_primitive_wbp.yaml`, and requires newly
-trained weights.
+for timing, settings and current model limitations. The single YOPO preset uses
+CUDA inference and the `primitive_goal_v5` checkpoint `best_17000` from the
+fixed-map CUDA training run. It is selected for online testing based on offline
+validation; online navigation success has not yet been established. See the
+[primitive-frame design](uav_ac/planning/end2end/PRIMITIVE_V4.md) and
+[CUDA training recipe](uav_ac/YOPO/CUDA_TRAINING.md).
 
 
 ## Optional MPC and RL workflows

@@ -1,0 +1,19 @@
+# CUDA-trained primitive_goal_v5; best offline checkpoint, for online testing.
+task: whole_body_planning
+scene: whole_body_dense_outdoor
+planner: yopo
+controller: cascaded
+control_dt: 0.01
+duration: 180.0
+visualize: true
+follow_camera: true
+wind: none
+yopo:
+  checkpoint: ../../runs/yopo_whole_body/cuda_scale_v1/formal_cuda/best_17000
+  device: cuda:0
+  speed_scale: 1.0
+  gripper_tolerance: 0.002  # Measured fixed-gripper servo deviation, metres.
+whole_body:
+  replan_dt: 0.2
+  planning_timeout: 1.0
+  max_plan_age: 0.5

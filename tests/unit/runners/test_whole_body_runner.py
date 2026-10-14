@@ -13,8 +13,9 @@ def config_file(tmp_path):
     n=Normalization((-2.8,-2.2,-2.4,-2.4),(2.8,2.2,2.4,2.4))
     model=WholeBodyPlannerNet(n,score_mode='ranking',width=4)
     checkpoint=tmp_path/'policy';save_checkpoint(checkpoint,model,{'depth_spec':DepthSpec().as_mapping(),'candidate_count':27,'gripper_gap':.06})
-    values=yaml.safe_load(Path('configs/flight/yopo_like_wbp.yaml').read_text())
+    values=yaml.safe_load(Path('configs/flight/yopo.yaml').read_text())
     values['yopo']['checkpoint']=str(checkpoint)
+    values['yopo']['device']='cpu'  # Fixture tests do not require CUDA.
     path=tmp_path/'config.yaml';path.write_text(yaml.safe_dump(values))
     return path,values
 

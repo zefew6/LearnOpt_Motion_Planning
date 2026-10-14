@@ -86,13 +86,15 @@ be treated as trained primitive_v4 weights.
 Experimental live entry point:
 
 ```bash
-.venv/bin/python -m uav_ac.main --config configs/flight/yopo_primitive_wbp.yaml
+.venv/bin/python -m uav_ac.main --config configs/flight/yopo.yaml
 ```
 
-It uses the local 32-step pilot checkpoint; edit the YAML checkpoint path when
-training a different run. The old `yopo_like_wbp.yaml` and its weights are retained.
-Ordinary viewer runs write no artifacts. The new entry point uses the existing
-controller, scene and live overlays, without a classical map-based fallback.
+The current single flight preset uses the CUDA-trained `primitive_goal_v5`
+checkpoint `best_17000`, rather than the historical 32-step v4 pilot. To test a
+different compatible checkpoint, edit `yopo.checkpoint` in that YAML. Historical
+weights and datasets remain available. Ordinary viewer runs write no artifacts.
+The entry point uses the existing controller, scene and live overlays, without
+a classical map-based fallback.
 
 ## Verification and limits
 

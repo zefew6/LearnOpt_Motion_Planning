@@ -3,8 +3,12 @@
 Launch from the repository root:
 
 ```bash
-.venv/bin/python -m uav_ac.main --config configs/flight/yopo_like_wbp.yaml
+.venv/bin/python -m uav_ac.main --config configs/flight/yopo.yaml
 ```
+
+The preset uses CUDA inference and the fixed-map training run’s `best_17000`
+checkpoint (`primitive_goal_v5`). It is an online test configuration; the offline
+validation result does not establish successful navigation.
 
 This task opens the MuJoCo viewer before submitting the first plan. Green shows
 the selected base trajectory; pale gray shows five diverse alternative candidates,
