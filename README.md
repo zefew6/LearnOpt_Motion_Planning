@@ -20,13 +20,6 @@ Built on [Mdhvince/UAV-Autonomous-control](https://github.com/Mdhvince/UAV-Auton
 - [x] Integrated YOPO (You Only Plan Once), an end-to-end motion planner for UAVs.
 - [ ] Implement diffusion-based motion planning
 
-The flight CLI supports trajectory tracking; the RL training/evaluation entrypoints also support gate racing without a planner or trajectory bank. Implementation details and experiment workflows are documented in the [planning library guide](uav_ac/planning/README.md), [robot guide](uav_ac/robot/README.md), [RL workflow guide](uav_ac/rl/README.md), [gate racing guide](uav_ac/rl/README.md#gate-racing-details), and [contributor guide](AGENTS.md).
-
-Aerial-manipulator depth-to-whole-body guidance learning has an independent
-[YOPO dataset, training and map-free prediction workflow](uav_ac/yopo/README.md).
-It provides offline guidance learning and online replanning with actual
-controller tracking; navigation success must be assessed in the live task.
-
 ## Experiment videos
 
 The videos show the implemented planning and tracking pipelines in MuJoCo. The
