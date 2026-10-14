@@ -6,7 +6,8 @@ from uav_ac.yopo.contracts import DepthSpec
 
 
 class IdealDepthObserver:
-    def __init__(self,model,data,*,camera_name='yopo_depth',spec=None):
+    def __init__(self,model,data,*,camera_name='yopo_depth',spec=None,exclude_robot=False):
+        if not isinstance(exclude_robot,bool):raise ValueError('exclude_robot must be a boolean')
         self.model,self.data=model,data;self.spec=DepthSpec() if spec is None else spec
         self.camera_id=mujoco.mj_name2id(model,mujoco.mjtObj.mjOBJ_CAMERA,camera_name)
         if self.camera_id<0: raise ValueError(f'missing depth camera: {camera_name}')
@@ -46,6 +47,12 @@ class IdealDepthObserver:
         # The live physics model and the physical robot geometry stay unchanged.
         self._render_model=copy(model)
         if self.debug_ids:self._render_model.geom_group[list(self.debug_ids)]=5
+        if exclude_robot and quad>=0:
+            robot_bodies={quad}
+            for body in range(model.nbody):
+                if int(model.body_parentid[body]) in robot_bodies:robot_bodies.add(body)
+            robot_geoms=[g for g in range(model.ngeom) if int(model.geom_bodyid[g]) in robot_bodies]
+            self._render_model.geom_group[robot_geoms]=5
         self._render_data=mujoco.MjData(self._render_model)
         self.renderer=mujoco.Renderer(self._render_model,height=self.spec.height,width=self.spec.width)
         self.renderer.enable_depth_rendering()

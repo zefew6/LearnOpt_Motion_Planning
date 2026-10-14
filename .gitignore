@@ -9,7 +9,7 @@ docs/superpowers/
 venv/
 tools/
 .venv/
-uav/
+/uav/
 __pycache__/
 
 # Local aerial-manipulator implementation notes

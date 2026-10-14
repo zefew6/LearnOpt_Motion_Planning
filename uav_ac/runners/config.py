@@ -18,7 +18,7 @@ DEFAULT_CONFIG = ROOT / "configs" / "flight" / "flight.yaml"
 PLANNERS = {"none", "mini_snap", "gcopter", "gcs", "bmtp",
             "aerial_manipulator_minco", "yopo"}
 CONTROLLERS = {"cascaded", "mpc", "rl"}
-TASKS = {"trajectory_tracking", "gate_racing", "aerial_pick_place", "whole_body_planning"}
+TASKS = {"trajectory_tracking", "gate_racing", "aerial_pick_place", "whole_body_planning", "yopo_navigation"}
 
 
 class _UniqueLoader(yaml.SafeLoader):
@@ -63,7 +63,7 @@ def load_config(path: str | Path = DEFAULT_CONFIG) -> dict:
         "task", "scene", "planner", "controller", "speed", "control_dt", "wind",
         "visualize", "follow_camera", "duration", "rl", "cascaded", "bmtp", "gcopter",
         "gcs", "mpc", "wind_options", "pick_place", "aerial_manipulator_minco",
-        "yopo", "whole_body",
+        "yopo", "whole_body", "yopo_uav",
     }
     if config.get("task", "trajectory_tracking") != "aerial_pick_place":
         flight_options.add("seed")
@@ -109,9 +109,12 @@ def load_config(path: str | Path = DEFAULT_CONFIG) -> dict:
     elif config['task']=='whole_body_planning':
         if config['planner']!='yopo' or config['controller']!='cascaded' or config.get('wind','none')!='none':
             raise ValueError('whole_body_planning requires yopo/cascaded and wind:none')
+    elif config['task']=='yopo_navigation':
+        if config['planner']!='yopo' or config['controller']!='cascaded' or config.get('wind','none')!='none':
+            raise ValueError('yopo_navigation requires yopo/cascaded and wind:none')
     elif config["planner"] == "none":
         raise ValueError("planner: none is only valid for task: gate_racing")
-    if config['planner']=='yopo' and config['task']!='whole_body_planning':
+    if config['planner']=='yopo' and config['task'] not in ('whole_body_planning','yopo_navigation'):
         raise ValueError('yopo planner requires whole_body_planning task')
     config.setdefault("speed", 3.0)
     config.setdefault("duration", 20.0)
@@ -200,4 +203,7 @@ def load_config(path: str | Path = DEFAULT_CONFIG) -> dict:
     model=config.setdefault('yopo',{})
     _only(model,{'checkpoint','device','gripper_tolerance','speed_scale'},'yopo')
     if config['task']=='whole_body_planning':validate_whole_body(config,path)
+    from .yopo_navigation import validate_options,validate_config
+    validate_options(config.setdefault('yopo_uav',{}))
+    if config['task']=='yopo_navigation':validate_config(config,path)
     return config

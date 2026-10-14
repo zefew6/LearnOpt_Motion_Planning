@@ -36,6 +36,9 @@ uav_ac = [
     "simulation/model/*.xml",
     "rl/acmpc/vendor/LICENSE.mit",
     "rl/acmpc/vendor/SOURCE.md",
+    "yopo/vendor/yopo_minco/LICENSE*",
+    "yopo/vendor/yopo_minco/provenance.json",
+    "yopo/vendor/yopo_minco/config/*.yaml",
 ]
 
 [tool.pytest.ini_options]

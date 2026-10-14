@@ -1,4 +1,4 @@
-# YOPO whole-body planning
+# YOPO planning
 
 YOPO owns the single-frame depth/state -> whole-body local trajectory workflow.
 `main.py`, `runners` and `tasks` retain online physics and controller orchestration.
@@ -22,7 +22,46 @@ the model receives a single depth image, current state and eight-value goal.
 Online execution repeatedly plans from the current robot state and tracks with
 actual MuJoCo physics.
 
-## Quickstart
+## Official YOPO-MINCO pure UAV
+
+The isolated UAV reproduction lives in `uav/`; pinned upstream modules live in
+`vendor/yopo_minco/`, with licenses and per-file hashes in `provenance.json`.
+It uses official revision `d5e1e60f83cc991602f142d9b6b96204a24d6b9f`:
+a single-channel ResNet18, nine body-frame state/goal inputs and **3×5 = 15**
+primitives. Each primitive predicts 14 MINCO parameters, a score and a
+20-channel safe-corridor estimate. The highest admitted score is selected;
+when no corridor is admitted, the controller holds position and turns toward
+the goal. This UAV path does not use the whole-body network or privileged maps.
+
+```bash
+.venv/bin/python -m uav_ac.main --config configs/flight/yopo_uav.yaml
+```
+
+The preset uses a pure quadrotor in `uav_yopo_bamboo.xml`, an independent
+`yopo_uav` block and the official pretrained weights under
+`runs/yopo_uav/official_minco_v1/`. Weights are local artifacts and are not
+shipped in Git. That directory requires `weights.pth` and `metadata.json`
+containing the profile, upstream revision, SHA256 and official configuration;
+incompatible whole-body weights are rejected. The existing whole-body preset,
+network, datasets and weights remain available through `configs/flight/yopo.yaml`.
+
+The native optical depth is 90×160 with fx=fy=80 pixels and a 20 m range,
+resized with nearest-neighbour sampling to 96×160 and quantized as upstream.
+The render copy excludes robot geometry. Explicit adapters convert repository
+NED/FRD states to upstream NWU/FLU. Current-state single-frame replanning runs
+asynchronously while cascaded feedback runs each physics step; the live viewer
+shows actual tracked motion and updated candidate paths. Ordinary viewer runs
+write no artifacts. Outdoor overflight is allowed: XML height bounds define a
+finite map extent, while runtime enforces horizontal limits and minimum height.
+
+U0 covers source/checkpoint and numerical parity; U1 covers this deployment
+interface. Official dataset generation and guidance training (U2) are not yet
+implemented. CPU/CUDA core parity and bounded controller-tracked motion have
+been checked; reaching the goal in the bamboo scene remains an acceptance
+item. Mission arrival uses a 0.5 m position tolerance, low speed and a settling
+interval, which is stricter than upstream's 5 m completion notification.
+
+## Whole-body quickstart
 
 From the repository root:
 

@@ -1,0 +1,76 @@
+<mujoco model="uav_yopo_bamboo">
+  <compiler angle="radian" autolimits="true" />
+  <default>
+    <default class="quadrotor_parts">
+      <geom contype="1" conaffinity="1" />
+    </default>
+  </default>
+  <option timestep="0.001" gravity="0 0 -9.81" integrator="Euler" />
+  <size nuser_site="1" />
+  <statistic center="20 0 2" extent="24" />
+  <custom>
+    <numeric name="planning_bounds" data="-2 -7 -15 42 7 -.3" />
+    <numeric name="flight_limits" data="3 2 8 12 0.7" />
+  </custom>
+  <visual>
+    <global azimuth="135" elevation="-25" />
+    <map znear=".0001" zfar="100" />
+    <quality offsamples="4" />
+  </visual>
+  <asset>
+    <texture name="ground_grid" type="2d" builtin="checker" width="512" height="512" rgb1="0.55 0.55 0.55" rgb2="0.35 0.35 0.35" />
+    <material name="ground" texture="ground_grid" texrepeat="8 8" texuniform="true" reflectance="0.1" />
+  </asset>
+  <worldbody>
+    <light name="sun" pos="2.5 0 8" dir="-0.3 0.2 -1" directional="true" />
+    <geom name="ground" type="plane" size="24 9 .1" material="ground" pos="20 0 0" />
+    <body name="quadrotor" pos=".1 0 1.5" childclass="quadrotor_parts">
+      <include file="../model/quadrotor.xml" />
+      <camera name="yopo_depth" pos=".13 0 0" xyaxes="0 -1 0 0 0 1" sensorsize="2 2" resolution="160 90" focalpixel="80 80" />
+    </body>
+    <site name="start" pos=".1 0 1.5" size=".06" rgba=".1 .8 .9 1" />
+    <site name="goal" pos="38 0 1.5" size=".06" rgba=".8 .2 .9 1" />
+    <geom name="obstacle_bamboo_0" type="cylinder" pos="6.0000 -5.5000 2.2909" size="0.0929 2.2909" rgba=".16 .4 .08 1" />
+    <geom name="obstacle_bamboo_1" type="cylinder" pos="6.0000 -3.0000 1.9030" size="0.1094 1.9030" rgba=".16 .4 .08 1" />
+    <geom name="obstacle_bamboo_2" type="cylinder" pos="6.0000 3.0000 1.4402" size="0.1109 1.4402" rgba=".16 .4 .08 1" />
+    <geom name="obstacle_bamboo_3" type="cylinder" pos="6.0000 5.5000 1.7280" size="0.1289 1.7280" rgba=".16 .4 .08 1" />
+    <geom name="obstacle_bamboo_4" type="cylinder" pos="9.5000 -5.5000 2.1441" size="0.0812 2.1441" rgba=".16 .4 .08 1" />
+    <geom name="obstacle_bamboo_5" type="cylinder" pos="9.5000 -3.0000 1.4930" size="0.1283 1.4930" rgba=".16 .4 .08 1" />
+    <geom name="obstacle_bamboo_6" type="cylinder" pos="9.5000 3.0000 1.2630" size="0.1598 1.2630" rgba=".16 .4 .08 1" />
+    <geom name="obstacle_bamboo_7" type="cylinder" pos="9.5000 5.5000 2.2737" size="0.0829 2.2737" rgba=".16 .4 .08 1" />
+    <geom name="obstacle_bamboo_8" type="cylinder" pos="13.0000 -5.5000 1.9162" size="0.1287 1.9162" rgba=".16 .4 .08 1" />
+    <geom name="obstacle_bamboo_9" type="cylinder" pos="13.0000 -3.0000 1.1594" size="0.0943 1.1594" rgba=".16 .4 .08 1" />
+    <geom name="obstacle_bamboo_10" type="cylinder" pos="13.0000 3.0000 1.3726" size="0.1170 1.3726" rgba=".16 .4 .08 1" />
+    <geom name="obstacle_bamboo_11" type="cylinder" pos="13.0000 5.5000 1.9155" size="0.1162 1.9155" rgba=".16 .4 .08 1" />
+    <geom name="obstacle_bamboo_12" type="cylinder" pos="16.5000 -5.5000 2.3917" size="0.1452 2.3917" rgba=".16 .4 .08 1" />
+    <geom name="obstacle_bamboo_13" type="cylinder" pos="16.5000 -3.0000 1.6916" size="0.0963 1.6916" rgba=".16 .4 .08 1" />
+    <geom name="obstacle_bamboo_14" type="cylinder" pos="16.5000 3.0000 1.6337" size="0.1490 1.6337" rgba=".16 .4 .08 1" />
+    <geom name="obstacle_bamboo_15" type="cylinder" pos="16.5000 5.5000 1.6209" size="0.1593 1.6209" rgba=".16 .4 .08 1" />
+    <geom name="obstacle_bamboo_16" type="cylinder" pos="20.0000 -5.5000 1.9138" size="0.0989 1.9138" rgba=".16 .4 .08 1" />
+    <geom name="obstacle_bamboo_17" type="cylinder" pos="20.0000 -3.0000 2.0392" size="0.1328 2.0392" rgba=".16 .4 .08 1" />
+    <geom name="obstacle_bamboo_18" type="cylinder" pos="20.0000 3.0000 1.8447" size="0.1023 1.8447" rgba=".16 .4 .08 1" />
+    <geom name="obstacle_bamboo_19" type="cylinder" pos="20.0000 5.5000 2.0004" size="0.1183 2.0004" rgba=".16 .4 .08 1" />
+    <geom name="obstacle_bamboo_20" type="cylinder" pos="23.5000 -5.5000 2.0319" size="0.1234 2.0319" rgba=".16 .4 .08 1" />
+    <geom name="obstacle_bamboo_21" type="cylinder" pos="23.5000 -3.0000 1.3136" size="0.1527 1.3136" rgba=".16 .4 .08 1" />
+    <geom name="obstacle_bamboo_22" type="cylinder" pos="23.5000 3.0000 1.1732" size="0.1049 1.1732" rgba=".16 .4 .08 1" />
+    <geom name="obstacle_bamboo_23" type="cylinder" pos="23.5000 5.5000 1.3813" size="0.1074 1.3813" rgba=".16 .4 .08 1" />
+    <geom name="obstacle_bamboo_24" type="cylinder" pos="27.0000 -5.5000 1.9836" size="0.1241 1.9836" rgba=".16 .4 .08 1" />
+    <geom name="obstacle_bamboo_25" type="cylinder" pos="27.0000 -3.0000 2.1167" size="0.1192 2.1167" rgba=".16 .4 .08 1" />
+    <geom name="obstacle_bamboo_26" type="cylinder" pos="27.0000 3.0000 2.2860" size="0.1078 2.2860" rgba=".16 .4 .08 1" />
+    <geom name="obstacle_bamboo_27" type="cylinder" pos="27.0000 5.5000 1.8899" size="0.1204 1.8899" rgba=".16 .4 .08 1" />
+    <geom name="obstacle_bamboo_28" type="cylinder" pos="30.5000 -5.5000 1.1798" size="0.0982 1.1798" rgba=".16 .4 .08 1" />
+    <geom name="obstacle_bamboo_29" type="cylinder" pos="30.5000 -3.0000 1.2629" size="0.0999 1.2629" rgba=".16 .4 .08 1" />
+    <geom name="obstacle_bamboo_30" type="cylinder" pos="30.5000 3.0000 1.1589" size="0.1035 1.1589" rgba=".16 .4 .08 1" />
+    <geom name="obstacle_bamboo_31" type="cylinder" pos="30.5000 5.5000 1.6547" size="0.1317 1.6547" rgba=".16 .4 .08 1" />
+    <geom name="obstacle_bamboo_32" type="cylinder" pos="34.0000 -5.5000 2.2890" size="0.1132 2.2890" rgba=".16 .4 .08 1" />
+    <geom name="obstacle_bamboo_33" type="cylinder" pos="34.0000 -3.0000 2.0028" size="0.1216 2.0028" rgba=".16 .4 .08 1" />
+    <geom name="obstacle_bamboo_34" type="cylinder" pos="34.0000 3.0000 1.4615" size="0.0959 1.4615" rgba=".16 .4 .08 1" />
+    <geom name="obstacle_bamboo_35" type="cylinder" pos="34.0000 5.5000 1.7606" size="0.1435 1.7606" rgba=".16 .4 .08 1" />
+    <geom name="obstacle_bamboo_36" type="cylinder" pos="37.5000 -5.5000 1.9509" size="0.1359 1.9509" rgba=".16 .4 .08 1" />
+    <geom name="obstacle_bamboo_37" type="cylinder" pos="37.5000 -3.0000 2.1358" size="0.1297 2.1358" rgba=".16 .4 .08 1" />
+    <geom name="obstacle_bamboo_38" type="cylinder" pos="37.5000 3.0000 1.4798" size="0.1153 1.4798" rgba=".16 .4 .08 1" />
+    <geom name="obstacle_bamboo_39" type="cylinder" pos="37.5000 5.5000 1.8434" size="0.0809 1.8434" rgba=".16 .4 .08 1" />
+    <geom name="obstacle_bamboo_40" type="cylinder" pos="17.0000 0.0000 1.5489" size="0.1087 1.5489" rgba=".16 .4 .08 1" />
+    <geom name="obstacle_bamboo_41" type="cylinder" pos="29.0000 0.0000 1.1640" size="0.1250 1.1640" rgba=".16 .4 .08 1" />
+  </worldbody>
+</mujoco>

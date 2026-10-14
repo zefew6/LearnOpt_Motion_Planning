@@ -1,0 +1,62 @@
+{
+  "repository": "https://github.com/TJU-Aerial-Robotics/YOPO",
+  "commit": "d5e1e60f83cc991602f142d9b6b96204a24d6b9f",
+  "branch": "YOPO-MINCO",
+  "adaptations": [
+    "absolute imports namespaced",
+    "explicit device from scoped cfg",
+    "primitive singleton scoped per config",
+    "config loader replaced with scoped PyYAML adapter; derivations unchanged",
+    "remove trailing whitespace and final blank line; no numerical change"
+  ],
+  "files": {
+    "config/traj_opt.yaml": {
+      "upstream_sha256": "aefb7d39529ca20efd96ecaff470e5b9889e5ec1a143ccb4d152af4b7b1a98c6",
+      "local_sha256": "aefb7d39529ca20efd96ecaff470e5b9889e5ec1a143ccb4d152af4b7b1a98c6"
+    },
+    "policy/primitive.py": {
+      "upstream_sha256": "57b40b014c6797eb2308bbc21b0cb57b23a2391ca11020f7a264f24c8f010a34",
+      "local_sha256": "dcb5284811298152ea27bb1d9ad93505365e58d90d6d3064c8e730815b9c4b48"
+    },
+    "policy/state_transform.py": {
+      "upstream_sha256": "4fa0358ca93f508535fdfb4d836ab7ba0731eee83efc9e1d747de8e59838d8b2",
+      "local_sha256": "831b9804c3af7d464c68de68463c3c089e0dd9255049011b8fe8b6a230c0db1b"
+    },
+    "policy/yopo_network.py": {
+      "upstream_sha256": "8aaa4cfeac161c7967fd316aec10e053926c5379d6645ab2fa9dcb7bab564bbe",
+      "local_sha256": "109e67bb13cc3e65fb45856d5925625c28a323e1c210802e7c97c7d01587360c"
+    },
+    "policy/poly_solver.py": {
+      "upstream_sha256": "141798208937c48ed993717bf2d86c06da68280c284f6cac914c1e17cac2a25f",
+      "local_sha256": "4adf35e81c216bb4caa08c975078a08e32145c4a8aeb8979425cef85ab5b8e2a"
+    },
+    "policy/models/backbone.py": {
+      "upstream_sha256": "1943b5658cad2d7a47aefbec01261084b183adcbdd641f4ed7663cb43c860266",
+      "local_sha256": "3a4b202a77e501cb2d960845e9c36e1088b3b11d6ff8f896acbe67b7ad758048"
+    },
+    "policy/models/head.py": {
+      "upstream_sha256": "62419b476bfb369078d07bf8dbe62416c8a1cd9e6d26278ff82e746a89140da3",
+      "local_sha256": "62419b476bfb369078d07bf8dbe62416c8a1cd9e6d26278ff82e746a89140da3"
+    },
+    "policy/models/resnet.py": {
+      "upstream_sha256": "4f6771cdf0eaae0b573479cb4a347f16526255a26931c82abc397d13007a6d56",
+      "local_sha256": "4f6771cdf0eaae0b573479cb4a347f16526255a26931c82abc397d13007a6d56"
+    },
+    "minco/__init__.py": {
+      "upstream_sha256": "b90b70cba69db52c412fb4762ae4c72aed895e91d7e4723e34d49b53cb2eea40",
+      "local_sha256": "b90b70cba69db52c412fb4762ae4c72aed895e91d7e4723e34d49b53cb2eea40"
+    },
+    "minco/minco.py": {
+      "upstream_sha256": "2e5edda74831024e01f6bcdca58843079f6476061d5e16f638ab68fa9819356c",
+      "local_sha256": "2e5edda74831024e01f6bcdca58843079f6476061d5e16f638ab68fa9819356c"
+    },
+    "minco/trajectory.py": {
+      "upstream_sha256": "f0edab69b43c3408412b0efd5cf97996ef4894724595360bb324d70493055df2",
+      "local_sha256": "f0edab69b43c3408412b0efd5cf97996ef4894724595360bb324d70493055df2"
+    },
+    "config/config.py": {
+      "upstream_sha256": "cbfead464a769ef58e3135978dca9bf95a81d37e0eb7ca4a18d56ca1aafbd180",
+      "local_sha256": "55190f092d7abedc32fe70759946c9f0c10559021c95c4bf5998bc130414a4c1"
+    }
+  }
+}
