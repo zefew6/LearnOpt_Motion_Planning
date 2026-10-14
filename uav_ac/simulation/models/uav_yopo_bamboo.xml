@@ -20,6 +20,8 @@
   <asset>
     <texture name="ground_grid" type="2d" builtin="checker" width="512" height="512" rgb1="0.55 0.55 0.55" rgb2="0.35 0.35 0.35" />
     <material name="ground" texture="ground_grid" texrepeat="8 8" texuniform="true" reflectance="0.1" />
+    <mesh name="tree_crown_small" scale="0.7 0.7 0.7" vertex="1.000000 0.000000 0.000000 0.923880 0.382683 0.000000 0.707107 0.707107 0.000000 0.382683 0.923880 0.000000 0.000000 1.000000 0.000000 -0.382683 0.923880 0.000000 -0.707107 0.707107 0.000000 -0.923880 0.382683 0.000000 -1.000000 0.000000 0.000000 -0.923880 -0.382683 0.000000 -0.707107 -0.707107 0.000000 -0.382683 -0.923880 0.000000 -0.000000 -1.000000 0.000000 0.382683 -0.923880 0.000000 0.707107 -0.707107 0.000000 0.923880 -0.382683 0.000000 0.923880 0.000000 0.382683 0.853553 0.353553 0.382683 0.653281 0.653281 0.382683 0.353553 0.853553 0.382683 0.000000 0.923880 0.382683 -0.353553 0.853553 0.382683 -0.653281 0.653281 0.382683 -0.853553 0.353553 0.382683 -0.923880 0.000000 0.382683 -0.853553 -0.353553 0.382683 -0.653281 -0.653281 0.382683 -0.353553 -0.853553 0.382683 -0.000000 -0.923880 0.382683 0.353553 -0.853553 0.382683 0.653281 -0.653281 0.382683 0.853553 -0.353553 0.382683 0.707107 0.000000 0.707107 0.653281 0.270598 0.707107 0.500000 0.500000 0.707107 0.270598 0.653281 0.707107 0.000000 0.707107 0.707107 -0.270598 0.653281 0.707107 -0.500000 0.500000 0.707107 -0.653281 0.270598 0.707107 -0.707107 0.000000 0.707107 -0.653281 -0.270598 0.707107 -0.500000 -0.500000 0.707107 -0.270598 -0.653281 0.707107 -0.000000 -0.707107 0.707107 0.270598 -0.653281 0.707107 0.500000 -0.500000 0.707107 0.653281 -0.270598 0.707107 0.382683 0.000000 0.923880 0.353553 0.146447 0.923880 0.270598 0.270598 0.923880 0.146447 0.353553 0.923880 0.000000 0.382683 0.923880 -0.146447 0.353553 0.923880 -0.270598 0.270598 0.923880 -0.353553 0.146447 0.923880 -0.382683 0.000000 0.923880 -0.353553 -0.146447 0.923880 -0.270598 -0.270598 0.923880 -0.146447 -0.353553 0.923880 -0.000000 -0.382683 0.923880 0.146447 -0.353553 0.923880 0.270598 -0.270598 0.923880 0.353553 -0.146447 0.923880 0.000000 0.000000 1.000000 0.000000 0.000000 0.000000" face="0 1 16 1 17 16 1 2 17 2 18 17 2 3 18 3 19 18 3 4 19 4 20 19 4 5 20 5 21 20 5 6 21 6 22 21 6 7 22 7 23 22 7 8 23 8 24 23 8 9 24 9 25 24 9 10 25 10 26 25 10 11 26 11 27 26 11 12 27 12 28 27 12 13 28 13 29 28 13 14 29 14 30 29 14 15 30 15 31 30 15 0 31 0 16 31 16 17 32 17 33 32 17 18 33 18 34 33 18 19 34 19 35 34 19 20 35 20 36 35 20 21 36 21 37 36 21 22 37 22 38 37 22 23 38 23 39 38 23 24 39 24 40 39 24 25 40 25 41 40 25 26 41 26 42 41 26 27 42 27 43 42 27 28 43 28 44 43 28 29 44 29 45 44 29 30 45 30 46 45 30 31 46 31 47 46 31 16 47 16 32 47 32 33 48 33 49 48 33 34 49 34 50 49 34 35 50 35 51 50 35 36 51 36 52 51 36 37 52 37 53 52 37 38 53 38 54 53 38 39 54 39 55 54 39 40 55 40 56 55 40 41 56 41 57 56 41 42 57 42 58 57 42 43 58 43 59 58 43 44 59 44 60 59 44 45 60 45 61 60 45 46 61 46 62 61 46 47 62 47 63 62 47 32 63 32 48 63 48 49 64 65 1 0 49 50 64 65 2 1 50 51 64 65 3 2 51 52 64 65 4 3 52 53 64 65 5 4 53 54 64 65 6 5 54 55 64 65 7 6 55 56 64 65 8 7 56 57 64 65 9 8 57 58 64 65 10 9 58 59 64 65 11 10 59 60 64 65 12 11 60 61 64 65 13 12 61 62 64 65 14 13 62 63 64 65 15 14 63 48 64 65 0 15" />
+    <mesh name="tree_crown_large" scale="1.1 1.1 1.1" vertex="1.000000 0.000000 0.000000 0.923880 0.382683 0.000000 0.707107 0.707107 0.000000 0.382683 0.923880 0.000000 0.000000 1.000000 0.000000 -0.382683 0.923880 0.000000 -0.707107 0.707107 0.000000 -0.923880 0.382683 0.000000 -1.000000 0.000000 0.000000 -0.923880 -0.382683 0.000000 -0.707107 -0.707107 0.000000 -0.382683 -0.923880 0.000000 -0.000000 -1.000000 0.000000 0.382683 -0.923880 0.000000 0.707107 -0.707107 0.000000 0.923880 -0.382683 0.000000 0.923880 0.000000 0.382683 0.853553 0.353553 0.382683 0.653281 0.653281 0.382683 0.353553 0.853553 0.382683 0.000000 0.923880 0.382683 -0.353553 0.853553 0.382683 -0.653281 0.653281 0.382683 -0.853553 0.353553 0.382683 -0.923880 0.000000 0.382683 -0.853553 -0.353553 0.382683 -0.653281 -0.653281 0.382683 -0.353553 -0.853553 0.382683 -0.000000 -0.923880 0.382683 0.353553 -0.853553 0.382683 0.653281 -0.653281 0.382683 0.853553 -0.353553 0.382683 0.707107 0.000000 0.707107 0.653281 0.270598 0.707107 0.500000 0.500000 0.707107 0.270598 0.653281 0.707107 0.000000 0.707107 0.707107 -0.270598 0.653281 0.707107 -0.500000 0.500000 0.707107 -0.653281 0.270598 0.707107 -0.707107 0.000000 0.707107 -0.653281 -0.270598 0.707107 -0.500000 -0.500000 0.707107 -0.270598 -0.653281 0.707107 -0.000000 -0.707107 0.707107 0.270598 -0.653281 0.707107 0.500000 -0.500000 0.707107 0.653281 -0.270598 0.707107 0.382683 0.000000 0.923880 0.353553 0.146447 0.923880 0.270598 0.270598 0.923880 0.146447 0.353553 0.923880 0.000000 0.382683 0.923880 -0.146447 0.353553 0.923880 -0.270598 0.270598 0.923880 -0.353553 0.146447 0.923880 -0.382683 0.000000 0.923880 -0.353553 -0.146447 0.923880 -0.270598 -0.270598 0.923880 -0.146447 -0.353553 0.923880 -0.000000 -0.382683 0.923880 0.146447 -0.353553 0.923880 0.270598 -0.270598 0.923880 0.353553 -0.146447 0.923880 0.000000 0.000000 1.000000 0.000000 0.000000 0.000000" face="0 1 16 1 17 16 1 2 17 2 18 17 2 3 18 3 19 18 3 4 19 4 20 19 4 5 20 5 21 20 5 6 21 6 22 21 6 7 22 7 23 22 7 8 23 8 24 23 8 9 24 9 25 24 9 10 25 10 26 25 10 11 26 11 27 26 11 12 27 12 28 27 12 13 28 13 29 28 13 14 29 14 30 29 14 15 30 15 31 30 15 0 31 0 16 31 16 17 32 17 33 32 17 18 33 18 34 33 18 19 34 19 35 34 19 20 35 20 36 35 20 21 36 21 37 36 21 22 37 22 38 37 22 23 38 23 39 38 23 24 39 24 40 39 24 25 40 25 41 40 25 26 41 26 42 41 26 27 42 27 43 42 27 28 43 28 44 43 28 29 44 29 45 44 29 30 45 30 46 45 30 31 46 31 47 46 31 16 47 16 32 47 32 33 48 33 49 48 33 34 49 34 50 49 34 35 50 35 51 50 35 36 51 36 52 51 36 37 52 37 53 52 37 38 53 38 54 53 38 39 54 39 55 54 39 40 55 40 56 55 40 41 56 41 57 56 41 42 57 42 58 57 42 43 58 43 59 58 43 44 59 44 60 59 44 45 60 45 61 60 45 46 61 46 62 61 46 47 62 47 63 62 47 32 63 32 48 63 48 49 64 65 1 0 49 50 64 65 2 1 50 51 64 65 3 2 51 52 64 65 4 3 52 53 64 65 5 4 53 54 64 65 6 5 54 55 64 65 7 6 55 56 64 65 8 7 56 57 64 65 9 8 57 58 64 65 10 9 58 59 64 65 11 10 59 60 64 65 12 11 60 61 64 65 13 12 61 62 64 65 14 13 62 63 64 65 15 14 63 48 64 65 0 15" />
   </asset>
   <worldbody>
     <light name="sun" pos="2.5 0 8" dir="-0.3 0.2 -1" directional="true" />
@@ -30,101 +32,197 @@
     </body>
     <site name="start" pos=".1 0 .9" size=".06" rgba=".1 .8 .9 1" />
     <site name="goal" pos="38 0 .9" size=".06" rgba=".8 .2 .9 1" />
-    <geom name="obstacle_bamboo_0" type="cylinder" pos="6.0000 -5.5000 2.2909" size="0.0929 2.2909" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_1" type="cylinder" pos="6.0000 -3.0000 1.9030" size="0.1094 1.9030" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_2" type="cylinder" pos="6.0000 3.0000 1.4402" size="0.1109 1.4402" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_3" type="cylinder" pos="6.0000 5.5000 1.7280" size="0.1289 1.7280" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_4" type="cylinder" pos="9.5000 -5.5000 2.1441" size="0.0812 2.1441" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_5" type="cylinder" pos="9.5000 -3.0000 1.4930" size="0.1283 1.4930" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_6" type="cylinder" pos="9.5000 3.0000 1.2630" size="0.1598 1.2630" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_7" type="cylinder" pos="9.5000 5.5000 2.2737" size="0.0829 2.2737" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_8" type="cylinder" pos="13.0000 -5.5000 1.9162" size="0.1287 1.9162" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_9" type="cylinder" pos="13.0000 -3.0000 1.1594" size="0.0943 1.1594" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_10" type="cylinder" pos="13.0000 3.0000 1.3726" size="0.1170 1.3726" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_11" type="cylinder" pos="13.0000 5.5000 1.9155" size="0.1162 1.9155" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_12" type="cylinder" pos="16.5000 -5.5000 2.3917" size="0.1452 2.3917" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_13" type="cylinder" pos="16.5000 -3.0000 1.6916" size="0.0963 1.6916" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_14" type="cylinder" pos="16.5000 3.0000 1.6337" size="0.1490 1.6337" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_15" type="cylinder" pos="16.5000 5.5000 1.6209" size="0.1593 1.6209" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_16" type="cylinder" pos="20.0000 -5.5000 1.9138" size="0.0989 1.9138" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_17" type="cylinder" pos="20.0000 -3.0000 2.0392" size="0.1328 2.0392" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_18" type="cylinder" pos="20.0000 3.0000 1.8447" size="0.1023 1.8447" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_19" type="cylinder" pos="20.0000 5.5000 2.0004" size="0.1183 2.0004" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_20" type="cylinder" pos="23.5000 -5.5000 2.0319" size="0.1234 2.0319" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_21" type="cylinder" pos="23.5000 -3.0000 1.3136" size="0.1527 1.3136" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_22" type="cylinder" pos="23.5000 3.0000 1.1732" size="0.1049 1.1732" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_23" type="cylinder" pos="23.5000 5.5000 1.3813" size="0.1074 1.3813" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_24" type="cylinder" pos="27.0000 -5.5000 1.9836" size="0.1241 1.9836" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_25" type="cylinder" pos="27.0000 -3.0000 2.1167" size="0.1192 2.1167" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_26" type="cylinder" pos="27.0000 3.0000 2.2860" size="0.1078 2.2860" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_27" type="cylinder" pos="27.0000 5.5000 1.8899" size="0.1204 1.8899" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_28" type="cylinder" pos="30.5000 -5.5000 1.1798" size="0.0982 1.1798" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_29" type="cylinder" pos="30.5000 -3.0000 1.2629" size="0.0999 1.2629" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_30" type="cylinder" pos="30.5000 3.0000 1.1589" size="0.1035 1.1589" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_31" type="cylinder" pos="30.5000 5.5000 1.6547" size="0.1317 1.6547" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_32" type="cylinder" pos="34.0000 -5.5000 2.2890" size="0.1132 2.2890" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_33" type="cylinder" pos="34.0000 -3.0000 2.0028" size="0.1216 2.0028" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_34" type="cylinder" pos="34.0000 3.0000 1.4615" size="0.0959 1.4615" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_35" type="cylinder" pos="34.0000 5.5000 1.7606" size="0.1435 1.7606" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_36" type="cylinder" pos="37.5000 -5.5000 1.9509" size="0.1359 1.9509" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_37" type="cylinder" pos="37.5000 -3.0000 2.1358" size="0.1297 2.1358" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_38" type="cylinder" pos="37.5000 3.0000 1.4798" size="0.1153 1.4798" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_39" type="cylinder" pos="37.5000 5.5000 1.8434" size="0.0809 1.8434" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_40" type="cylinder" pos="3.6412 -2.6070 2.6266" size="0.2604 2.6266" rgba=".30 .22 .12 1" />
-    <geom name="obstacle_bamboo_41" type="cylinder" pos="3.5480 -0.0280 1.9280" size="0.1710 1.9280" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_42" type="cylinder" pos="3.5140 1.2556 2.3852" size="0.1647 2.3852" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_43" type="cylinder" pos="3.4329 2.6917 1.9719" size="0.1626 1.9719" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_44" type="cylinder" pos="5.9711 -2.6889 1.9247" size="0.1997 1.9247" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_45" type="cylinder" pos="6.1255 0.1025 1.1270" size="0.1862 1.1270" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_46" type="cylinder" pos="6.0976 1.3312 0.9880" size="0.1792 0.9880" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_47" type="cylinder" pos="6.0502 2.6900 1.4921" size="0.1977 1.4921" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_48" type="cylinder" pos="8.4865 -2.4578 1.6647" size="0.1871 1.6647" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_49" type="cylinder" pos="8.3852 -1.3672 2.1172" size="0.1364 2.1172" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_50" type="cylinder" pos="8.1540 0.0738 0.9810" size="0.1903 0.9810" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_51" type="cylinder" pos="8.1421 2.5885 1.0961" size="0.1503 1.0961" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_52" type="cylinder" pos="10.6033 -2.6231 2.2679" size="0.1918 2.2679" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_53" type="cylinder" pos="10.7421 -1.2053 0.7041" size="0.1584 0.7041" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_54" type="cylinder" pos="10.6241 -0.1282 1.7244" size="0.1476 1.7244" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_55" type="cylinder" pos="10.8013 2.5315 2.1169" size="0.3014 2.1169" rgba=".30 .22 .12 1" />
-    <geom name="obstacle_bamboo_56" type="cylinder" pos="13.0700 -2.6517 0.7009" size="0.2012 0.7009" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_57" type="cylinder" pos="13.0864 0.0375 1.0342" size="0.1682 1.0342" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_58" type="cylinder" pos="13.2934 1.3580 2.2344" size="0.3101 2.2344" rgba=".30 .22 .12 1" />
-    <geom name="obstacle_bamboo_59" type="cylinder" pos="13.0473 2.6069 1.2308" size="0.1500 1.2308" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_60" type="cylinder" pos="15.5411 -2.7359 2.2439" size="0.2056 2.2439" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_61" type="cylinder" pos="15.3865 -0.1137 1.8927" size="0.3179 1.8927" rgba=".30 .22 .12 1" />
-    <geom name="obstacle_bamboo_62" type="cylinder" pos="15.5185 1.2025 2.3122" size="0.1812 2.3122" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_63" type="cylinder" pos="15.6820 2.7233 1.3497" size="0.1474 1.3497" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_64" type="cylinder" pos="17.8039 -2.7005 1.8826" size="0.1922 1.8826" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_65" type="cylinder" pos="17.9542 -1.3277 2.2698" size="0.2915 2.2698" rgba=".30 .22 .12 1" />
-    <geom name="obstacle_bamboo_66" type="cylinder" pos="18.0220 0.0994 0.7874" size="0.1616 0.7874" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_67" type="cylinder" pos="17.9167 2.5630 1.1028" size="0.1251 1.1028" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_68" type="cylinder" pos="20.0545 -2.6281 1.8699" size="0.2624 1.8699" rgba=".30 .22 .12 1" />
-    <geom name="obstacle_bamboo_69" type="cylinder" pos="20.3718 -1.2657 1.6995" size="0.1498 1.6995" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_70" type="cylinder" pos="20.0834 -0.1419 2.3281" size="0.1374 2.3281" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_71" type="cylinder" pos="20.1686 2.6672 1.4625" size="0.2013 1.4625" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_72" type="cylinder" pos="22.7915 -2.6140 0.9599" size="0.1542 0.9599" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_73" type="cylinder" pos="22.7514 -0.0995 1.0776" size="0.2003 1.0776" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_74" type="cylinder" pos="22.4682 1.2815 0.6584" size="0.1515 0.6584" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_75" type="cylinder" pos="22.8320 2.4694 1.7123" size="0.1460 1.7123" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_76" type="cylinder" pos="24.8635 -2.7014 2.1542" size="0.1392 2.1542" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_77" type="cylinder" pos="25.1800 0.1479 1.6730" size="0.1475 1.6730" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_78" type="cylinder" pos="24.8603 1.3869 2.1242" size="0.1280 2.1242" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_79" type="cylinder" pos="24.9734 2.6724 1.8045" size="0.1797 1.8045" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_80" type="cylinder" pos="27.4253 -2.5145 2.1185" size="0.1204 2.1185" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_81" type="cylinder" pos="27.7447 -1.1889 1.3280" size="0.1558 1.3280" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_82" type="cylinder" pos="27.5314 -0.0345 1.7794" size="0.1618 1.7794" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_83" type="cylinder" pos="27.2670 2.4906 1.8758" size="0.2976 1.8758" rgba=".30 .22 .12 1" />
-    <geom name="obstacle_bamboo_84" type="cylinder" pos="29.8041 -2.5284 1.4122" size="0.1272 1.4122" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_85" type="cylinder" pos="29.9873 -1.4407 1.9006" size="0.1343 1.9006" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_86" type="cylinder" pos="30.0095 0.0308 1.3821" size="0.1728 1.3821" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_87" type="cylinder" pos="30.0756 2.4979 1.8046" size="0.1827 1.8046" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_88" type="cylinder" pos="32.3066 -2.5354 0.7718" size="0.1818 0.7718" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_89" type="cylinder" pos="32.0866 -0.0333 2.0989" size="0.3065 2.0989" rgba=".30 .22 .12 1" />
-    <geom name="obstacle_bamboo_90" type="cylinder" pos="32.2113 1.3933 2.0959" size="0.1923 2.0959" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_91" type="cylinder" pos="32.3169 2.5852 1.1971" size="0.1449 1.1971" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_92" type="cylinder" pos="34.8469 -2.7109 0.8650" size="0.1517 0.8650" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_93" type="cylinder" pos="34.9291 0.0131 0.7194" size="0.1336 0.7194" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_94" type="cylinder" pos="34.8331 1.1673 0.9449" size="0.1547 0.9449" rgba=".16 .4 .08 1" />
-    <geom name="obstacle_bamboo_95" type="cylinder" pos="34.9168 2.4766 0.7197" size="0.1648 0.7197" rgba=".16 .4 .08 1" />
+    <geom name="obstacle_tree_trunk_0" type="cylinder" pos="6.0000 -5.5000 2.2909" size="0.0929 2.2909" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_1" type="cylinder" pos="6.0000 -3.0000 1.9030" size="0.1094 1.9030" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_2" type="cylinder" pos="6.0000 3.0000 1.4402" size="0.1109 1.4402" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_3" type="cylinder" pos="6.0000 5.5000 1.7280" size="0.1289 1.7280" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_4" type="cylinder" pos="9.5000 -5.5000 2.1441" size="0.0812 2.1441" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_5" type="cylinder" pos="9.5000 -3.0000 1.4930" size="0.1283 1.4930" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_6" type="cylinder" pos="9.5000 3.0000 1.2630" size="0.1598 1.2630" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_7" type="cylinder" pos="9.5000 5.5000 2.2737" size="0.0829 2.2737" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_8" type="cylinder" pos="13.0000 -5.5000 1.9162" size="0.1287 1.9162" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_9" type="cylinder" pos="13.0000 -3.0000 1.1594" size="0.0943 1.1594" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_10" type="cylinder" pos="13.0000 3.0000 1.3726" size="0.1170 1.3726" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_11" type="cylinder" pos="13.0000 5.5000 1.9155" size="0.1162 1.9155" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_12" type="cylinder" pos="16.5000 -5.5000 2.3917" size="0.1452 2.3917" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_13" type="cylinder" pos="16.5000 -3.0000 1.6916" size="0.0963 1.6916" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_14" type="cylinder" pos="16.5000 3.0000 1.6337" size="0.1490 1.6337" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_15" type="cylinder" pos="16.5000 5.5000 1.6209" size="0.1593 1.6209" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_16" type="cylinder" pos="20.0000 -5.5000 1.9138" size="0.0989 1.9138" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_17" type="cylinder" pos="20.0000 -3.0000 2.0392" size="0.1328 2.0392" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_18" type="cylinder" pos="20.0000 3.0000 1.8447" size="0.1023 1.8447" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_19" type="cylinder" pos="20.0000 5.5000 2.0004" size="0.1183 2.0004" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_20" type="cylinder" pos="23.5000 -5.5000 2.0319" size="0.1234 2.0319" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_21" type="cylinder" pos="23.5000 -3.0000 1.3136" size="0.1527 1.3136" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_22" type="cylinder" pos="23.5000 3.0000 1.1732" size="0.1049 1.1732" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_23" type="cylinder" pos="23.5000 5.5000 1.3813" size="0.1074 1.3813" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_24" type="cylinder" pos="27.0000 -5.5000 1.9836" size="0.1241 1.9836" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_25" type="cylinder" pos="27.0000 -3.0000 2.1167" size="0.1192 2.1167" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_26" type="cylinder" pos="27.0000 3.0000 2.2860" size="0.1078 2.2860" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_27" type="cylinder" pos="27.0000 5.5000 1.8899" size="0.1204 1.8899" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_28" type="cylinder" pos="30.5000 -5.5000 1.1798" size="0.0982 1.1798" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_29" type="cylinder" pos="30.5000 -3.0000 1.2629" size="0.0999 1.2629" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_30" type="cylinder" pos="30.5000 3.0000 1.1589" size="0.1035 1.1589" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_31" type="cylinder" pos="30.5000 5.5000 1.6547" size="0.1317 1.6547" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_32" type="cylinder" pos="34.0000 -5.5000 2.2890" size="0.1132 2.2890" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_33" type="cylinder" pos="34.0000 -3.0000 2.0028" size="0.1216 2.0028" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_34" type="cylinder" pos="34.0000 3.0000 1.4615" size="0.0959 1.4615" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_35" type="cylinder" pos="34.0000 5.5000 1.7606" size="0.1435 1.7606" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_36" type="cylinder" pos="37.5000 -5.5000 1.9509" size="0.1359 1.9509" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_37" type="cylinder" pos="37.5000 -3.0000 2.1358" size="0.1297 2.1358" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_38" type="cylinder" pos="37.5000 3.0000 1.4798" size="0.1153 1.4798" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_39" type="cylinder" pos="37.5000 5.5000 1.8434" size="0.0809 1.8434" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_40" type="cylinder" pos="3.6412 -2.6070 2.6266" size="0.1700 2.6266" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_41" type="cylinder" pos="3.5480 -0.0280 1.9280" size="0.1700 1.9280" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_42" type="cylinder" pos="3.5140 1.2556 2.3852" size="0.1647 2.3852" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_43" type="cylinder" pos="3.4329 2.6917 1.9719" size="0.1626 1.9719" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_44" type="cylinder" pos="5.9711 -2.6889 1.9247" size="0.1700 1.9247" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_45" type="cylinder" pos="6.1255 0.1025 1.1270" size="0.1700 1.1270" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_46" type="cylinder" pos="6.0976 1.3312 0.9880" size="0.1700 0.9880" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_47" type="cylinder" pos="6.0502 2.6900 1.4921" size="0.1700 1.4921" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_48" type="cylinder" pos="8.4865 -2.4578 1.6647" size="0.1700 1.6647" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_49" type="cylinder" pos="8.3852 -1.3672 2.1172" size="0.1364 2.1172" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_50" type="cylinder" pos="8.1540 0.0738 0.9810" size="0.1700 0.9810" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_51" type="cylinder" pos="8.1421 2.5885 1.0961" size="0.1503 1.0961" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_52" type="cylinder" pos="10.6033 -2.6231 2.2679" size="0.1700 2.2679" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_53" type="cylinder" pos="10.7421 -1.2053 0.7041" size="0.1584 0.7041" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_54" type="cylinder" pos="10.6241 -0.1282 1.7244" size="0.1476 1.7244" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_55" type="cylinder" pos="10.8013 2.5315 2.1169" size="0.1700 2.1169" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_56" type="cylinder" pos="13.0700 -2.6517 0.7009" size="0.1700 0.7009" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_57" type="cylinder" pos="13.0864 0.0375 1.0342" size="0.1682 1.0342" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_58" type="cylinder" pos="13.2934 1.3580 2.2344" size="0.1700 2.2344" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_59" type="cylinder" pos="13.0473 2.6069 1.2308" size="0.1500 1.2308" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_60" type="cylinder" pos="15.5411 -2.7359 2.2439" size="0.1700 2.2439" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_61" type="cylinder" pos="15.3865 -0.1137 1.8927" size="0.1700 1.8927" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_62" type="cylinder" pos="15.5185 1.2025 2.3122" size="0.1700 2.3122" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_63" type="cylinder" pos="15.6820 2.7233 1.3497" size="0.1474 1.3497" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_64" type="cylinder" pos="17.8039 -2.7005 1.8826" size="0.1700 1.8826" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_65" type="cylinder" pos="17.9542 -1.3277 2.2698" size="0.1700 2.2698" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_66" type="cylinder" pos="18.0220 0.0994 0.7874" size="0.1616 0.7874" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_67" type="cylinder" pos="17.9167 2.5630 1.1028" size="0.1251 1.1028" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_68" type="cylinder" pos="20.0545 -2.6281 1.8699" size="0.1700 1.8699" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_69" type="cylinder" pos="20.3718 -1.2657 1.6995" size="0.1498 1.6995" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_70" type="cylinder" pos="20.0834 -0.1419 2.3281" size="0.1374 2.3281" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_71" type="cylinder" pos="20.1686 2.6672 1.4625" size="0.1700 1.4625" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_72" type="cylinder" pos="22.7915 -2.6140 0.9599" size="0.1542 0.9599" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_73" type="cylinder" pos="22.7514 -0.0995 1.0776" size="0.1700 1.0776" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_74" type="cylinder" pos="22.4682 1.2815 0.6584" size="0.1515 0.6584" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_75" type="cylinder" pos="22.8320 2.4694 1.7123" size="0.1460 1.7123" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_76" type="cylinder" pos="24.8635 -2.7014 2.1542" size="0.1392 2.1542" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_77" type="cylinder" pos="25.1800 0.1479 1.6730" size="0.1475 1.6730" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_78" type="cylinder" pos="24.8603 1.3869 2.1242" size="0.1280 2.1242" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_79" type="cylinder" pos="24.9734 2.6724 1.8045" size="0.1700 1.8045" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_80" type="cylinder" pos="27.4253 -2.5145 2.1185" size="0.1204 2.1185" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_81" type="cylinder" pos="27.7447 -1.1889 1.3280" size="0.1558 1.3280" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_82" type="cylinder" pos="27.5314 -0.0345 1.7794" size="0.1618 1.7794" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_83" type="cylinder" pos="27.2670 2.4906 1.8758" size="0.1700 1.8758" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_84" type="cylinder" pos="29.8041 -2.5284 1.4122" size="0.1272 1.4122" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_85" type="cylinder" pos="29.9873 -1.4407 1.9006" size="0.1343 1.9006" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_86" type="cylinder" pos="30.0095 0.0308 1.3821" size="0.1700 1.3821" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_87" type="cylinder" pos="30.0756 2.4979 1.8046" size="0.1700 1.8046" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_88" type="cylinder" pos="32.3066 -2.5354 0.7718" size="0.1700 0.7718" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_89" type="cylinder" pos="32.0866 -0.0333 2.0989" size="0.1700 2.0989" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_90" type="cylinder" pos="32.2113 1.3933 2.0959" size="0.1700 2.0959" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_91" type="cylinder" pos="32.3169 2.5852 1.1971" size="0.1449 1.1971" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_92" type="cylinder" pos="34.8469 -2.7109 0.8650" size="0.1517 0.8650" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_93" type="cylinder" pos="34.9291 0.0131 0.7194" size="0.1336 0.7194" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_94" type="cylinder" pos="34.8331 1.1673 0.9449" size="0.1547 0.9449" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_trunk_95" type="cylinder" pos="34.9168 2.4766 0.7197" size="0.1648 0.7197" rgba=".30 .22 .12 1" />
+    <geom name="obstacle_tree_crown_0" type="mesh" mesh="tree_crown_small" pos="6.0000 -5.5000 4.4618" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_1" type="mesh" mesh="tree_crown_small" pos="6.0000 -3.0000 3.6860" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_2" type="mesh" mesh="tree_crown_small" pos="6.0000 3.0000 2.7604" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_3" type="mesh" mesh="tree_crown_small" pos="6.0000 5.5000 3.3360" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_4" type="mesh" mesh="tree_crown_small" pos="9.5000 -5.5000 4.1682" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_5" type="mesh" mesh="tree_crown_small" pos="9.5000 -3.0000 2.8660" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_6" type="mesh" mesh="tree_crown_small" pos="9.5000 3.0000 2.4060" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_7" type="mesh" mesh="tree_crown_small" pos="9.5000 5.5000 4.4274" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_8" type="mesh" mesh="tree_crown_small" pos="13.0000 -5.5000 3.7124" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_9" type="mesh" mesh="tree_crown_small" pos="13.0000 -3.0000 2.1988" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_10" type="mesh" mesh="tree_crown_small" pos="13.0000 3.0000 2.6252" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_11" type="mesh" mesh="tree_crown_small" pos="13.0000 5.5000 3.7110" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_12" type="mesh" mesh="tree_crown_small" pos="16.5000 -5.5000 4.6634" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_13" type="mesh" mesh="tree_crown_small" pos="16.5000 -3.0000 3.2632" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_14" type="mesh" mesh="tree_crown_small" pos="16.5000 3.0000 3.1474" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_15" type="mesh" mesh="tree_crown_small" pos="16.5000 5.5000 3.1218" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_16" type="mesh" mesh="tree_crown_small" pos="20.0000 -5.5000 3.7076" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_17" type="mesh" mesh="tree_crown_small" pos="20.0000 -3.0000 3.9584" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_18" type="mesh" mesh="tree_crown_small" pos="20.0000 3.0000 3.5694" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_19" type="mesh" mesh="tree_crown_small" pos="20.0000 5.5000 3.8808" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_20" type="mesh" mesh="tree_crown_small" pos="23.5000 -5.5000 3.9438" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_21" type="mesh" mesh="tree_crown_small" pos="23.5000 -3.0000 2.5072" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_22" type="mesh" mesh="tree_crown_small" pos="23.5000 3.0000 2.2264" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_23" type="mesh" mesh="tree_crown_small" pos="23.5000 5.5000 2.6426" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_24" type="mesh" mesh="tree_crown_small" pos="27.0000 -5.5000 3.8472" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_25" type="mesh" mesh="tree_crown_small" pos="27.0000 -3.0000 4.1134" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_26" type="mesh" mesh="tree_crown_small" pos="27.0000 3.0000 4.4520" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_27" type="mesh" mesh="tree_crown_small" pos="27.0000 5.5000 3.6598" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_28" type="mesh" mesh="tree_crown_small" pos="30.5000 -5.5000 2.2396" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_29" type="mesh" mesh="tree_crown_small" pos="30.5000 -3.0000 2.4058" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_30" type="mesh" mesh="tree_crown_small" pos="30.5000 3.0000 2.1978" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_31" type="mesh" mesh="tree_crown_small" pos="30.5000 5.5000 3.1894" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_32" type="mesh" mesh="tree_crown_small" pos="34.0000 -5.5000 4.4580" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_33" type="mesh" mesh="tree_crown_small" pos="34.0000 -3.0000 3.8856" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_34" type="mesh" mesh="tree_crown_small" pos="34.0000 3.0000 2.8030" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_35" type="mesh" mesh="tree_crown_small" pos="34.0000 5.5000 3.4012" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_36" type="mesh" mesh="tree_crown_small" pos="37.5000 -5.5000 3.7818" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_37" type="mesh" mesh="tree_crown_small" pos="37.5000 -3.0000 4.1516" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_38" type="mesh" mesh="tree_crown_small" pos="37.5000 3.0000 2.8396" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_39" type="mesh" mesh="tree_crown_small" pos="37.5000 5.5000 3.5668" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_40" type="mesh" mesh="tree_crown_large" pos="3.6412 -2.6070 5.1332" rgba=".12 .34 .06 1" />
+    <geom name="obstacle_tree_crown_41" type="mesh" mesh="tree_crown_small" pos="3.5480 -0.0280 3.7360" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_42" type="mesh" mesh="tree_crown_small" pos="3.5140 1.2556 4.6504" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_43" type="mesh" mesh="tree_crown_small" pos="3.4329 2.6917 3.8238" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_44" type="mesh" mesh="tree_crown_small" pos="5.9711 -2.6889 3.7294" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_45" type="mesh" mesh="tree_crown_small" pos="6.1255 0.1025 2.1340" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_46" type="mesh" mesh="tree_crown_small" pos="6.0976 1.3312 1.8560" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_47" type="mesh" mesh="tree_crown_small" pos="6.0502 2.6900 2.8642" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_48" type="mesh" mesh="tree_crown_small" pos="8.4865 -2.4578 3.2094" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_49" type="mesh" mesh="tree_crown_small" pos="8.3852 -1.3672 4.1144" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_50" type="mesh" mesh="tree_crown_small" pos="8.1540 0.0738 1.8420" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_51" type="mesh" mesh="tree_crown_small" pos="8.1421 2.5885 2.0722" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_52" type="mesh" mesh="tree_crown_small" pos="10.6033 -2.6231 4.4158" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_53" type="mesh" mesh="tree_crown_small" pos="10.7421 -1.2053 1.2882" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_54" type="mesh" mesh="tree_crown_small" pos="10.6241 -0.1282 3.3288" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_55" type="mesh" mesh="tree_crown_large" pos="10.8013 2.5315 4.1138" rgba=".12 .34 .06 1" />
+    <geom name="obstacle_tree_crown_56" type="mesh" mesh="tree_crown_small" pos="13.0700 -2.6517 1.2818" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_57" type="mesh" mesh="tree_crown_small" pos="13.0864 0.0375 1.9484" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_58" type="mesh" mesh="tree_crown_large" pos="13.2934 1.3580 4.3488" rgba=".12 .34 .06 1" />
+    <geom name="obstacle_tree_crown_59" type="mesh" mesh="tree_crown_small" pos="13.0473 2.6069 2.3416" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_60" type="mesh" mesh="tree_crown_small" pos="15.5411 -2.7359 4.3678" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_61" type="mesh" mesh="tree_crown_large" pos="15.3865 -0.1137 3.6654" rgba=".12 .34 .06 1" />
+    <geom name="obstacle_tree_crown_62" type="mesh" mesh="tree_crown_small" pos="15.5185 1.2025 4.5044" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_63" type="mesh" mesh="tree_crown_small" pos="15.6820 2.7233 2.5794" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_64" type="mesh" mesh="tree_crown_small" pos="17.8039 -2.7005 3.6452" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_65" type="mesh" mesh="tree_crown_large" pos="17.9542 -1.3277 4.4196" rgba=".12 .34 .06 1" />
+    <geom name="obstacle_tree_crown_66" type="mesh" mesh="tree_crown_small" pos="18.0220 0.0994 1.4548" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_67" type="mesh" mesh="tree_crown_small" pos="17.9167 2.5630 2.0856" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_68" type="mesh" mesh="tree_crown_large" pos="20.0545 -2.6281 3.6198" rgba=".12 .34 .06 1" />
+    <geom name="obstacle_tree_crown_69" type="mesh" mesh="tree_crown_small" pos="20.3718 -1.2657 3.2790" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_70" type="mesh" mesh="tree_crown_small" pos="20.0834 -0.1419 4.5362" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_71" type="mesh" mesh="tree_crown_small" pos="20.1686 2.6672 2.8050" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_72" type="mesh" mesh="tree_crown_small" pos="22.7915 -2.6140 1.7998" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_73" type="mesh" mesh="tree_crown_small" pos="22.7514 -0.0995 2.0352" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_74" type="mesh" mesh="tree_crown_small" pos="22.4682 1.2815 1.1968" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_75" type="mesh" mesh="tree_crown_small" pos="22.8320 2.4694 3.3046" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_76" type="mesh" mesh="tree_crown_small" pos="24.8635 -2.7014 4.1884" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_77" type="mesh" mesh="tree_crown_small" pos="25.1800 0.1479 3.2260" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_78" type="mesh" mesh="tree_crown_small" pos="24.8603 1.3869 4.1284" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_79" type="mesh" mesh="tree_crown_small" pos="24.9734 2.6724 3.4890" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_80" type="mesh" mesh="tree_crown_small" pos="27.4253 -2.5145 4.1170" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_81" type="mesh" mesh="tree_crown_small" pos="27.7447 -1.1889 2.5360" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_82" type="mesh" mesh="tree_crown_small" pos="27.5314 -0.0345 3.4388" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_83" type="mesh" mesh="tree_crown_large" pos="27.2670 2.4906 3.6316" rgba=".12 .34 .06 1" />
+    <geom name="obstacle_tree_crown_84" type="mesh" mesh="tree_crown_small" pos="29.8041 -2.5284 2.7044" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_85" type="mesh" mesh="tree_crown_small" pos="29.9873 -1.4407 3.6812" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_86" type="mesh" mesh="tree_crown_small" pos="30.0095 0.0308 2.6442" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_87" type="mesh" mesh="tree_crown_small" pos="30.0756 2.4979 3.4892" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_88" type="mesh" mesh="tree_crown_small" pos="32.3066 -2.5354 1.4236" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_89" type="mesh" mesh="tree_crown_large" pos="32.0866 -0.0333 4.0778" rgba=".12 .34 .06 1" />
+    <geom name="obstacle_tree_crown_90" type="mesh" mesh="tree_crown_small" pos="32.2113 1.3933 4.0718" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_91" type="mesh" mesh="tree_crown_small" pos="32.3169 2.5852 2.2742" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_92" type="mesh" mesh="tree_crown_small" pos="34.8469 -2.7109 1.6100" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_93" type="mesh" mesh="tree_crown_small" pos="34.9291 0.0131 1.3188" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_94" type="mesh" mesh="tree_crown_small" pos="34.8331 1.1673 1.7698" rgba=".20 .43 .10 1" />
+    <geom name="obstacle_tree_crown_95" type="mesh" mesh="tree_crown_small" pos="34.9168 2.4766 1.3194" rgba=".20 .43 .10 1" />
   </worldbody>
 </mujoco>

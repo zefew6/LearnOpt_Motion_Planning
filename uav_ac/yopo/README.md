@@ -40,8 +40,11 @@ the goal. This UAV path does not use the whole-body network or privileged maps.
 The preset uses a pure quadrotor in `uav_yopo_bamboo.xml`, an independent
 `yopo_uav` block and the official pretrained weights under
 `runs/yopo_uav/official_minco_v1/`. Weights are local artifacts and are not
-shipped in Git. The UAV scene has 96 varied-height poles/trunks, staggered
-central passages, and initial/start/goal heights of 0.9 m. That directory requires `weights.pth` and `metadata.json`
+shipped in Git. The UAV scene has 96 varied-height trees with slender trunks and closed
+hemispherical canopies (radii 0.7/1.1 m), staggered central passages, and
+initial/start/goal heights of 0.9 m. Canopies participate in optical depth and
+MuJoCo contacts. Scene planning metadata conservatively covers each mesh with
+a box; UAV inference does not consume that metadata. That directory requires `weights.pth` and `metadata.json`
 containing the profile, upstream revision, SHA256 and official configuration;
 incompatible whole-body weights are rejected. The existing whole-body preset,
 network, datasets and weights remain available through `configs/flight/yopo.yaml`.

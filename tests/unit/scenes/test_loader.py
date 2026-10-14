@@ -37,3 +37,22 @@ def test_tracking_validates_optional_scene_requirements_separately(
     simulation.step()
     with pytest.raises(ValueError, match="trajectory tracking requires"):
         MujocoTrajectoryTrackingEnv(np.zeros((1, 10)), model_path=path)
+
+
+def test_mesh_scene_metadata_conservatively_contains_rendered_vertices():
+    import mujoco
+    from pathlib import Path
+    from uav_ac.scenes.loader import ENU_TO_NED
+    path=Path('uav_ac/simulation/models/uav_yopo_bamboo.xml')
+    scene=load_scene(path)
+    model=mujoco.MjModel.from_xml_path(str(path));data=mujoco.MjData(model);mujoco.mj_forward(model,data)
+    crowns=[g for g in scene.collision_geometries if g.name.startswith('obstacle_tree_crown_')]
+    assert len(crowns)==96
+    for geometry in crowns:
+        geom=mujoco.mj_name2id(model,mujoco.mjtObj.mjOBJ_GEOM,geometry.name)
+        mesh=model.geom_dataid[geom];start=model.mesh_vertadr[mesh];count=model.mesh_vertnum[mesh]
+        vertices=model.mesh_vert[start:start+count].astype(float)
+        world=(vertices@data.geom_xmat[geom].reshape(3,3).T+data.geom_xpos[geom])@ENU_TO_NED
+        local=(world-geometry.center)@geometry.rotation
+        assert geometry.kind=='box'
+        assert np.all(np.abs(local)<=geometry.size+1e-6)

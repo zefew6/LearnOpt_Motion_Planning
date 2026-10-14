@@ -149,16 +149,28 @@ def _extract_collision_geometries(model: mujoco.MjModel, data: mujoco.MjData, *,
             mujoco.mjtGeom.mjGEOM_SPHERE: "sphere",
             mujoco.mjtGeom.mjGEOM_CYLINDER: "cylinder",
             mujoco.mjtGeom.mjGEOM_PLANE: "plane",
+            mujoco.mjtGeom.mjGEOM_MESH: "box",
         }
         if geom_type not in kinds:
             raise ValueError(
                 f"MuJoCo planning geometry '{name}' has unsupported type {geom_type}; "
-                "use box, sphere, cylinder, or plane")
+                "use box, sphere, cylinder, plane, or mesh")
         center = ENU_TO_NED @ data.geom_xpos[geom_id]
         rotation = ENU_TO_NED @ data.geom_xmat[geom_id].reshape(3, 3) @ ENU_TO_NED
+        size = model.geom_size[geom_id].copy()
+        if geom_type == mujoco.mjtGeom.mjGEOM_MESH:
+            # Planning metadata uses a conservative local box. Rendering and
+            # MuJoCo contacts retain the original mesh and its compiled pose.
+            mesh = int(model.geom_dataid[geom_id])
+            start = int(model.mesh_vertadr[mesh])
+            count = int(model.mesh_vertnum[mesh])
+            vertices = model.mesh_vert[start:start+count].astype(float) @ ENU_TO_NED
+            lower, upper = vertices.min(axis=0), vertices.max(axis=0)
+            center += rotation @ ((lower+upper)/2)
+            size = (upper-lower)/2
         geometries.append(SceneGeometry(
             name, kinds[geom_type], center, rotation.copy(),
-            model.geom_size[geom_id].copy(), int(model.geom_contype[geom_id]),
+            size, int(model.geom_contype[geom_id]),
             int(model.geom_conaffinity[geom_id])))
     return tuple(geometries)
 
