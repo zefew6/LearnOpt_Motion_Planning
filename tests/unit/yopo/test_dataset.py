@@ -2,9 +2,9 @@ from pathlib import Path
 import json
 import numpy as np
 import pytest
-from uav_ac.yopo.data.config import load_config
-from uav_ac.yopo.data.generate import generate_dataset
-from uav_ac.yopo.data.dataset import PlanningDataset
+from uav_ac.yopo.whole_body.data.config import load_config
+from uav_ac.yopo.whole_body.data.generate import generate_dataset
+from uav_ac.yopo.whole_body.data.dataset import PlanningDataset
 
 
 def tiny_config(tmp_path):

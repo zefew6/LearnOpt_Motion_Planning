@@ -8,8 +8,8 @@ from dataclasses import dataclass
 import numpy as np
 import torch
 from torch.nn import functional as F
-from uav_ac.yopo.trajectory.torch import solve_minco, states, energy
-from uav_ac.yopo.model.kinematics import TorchKinematics, flatness_rotation
+from uav_ac.yopo.whole_body.trajectory.torch import solve_minco, states, energy
+from uav_ac.yopo.whole_body.model.kinematics import TorchKinematics, flatness_rotation
 
 def norm(x):return torch.linalg.vector_norm(x,dim=-1)
 
@@ -44,7 +44,7 @@ class TorchGuidanceBatch:
             {k:v[index] for k,v in self.components.items()},{k:v[index] for k,v in self.collision_components.items()})
 
     def numpy(self):
-        from uav_ac.yopo.training.legacy import GuidanceBatch
+        from uav_ac.yopo.whole_body.training.oracle import GuidanceBatch
         def array(t):return t.detach().cpu().numpy()
         return GuidanceBatch(array(self.costs),np.empty((len(self.costs),34)),
             {k:array(v) for k,v in self.components.items()},array(self.violations),array(self.collided),
@@ -164,7 +164,7 @@ class TorchGuidanceOracle:
 
     @torch.enable_grad()
     def evaluate(self,obs,parameters):
-        from uav_ac.yopo.training.legacy import GuidanceBatch
+        from uav_ac.yopo.whole_body.training.oracle import GuidanceBatch
         z=torch.tensor(np.asarray(parameters),dtype=torch.float64,requires_grad=True)[None]
         result=self.backend.evaluate(z,[obs]);gradient=torch.autograd.grad(result.costs.sum(),z)[0][0]
         full=self.backend.evaluate(z,[obs],detach_guidance=False)

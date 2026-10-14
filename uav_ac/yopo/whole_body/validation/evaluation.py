@@ -3,9 +3,9 @@ import argparse
 import json
 from pathlib import Path
 import torch
-from uav_ac.yopo.data.dataset import PlanningDataset
-from uav_ac.yopo.training.runner import OracleCache, subset, evaluate
-from uav_ac.yopo.model.checkpoint import load_checkpoint
+from uav_ac.yopo.whole_body.data.dataset import PlanningDataset
+from uav_ac.yopo.whole_body.training.runner import OracleCache, subset, evaluate
+from uav_ac.yopo.whole_body.model.checkpoint import load_checkpoint
 
 def compare(dataset_path, checkpoints, *, split='validation', samples=8, peak_weight=0., self_clearance=0.,guidance_profile='legacy_direct_v3',guidance=None):
     if split not in ('validation','test') or samples<1:
@@ -13,7 +13,7 @@ def compare(dataset_path, checkpoints, *, split='validation', samples=8, peak_we
     torch.set_num_threads(2)
     data=PlanningDataset(dataset_path,split=split)
     records=subset(data,samples)
-    from uav_ac.yopo.training.runner import TrainingConfig
+    from uav_ac.yopo.whole_body.training.runner import TrainingConfig
     settings=TrainingConfig(guidance_profile=guidance_profile,guidance=guidance or {},collision_model='exact_geometry' if guidance_profile=='yopo_minco_v1' else 'planning_spheres',peak_weight=peak_weight,self_clearance=self_clearance)
     cache=OracleCache(data,peak_weight,self_clearance,guidance_profile=guidance_profile,guidance=settings.guidance)
     results={}

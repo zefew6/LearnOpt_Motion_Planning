@@ -1,11 +1,11 @@
 import json
 import numpy as np
-from uav_ac.yopo.data.config import DatasetConfig
-from uav_ac.yopo.data.generate import generate_dataset
-from uav_ac.yopo.training.runner import TrainingConfig, train
-from uav_ac.yopo.model.checkpoint import load_checkpoint
-from uav_ac.yopo.deployment import YopoPlanner
-from uav_ac.yopo.data.dataset import PlanningDataset
+from uav_ac.yopo.whole_body.data.config import DatasetConfig
+from uav_ac.yopo.whole_body.data.generate import generate_dataset
+from uav_ac.yopo.whole_body.training.runner import TrainingConfig, train
+from uav_ac.yopo.whole_body.model.checkpoint import load_checkpoint
+from uav_ac.yopo.whole_body.deployment import YopoPlanner
+from uav_ac.yopo.whole_body.data.dataset import PlanningDataset
 
 
 def test_train_save_resume_and_map_free_prediction(tmp_path):
@@ -15,7 +15,7 @@ def test_train_save_resume_and_map_free_prediction(tmp_path):
     assert np.isfinite(result['final_train_cost'])
     checkpoint=tmp_path/'train'/'last';model,metadata=load_checkpoint(checkpoint)
     assert metadata['candidate_count']==1
-    from uav_ac.yopo.validation.evaluation import compare
+    from uav_ac.yopo.whole_body.validation.evaluation import compare
     metrics=compare(dataset,[checkpoint],samples=1)['models'][str(checkpoint)]
     assert metrics['selected_cost']==metrics['random_cost']
     observation,_=PlanningDataset(dataset,split='train')[0]
@@ -75,9 +75,9 @@ def test_primitive_resume_keeps_saved_observation_normalization(tmp_path,monkeyp
     from dataclasses import replace
     import shutil
     import torch
-    from uav_ac.yopo.training import runner as training
-    from uav_ac.yopo.model.network import PrimitivePlannerNet
-    from uav_ac.yopo.model.checkpoint import save_checkpoint
+    from uav_ac.yopo.whole_body.training import runner as training
+    from uav_ac.yopo.whole_body.model.network import PrimitivePlannerNet
+    from uav_ac.yopo.whole_body.model.checkpoint import save_checkpoint
     root=tmp_path/'data'
     generate_dataset(DatasetConfig(profile='rolling_v2',scene_count=3,samples_per_scene=1,split_counts=(1,1,1)),root)
     config=TrainingConfig(profile='primitive_v4',steps=1,train_samples=1,validation_samples=1,batch_size=1,width=4,candidate_count=27)

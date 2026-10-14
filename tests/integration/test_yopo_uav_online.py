@@ -59,7 +59,7 @@ def test_goal_settling_discards_pending_snapshot_and_old_plan():
 
 def test_uav_depth_can_exclude_robot_without_changing_live_geometry():
     from uav_ac.simulation.depth_observation import IdealDepthObserver
-    from uav_ac.yopo.contracts import DepthSpec
+    from uav_ac.yopo.whole_body.contracts import DepthSpec
     sim=MujocoSimulation('uav_ac/simulation/models/uav_yopo_bamboo.xml',planning_path_capacity=0,record_actual_trajectory=False)
     groups=sim.model.geom_group.copy();state=sim.quad.X.copy()
     spec=DepthSpec(height=90,vfov_deg=float(np.rad2deg(2*np.arctan(45/80))),far_m=20.)

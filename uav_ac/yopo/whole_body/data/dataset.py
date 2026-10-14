@@ -5,7 +5,7 @@ import hashlib
 import json
 from collections import OrderedDict
 import numpy as np
-from uav_ac.yopo.contracts import DepthSpec, PlannerObservation
+from uav_ac.yopo.whole_body.contracts import DepthSpec, PlannerObservation
 
 FIELDS=('depth_m','depth_valid','configuration','velocity','start_pva','goal')
 DYNAMIC_FIELDS=FIELDS+('timestamp','start_jerk','derivative_source')

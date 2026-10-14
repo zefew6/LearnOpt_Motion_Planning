@@ -5,12 +5,12 @@ import json
 from pathlib import Path
 import numpy as np
 import torch
-from uav_ac.yopo.data.dataset import PlanningDataset
-from uav_ac.yopo.training.runner import OracleCache, subset, tensors
-from uav_ac.yopo.training.losses import guidance_costs
-from uav_ac.yopo.model.encoding import Normalization
-from uav_ac.yopo.model.checkpoint import load_checkpoint
-from uav_ac.yopo.model.network import PrimitivePlannerNet
+from uav_ac.yopo.whole_body.data.dataset import PlanningDataset
+from uav_ac.yopo.whole_body.training.runner import OracleCache, subset, tensors
+from uav_ac.yopo.whole_body.training.losses import guidance_costs
+from uav_ac.yopo.whole_body.model.encoding import Normalization
+from uav_ac.yopo.whole_body.model.checkpoint import load_checkpoint
+from uav_ac.yopo.whole_body.model.network import PrimitivePlannerNet
 
 def audit_candidates(observation,oracle,parameters,indices,*,epsilon=1e-6,tolerance=1e-4):
     records=[]
@@ -90,7 +90,7 @@ def audit(dataset_path,*,checkpoint=None,samples=3,seed=23,epsilon=1e-6):
         z=output.parameters[0].detach().numpy();selected=int(output.scores[0].argmax())
         oracle=cache.get(priv)
         if cache.backend=='torch_esdf':
-            from uav_ac.yopo.training.cuda import TorchGuidanceOracle
+            from uav_ac.yopo.whole_body.training.cuda import TorchGuidanceOracle
             oracle=TorchGuidanceOracle(oracle)
         numeric=audit_candidates(obs,oracle,z,sorted({selected,13,(selected+9)%27}),epsilon=epsilon)
         inputs=tensors([obs],model.normalization,27,'cpu',model.profile,model.spec)

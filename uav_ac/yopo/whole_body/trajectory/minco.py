@@ -5,8 +5,8 @@ are observation features, not an exact-flatness admission check. The supplied
 head PVA is honored; model mismatch is diagnosed by the training/evaluation layer.
 """
 import numpy as np
-from uav_ac.yopo.contracts import finite_array
-from uav_ac.yopo.model.encoding import LocalFrame
+from uav_ac.yopo.whole_body.contracts import finite_array
+from uav_ac.yopo.whole_body.model.encoding import LocalFrame
 from uav_ac.planning.trajectory.gcopter.minco import MINCOQuintic
 from uav_ac.planning.trajectory.aerial_manipulator_minco.trajectory import AerialManipulatorTrajectory
 

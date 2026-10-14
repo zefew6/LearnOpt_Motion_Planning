@@ -2,11 +2,11 @@
 from pathlib import Path
 import json
 from dataclasses import asdict
-from uav_ac.yopo.model.primitives import PrimitiveSpec, PRIMITIVE_STATE_LAYOUT
-from uav_ac.yopo.model.network import PrimitivePlannerNet, GoalPrimitivePlannerNet, WholeBodyPlannerNet
+from uav_ac.yopo.whole_body.model.primitives import PrimitiveSpec, PRIMITIVE_STATE_LAYOUT
+from uav_ac.yopo.whole_body.model.network import PrimitivePlannerNet, GoalPrimitivePlannerNet, WholeBodyPlannerNet
 import torch
-from uav_ac.yopo.model.encoding import Normalization, STATE_LAYOUT
-from uav_ac.yopo.contracts import DepthSpec
+from uav_ac.yopo.whole_body.model.encoding import Normalization, STATE_LAYOUT
+from uav_ac.yopo.whole_body.contracts import DepthSpec
 
 def save_checkpoint(path,model,metadata):
     path=Path(path);path.mkdir(parents=True,exist_ok=False)

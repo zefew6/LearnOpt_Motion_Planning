@@ -4,10 +4,10 @@ import numpy as np
 import pytest
 import torch
 from uav_ac.simulation.mujoco_sim import MujocoSimulation
-from uav_ac.yopo.contracts import PlannerObservation
-from uav_ac.yopo.trajectory.legacy import InteriorMap
-from uav_ac.yopo.training.legacy import PrivilegedEvaluator
-from uav_ac.yopo.training.losses import guidance_loss, score_loss, calibrate_cost_scale
+from uav_ac.yopo.whole_body.contracts import PlannerObservation
+from uav_ac.yopo.whole_body.trajectory.parameterization import InteriorMap
+from uav_ac.yopo.whole_body.training.oracle import PrivilegedEvaluator
+from uav_ac.yopo.whole_body.training.losses import guidance_loss, score_loss, calibrate_cost_scale
 
 
 def setup_case():
@@ -17,7 +17,7 @@ def setup_case():
     y=np.r_[q[:3],0.,q[7:11]];head=np.vstack((y,np.zeros((2,8))))
     goal=y.copy();goal[0]=.8;goal[1]=.1;goal[3]=.1
     obs=PlannerObservation(np.full((96,160),6.),np.zeros((96,160),bool),q,np.zeros(11),head,goal)
-    from uav_ac.yopo.model.encoding import LocalFrame
+    from uav_ac.yopo.whole_body.model.encoding import LocalFrame
     frame=LocalFrame.from_observation(obs)
     free=InteriorMap(frame.local_pva(head),np.vstack((frame.local_goal(goal),np.zeros((2,8))))).seed()
     return sim,obs,free
@@ -52,7 +52,7 @@ def test_score_target_detach_and_cost_calibration():
 def test_reference_objective_and_backward_are_numerically_identical():
     from uav_ac.planning.trajectory.gcopter.optimization import evaluate_minco_objective
     sim,obs,free=setup_case();oracle=PrivilegedEvaluator.from_simulation(sim)
-    from uav_ac.yopo.model.encoding import LocalFrame
+    from uav_ac.yopo.whole_body.model.encoding import LocalFrame
     frame=LocalFrame.from_observation(obs)
     mapping=InteriorMap(frame.local_pva(obs.start_pva),np.vstack((frame.local_goal(obs.goal),np.zeros((2,8)))))
     world_minco=InteriorMap(obs.start_pva,np.vstack((obs.goal,np.zeros((2,8))))).minco
@@ -78,7 +78,7 @@ def test_collision_and_nonzero_yaw_pullback_gradients():
     x=origin[0]+.04*np.arange(shape[0])
     values=np.broadcast_to((.55-x)[:,None,None],shape).copy()
     oracle=PrivilegedEvaluator(sim.robot,ESDF(values,origin,.04),sim.quad,sim.space_limits)
-    from uav_ac.yopo.model.encoding import LocalFrame
+    from uav_ac.yopo.whole_body.model.encoding import LocalFrame
     frame=LocalFrame.from_observation(obs)
     free=InteriorMap(frame.local_pva(head),np.vstack((frame.local_goal(goal),np.zeros((2,8))))).seed()
     result=oracle.evaluate(obs,free[None]);assert result.components['environment'][0]>0

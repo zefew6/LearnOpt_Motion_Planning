@@ -1,19 +1,17 @@
 # YOPO planning
 
-YOPO owns the single-frame depth/state -> whole-body local trajectory workflow.
+YOPO owns independent UAV and whole-body single-frame depth/state planning workflows.
 `main.py`, `runners` and `tasks` retain online physics and controller orchestration.
 
 | Location | Responsibility |
 | --- | --- |
-| `contracts.py` | Depth calibration and immutable current-state/goal observations |
-| `deployment.py` | `YopoPlanner`: checkpoint inference, candidate selection, deterministic decode |
-| `model/` | Network variants, 3×3 primitive alignment, observation encoding, checkpoint IO and tensor FK |
-| `trajectory/` | Two-piece MINCO decode and differentiable tensor solve; `legacy.py` retains earlier trajectory contracts |
-| `data/` | Dataset schemas, independent-state sampling and generated scene artifacts |
-| `training/` | CPU/CUDA guidance, losses, optimizer and checkpoint resume |
-| `validation/` | Offline evaluation, candidate audit and closed-loop acceptance tools |
+| `uav/` | Official pure-UAV model adapter, checkpoints and deployment |
+| `whole_body/` | Articulated network, datasets, MINCO, guidance training and validation |
+| `common/depth.py` | Shared depth calibration and immutable array validation |
+| `vendor/yopo_minco/` | Pinned upstream algorithms, source hashes and licenses |
+| `_compat.py` | Lazy aliases for previous whole-body imports and CLI entrypoints |
 
-The primary `primitive_goal_v5` network predicts 27 candidates (3×3 directions,
+The whole-body `primitive_goal_v5` network predicts 27 candidates (3×3 directions,
 three arm priors), each with 34 MINCO parameters: one intermediate configuration,
 free terminal PVA and two durations. Existing `direct_v3` and `primitive_v4`
 checkpoints remain loadable. Deployment imports no training or privileged-map modules.
@@ -21,6 +19,15 @@ Training uses complete scene geometry only to compute trajectory costs/gradients
 the model receives a single depth image, current state and eight-value goal.
 Online execution repeatedly plans from the current robot state and tracks with
 actual MuJoCo physics.
+
+Whole-body modules now have an explicit `uav_ac.yopo.whole_body` namespace.
+Previous imports (`uav_ac.yopo.model`, `data`, `training`, `trajectory`,
+`validation`, `deployment`, `contracts`) and module commands remain lazy aliases
+to the same implementation. The former `legacy` modules are now named
+`data.sampling`, `training.oracle` and `trajectory.parameterization`.
+Checkpoint schemas, normalization, dataset paths and weights are unchanged.
+Vendor code remains separate from `common`: provenance/namespace adaptations
+are third-party integration details, while `common` holds genuinely shared interfaces.
 
 ## Official YOPO-MINCO pure UAV
 
@@ -40,14 +47,16 @@ the goal. This UAV path does not use the whole-body network or privileged maps.
 The preset uses a pure quadrotor in `uav_yopo_bamboo.xml`, an independent
 `yopo_uav` block and the official pretrained weights under
 `runs/yopo_uav/official_minco_v1/`. Weights are local artifacts and are not
-shipped in Git. The UAV scene has 96 varied-height trees with slender trunks and closed
-hemispherical canopies (radii 0.7/1.1 m), staggered central passages, and
-initial/start/goal heights of 0.9 m. Canopies participate in optical depth and
-MuJoCo contacts. Scene planning metadata conservatively covers each mesh with
-a box; UAV inference does not consume that metadata. That directory requires `weights.pth` and `metadata.json`
+shipped in Git. This directory requires `weights.pth` and `metadata.json`
 containing the profile, upstream revision, SHA256 and official configuration;
 incompatible whole-body weights are rejected. The existing whole-body preset,
 network, datasets and weights remain available through `configs/flight/yopo.yaml`.
+
+The roughly 60×20 m UAV scene has 96 varied-height trees with slender trunks
+and closed hemispherical canopies (radii 0.7/1.1 m), staggered central passages,
+initial/start/goal heights of 0.9 m, and a goal at x=58 m. Canopies participate
+in optical depth and MuJoCo contacts. Scene planning metadata conservatively
+covers each mesh with a box; UAV inference does not consume that metadata.
 
 The native optical depth is 90×160 with fx=fy=80 pixels and a 20 m range,
 resized with nearest-neighbour sampling to 96×160 and quantized as upstream.
@@ -71,11 +80,11 @@ From the repository root:
 
 ```bash
 # Dataset instances and XML copies are written beneath runs/.
-MUJOCO_GL=egl .venv/bin/python -m uav_ac.yopo.data.generate \
+MUJOCO_GL=egl .venv/bin/python -m uav_ac.yopo.whole_body.data.generate \
   --config configs/yopo/dataset/yopo_fixed_dense.yaml \
   --run-dir runs/yopo_whole_body/bamboo_data
 
-.venv/bin/python -m uav_ac.yopo.training \
+.venv/bin/python -m uav_ac.yopo.whole_body.training \
   --config configs/yopo/train/yopo_cuda_large.yaml \
   --dataset runs/yopo_whole_body/bamboo_data/dataset \
   --run-dir runs/yopo_whole_body/bamboo_train
@@ -172,12 +181,12 @@ exact actual attitude/body-rate consistency or certify the full trajectory.
 
 ### Contracts and commands
 
-Network and geometric encoding live in `uav_ac/yopo/model/{network,primitives}.py`.
+Network and geometric encoding live in `uav_ac/yopo/whole_body/model/{network,primitives}.py`.
 Dataset generation, oracle guidance and training stay under `uav_ac/yopo`.
 Training selects `profile: primitive_v4` and requires 27 candidates.
 
 ```bash
-MUJOCO_GL=egl .venv/bin/python -m uav_ac.yopo.training \
+MUJOCO_GL=egl .venv/bin/python -m uav_ac.yopo.whole_body.training \
   --config configs/yopo/train/yopo_primitive_pilot.yaml \
   --dataset runs/yopo_whole_body/wall_portals_forest_v4/dataset \
   --run-dir runs/yopo_whole_body/my_primitive_pilot
@@ -323,18 +332,18 @@ matching recipe/settings; warm-start transfers compatible network weights
 and resets optimizer/calibration.
 
 ```bash
-MUJOCO_GL=egl .venv/bin/python -m uav_ac.yopo.training \
+MUJOCO_GL=egl .venv/bin/python -m uav_ac.yopo.whole_body.training \
   --config configs/yopo/train/yopo_stage_free.yaml \
   --dataset runs/yopo_whole_body/staged_repair_v1/curriculum_closed_loop_states/dataset \
   --run-dir runs/yopo_whole_body/<new-run>
 
-MUJOCO_GL=egl .venv/bin/python -m uav_ac.yopo.validation.audit \
+MUJOCO_GL=egl .venv/bin/python -m uav_ac.yopo.whole_body.validation.audit \
   --dataset runs/yopo_whole_body/staged_repair_v1/curriculum_closed_loop_states/dataset \
   --checkpoint runs/yopo_whole_body/<new-run>/last \
   --samples 3 --epsilon 1e-5 --output <new-audit.json>
 ```
 
-Use `python -m uav_ac.yopo.validation.evaluation --guidance-profile yopo_minco_v1` for an explicitly common
+Use `python -m uav_ac.yopo.whole_body.validation.evaluation --guidance-profile yopo_minco_v1` for an explicitly common
 new objective when comparing checkpoints. The existing acceptance tool runs
 selected dense validation plus actual MuJoCo/controller tracking. Training or
 audit success does not promote a checkpoint to the live benchmark.
@@ -426,7 +435,7 @@ acceptance still need to be evaluated after training.
 Generate data:
 
 ```bash
-MUJOCO_GL=egl OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 .venv/bin/python -m uav_ac.yopo.data.generate \
+MUJOCO_GL=egl OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 .venv/bin/python -m uav_ac.yopo.whole_body.data.generate \
   --config configs/yopo/dataset/yopo_fixed_dense.yaml \
   --run-dir runs/yopo_whole_body/<data-run>
 ```
@@ -434,7 +443,7 @@ MUJOCO_GL=egl OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 .venv/bin/python -m uav_a
 Train:
 
 ```bash
-MUJOCO_GL=egl OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 .venv/bin/python -m uav_ac.yopo.training \
+MUJOCO_GL=egl OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 .venv/bin/python -m uav_ac.yopo.whole_body.training \
   --config configs/yopo/train/yopo_cuda_large.yaml \
   --dataset runs/yopo_whole_body/<data-run>/dataset \
   --run-dir runs/yopo_whole_body/<train-run>
@@ -443,7 +452,7 @@ MUJOCO_GL=egl OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 .venv/bin/python -m uav_a
 Resume into a **new** run directory, preserving the existing run:
 
 ```bash
-MUJOCO_GL=egl OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 .venv/bin/python -m uav_ac.yopo.training \
+MUJOCO_GL=egl OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 .venv/bin/python -m uav_ac.yopo.whole_body.training \
   --config configs/yopo/train/yopo_cuda_large.yaml \
   --dataset runs/yopo_whole_body/<data-run>/dataset \
   --resume runs/yopo_whole_body/<train-run>/latest \
@@ -483,9 +492,9 @@ A graphical desktop/OpenGL and the YAML-selected local checkpoint are required.
 
 `main.py` dispatches `task: whole_body_planning` to
 `runners/whole_body_planning.py`; task execution and actual-state sampling belong
-in `tasks/whole_body_reaching.py`. Neural modeling, decoding and deployment live in `yopo/model`,
-`yopo/trajectory` and `yopo/deployment.py`; data and training live in
-`yopo/data` and `yopo/training`.
+in `tasks/whole_body_reaching.py`. Neural modeling, decoding and deployment live in `yopo/whole_body/model`,
+`yopo/whole_body/trajectory` and `yopo/whole_body/deployment.py`; data and training live in
+`yopo/whole_body/data` and `yopo/whole_body/training`.
 
 The task selects `planner: yopo`, `controller: cascaded`, and `wind: none`.
 The whole-body adapter adds inverse-dynamics arm tracking to cascaded base

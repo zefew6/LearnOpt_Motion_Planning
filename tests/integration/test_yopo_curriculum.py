@@ -1,7 +1,7 @@
 import numpy as np
-from uav_ac.yopo.data.config import DatasetConfig
-from uav_ac.yopo.data.generate import generate_dataset
-from uav_ac.yopo.data.dataset import PlanningDataset
+from uav_ac.yopo.whole_body.data.config import DatasetConfig
+from uav_ac.yopo.whole_body.data.generate import generate_dataset
+from uav_ac.yopo.whole_body.data.dataset import PlanningDataset
 
 
 def test_curriculum_is_scene_disjoint_independent_current_state_data(tmp_path):
@@ -18,10 +18,10 @@ def test_curriculum_is_scene_disjoint_independent_current_state_data(tmp_path):
 
 def test_warm_start_rejects_opposite_scoring_semantics(tmp_path):
     import pytest
-    from uav_ac.yopo.training.runner import TrainingConfig, train
-    from uav_ac.yopo.model.encoding import Normalization
-    from uav_ac.yopo.model.network import PrimitivePlannerNet
-    from uav_ac.yopo.model.checkpoint import save_checkpoint
+    from uav_ac.yopo.whole_body.training.runner import TrainingConfig, train
+    from uav_ac.yopo.whole_body.model.encoding import Normalization
+    from uav_ac.yopo.whole_body.model.network import PrimitivePlannerNet
+    from uav_ac.yopo.whole_body.model.checkpoint import save_checkpoint
     path=generate_dataset(DatasetConfig(profile='curriculum_v5',scene_count=12,split_counts=(4,4,4),samples_per_scene=1),tmp_path/'data')
     data=PlanningDataset(path.parent,split='train')
     n=Normalization((-2.8,-2.2,-2.4,-2.4),(2.8,2.2,2.4,2.4))

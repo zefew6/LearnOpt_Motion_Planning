@@ -3,7 +3,7 @@ from dataclasses import dataclass
 import numpy as np
 import torch
 from scipy.spatial.transform import Rotation
-from uav_ac.yopo.contracts import DepthSpec
+from uav_ac.yopo.common.depth import DepthSpec
 from uav_ac.yopo.vendor.yopo_minco.policy.poly_solver import MincoTraj
 from .checkpoint import load_checkpoint
 

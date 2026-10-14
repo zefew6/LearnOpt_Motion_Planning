@@ -5,10 +5,10 @@ from pathlib import Path
 import json
 import time
 import numpy as np
-from uav_ac.yopo.data.config import load_config
-from uav_ac.yopo.data.dataset import FIELDS, DYNAMIC_FIELDS, file_hash
-from uav_ac.yopo.data.scenes import write_scene, sample_scene
-from uav_ac.yopo.model.encoding import STATE_LAYOUT
+from uav_ac.yopo.whole_body.data.config import load_config
+from uav_ac.yopo.whole_body.data.dataset import FIELDS, DYNAMIC_FIELDS, file_hash
+from uav_ac.yopo.whole_body.data.scenes import write_scene, sample_scene
+from uav_ac.yopo.whole_body.model.encoding import STATE_LAYOUT
 
 def generate_dataset(config,output_dir):
     output=Path(output_dir).resolve();output.mkdir(parents=True,exist_ok=False)
@@ -20,25 +20,25 @@ def generate_dataset(config,output_dir):
         coupled=config.profile in ('coupled_v3','portal_v4','curriculum_v5')
         source_metadata={}
         if config.profile=='fixed_dense_v6':
-            from uav_ac.yopo.data.fixed import write_fixed_dense_scene, sample_fixed_dense_scene
+            from uav_ac.yopo.whole_body.data.fixed import write_fixed_dense_scene, sample_fixed_dense_scene
             from uav_ac.simulation.mujoco_sim import MujocoSimulation
             scene_id,family,path=write_fixed_dense_scene(scenes_dir,i,seed,config.depth)
             sim=MujocoSimulation(path,planning_path_capacity=0,record_actual_trajectory=False)
             samples,rejected=sample_fixed_dense_scene(sim,config,seed+1,path)
         elif coupled:
-            from uav_ac.yopo.data.legacy import write_coupled_scene
-            from uav_ac.yopo.data.legacy import sample_coupled_scene
+            from uav_ac.yopo.whole_body.data.sampling import write_coupled_scene
+            from uav_ac.yopo.whole_body.data.sampling import sample_coupled_scene
             from uav_ac.simulation.mujoco_sim import MujocoSimulation
             if config.profile=='curriculum_v5':
-                from uav_ac.yopo.data.scenes import write_curriculum_scene
+                from uav_ac.yopo.whole_body.data.scenes import write_curriculum_scene
                 scene_id,family,path=write_curriculum_scene(scenes_dir,i,seed,config.depth)
             elif config.profile=='portal_v4':
-                from uav_ac.yopo.data.legacy import write_portal_scene
+                from uav_ac.yopo.whole_body.data.sampling import write_portal_scene
                 scene_id,family,path=write_portal_scene(scenes_dir,i,seed,config.depth)
             else:scene_id,family,path=write_coupled_scene(scenes_dir,i,seed,config.depth)
             sim=MujocoSimulation(path,planning_path_capacity=0,record_actual_trajectory=False)
             if config.profile=='curriculum_v5':
-                from uav_ac.yopo.data.scenes import sample_curriculum_scene
+                from uav_ac.yopo.whole_body.data.scenes import sample_curriculum_scene
                 samples,sources,records=sample_curriculum_scene(sim,config,seed+1,family)
             else:samples,sources,records=sample_coupled_scene(sim,config,seed+1)
             rejected={}

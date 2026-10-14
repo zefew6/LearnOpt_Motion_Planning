@@ -1,16 +1,16 @@
 import numpy as np
 import torch
 import pytest
-from uav_ac.yopo.training.runner import OracleCache, TrainingConfig, tensors
-from uav_ac.yopo.data.dataset import PlanningDataset
-from uav_ac.yopo.model.network import GoalPrimitivePlannerNet
-from uav_ac.yopo.model.encoding import Normalization
+from uav_ac.yopo.whole_body.training.runner import OracleCache, TrainingConfig, tensors
+from uav_ac.yopo.whole_body.data.dataset import PlanningDataset
+from uav_ac.yopo.whole_body.model.network import GoalPrimitivePlannerNet
+from uav_ac.yopo.whole_body.model.encoding import Normalization
 
 
 def test_torch_physical_terms_match_cpu_and_esdf_backward(tmp_path):
-    from uav_ac.yopo.training.cuda import TorchGuidance
-    from uav_ac.yopo.data.generate import generate_dataset
-    from uav_ac.yopo.data.config import DatasetConfig
+    from uav_ac.yopo.whole_body.training.cuda import TorchGuidance
+    from uav_ac.yopo.whole_body.data.generate import generate_dataset
+    from uav_ac.yopo.whole_body.data.config import DatasetConfig
     generate_dataset(DatasetConfig(profile='rolling_v2',scene_count=3,split_counts=(1,1,1),samples_per_scene=1),tmp_path/'data')
     data=PlanningDataset(tmp_path/'data/dataset',split='train');obs,priv=data[0]
     cfg=TrainingConfig(guidance_profile='yopo_minco_v1',collision_model='exact_geometry')

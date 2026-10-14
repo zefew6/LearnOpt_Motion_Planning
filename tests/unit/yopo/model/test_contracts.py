@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
-from uav_ac.yopo.contracts import DepthSpec, PlannerObservation
-from uav_ac.yopo.model.encoding import LocalFrame, Normalization, encode_observation
+from uav_ac.yopo.whole_body.contracts import DepthSpec, PlannerObservation
+from uav_ac.yopo.whole_body.model.encoding import LocalFrame, Normalization, encode_observation
 
 
 def observation(yaw=0.):

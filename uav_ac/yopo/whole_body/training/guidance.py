@@ -7,8 +7,8 @@ Detached goal/curvature derivatives are recorded separately for honest FD audits
 from dataclasses import dataclass, fields
 import numpy as np
 from scipy.special import logsumexp
-from uav_ac.yopo.training.legacy import DirectEvaluator, GuidanceBatch
-from uav_ac.yopo.trajectory.minco import world_problem
+from uav_ac.yopo.whole_body.training.oracle import DirectEvaluator, GuidanceBatch
+from uav_ac.yopo.whole_body.trajectory.minco import world_problem
 from uav_ac.planning.trajectory.gcopter.optimization import evaluate_minco_objective
 from uav_ac.planning.trajectory.gcopter.mappings import polynomial_basis_matrix
 from uav_ac.planning.trajectory.aerial_manipulator_minco.constraints import _flatness_body_rate_squared

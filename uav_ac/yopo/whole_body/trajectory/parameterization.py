@@ -1,7 +1,7 @@
 """Four-piece MINCO with both lateral-jerk endpoint constraints eliminated."""
 import numpy as np
-from uav_ac.yopo.contracts import finite_array, PlannerObservation, DepthSpec
-from uav_ac.yopo.model.encoding import wrap, LocalFrame
+from uav_ac.yopo.whole_body.contracts import finite_array, PlannerObservation, DepthSpec
+from uav_ac.yopo.whole_body.model.encoding import wrap, LocalFrame
 from uav_ac.planning.trajectory.gcopter.minco import MINCOQuintic
 from uav_ac.planning.trajectory.aerial_manipulator_minco.trajectory import AerialManipulatorTrajectory
 from dataclasses import dataclass

@@ -2,7 +2,7 @@
 from dataclasses import dataclass
 import numpy as np
 from scipy.spatial.transform import Rotation
-from uav_ac.yopo.contracts import finite_array
+from uav_ac.yopo.whole_body.contracts import finite_array
 
 def wrap(angle):
     return np.arctan2(np.sin(angle),np.cos(angle))

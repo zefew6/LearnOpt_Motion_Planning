@@ -6,9 +6,9 @@ import tempfile
 import yaml
 import numpy as np
 import torch
-from uav_ac.yopo.data.dataset import PlanningDataset
-from uav_ac.yopo.training.runner import OracleCache, subset
-from uav_ac.yopo.deployment import YopoPlanner
+from uav_ac.yopo.whole_body.data.dataset import PlanningDataset
+from uav_ac.yopo.whole_body.training.runner import OracleCache, subset
+from uav_ac.yopo.whole_body.deployment import YopoPlanner
 from uav_ac.runners.config import load_config
 from uav_ac.runners.whole_body_planning import run_whole_body_planning
 
@@ -20,7 +20,7 @@ def gate(result,*,minimum_valid=.9):
 
 
 def online_config(checkpoint,family,duration):
-    root=Path(__file__).resolve().parents[3]
+    root=Path(__file__).resolve().parents[4]
     values=yaml.safe_load((root/'configs/flight/yopo.yaml').read_text())
     values.update(visualize=False,duration=duration)
     # Small acceptance scenes retain their bounded workspace contract.
@@ -29,7 +29,7 @@ def online_config(checkpoint,family,duration):
     with tempfile.NamedTemporaryFile(mode='w+',suffix='.yaml') as stream:
         yaml.safe_dump(values,stream);stream.flush()
         config=load_config(stream.name)
-        from uav_ac.yopo.data.scenes import write_debug_scene
+        from uav_ac.yopo.whole_body.data.scenes import write_debug_scene
         from uav_ac.runners.whole_body_config import validate_whole_body
         artifacts=root/'runs/yopo_whole_body/acceptance_scenes';artifacts.mkdir(parents=True,exist_ok=True)
         directory=Path(tempfile.mkdtemp(prefix='check_',dir=artifacts))

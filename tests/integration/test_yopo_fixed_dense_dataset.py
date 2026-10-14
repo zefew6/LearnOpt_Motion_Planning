@@ -1,7 +1,7 @@
 import numpy as np
-from uav_ac.yopo.data.config import DatasetConfig
-from uav_ac.yopo.data.generate import generate_dataset
-from uav_ac.yopo.data.dataset import PlanningDataset
+from uav_ac.yopo.whole_body.data.config import DatasetConfig
+from uav_ac.yopo.whole_body.data.generate import generate_dataset
+from uav_ac.yopo.whole_body.data.dataset import PlanningDataset
 
 
 def test_fixed_dense_independent_states_and_bounded_shards(tmp_path):
@@ -19,9 +19,9 @@ def test_fixed_dense_independent_states_and_bounded_shards(tmp_path):
 
 
 def test_cylinder_bounds_are_finite_and_pruning_preserves_guidance(tmp_path):
-    from uav_ac.yopo.training.runner import OracleCache, TrainingConfig, tensors
-    from uav_ac.yopo.model.network import GoalPrimitivePlannerNet
-    from uav_ac.yopo.model.encoding import Normalization
+    from uav_ac.yopo.whole_body.training.runner import OracleCache, TrainingConfig, tensors
+    from uav_ac.yopo.whole_body.model.network import GoalPrimitivePlannerNet
+    from uav_ac.yopo.whole_body.model.encoding import Normalization
     import torch
     generate_dataset(DatasetConfig(profile='fixed_dense_v6',scene_count=3,split_counts=(1,1,1),samples_per_scene=1),tmp_path/'data')
     data=PlanningDataset(tmp_path/'data/dataset',split='train');obs,priv=data[0]

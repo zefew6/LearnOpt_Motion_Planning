@@ -7,8 +7,8 @@ from pathlib import Path
 import shutil
 import xml.etree.ElementTree as ET
 import numpy as np
-from uav_ac.yopo.data.scenes import MODEL_ROOT
-from uav_ac.yopo.contracts import DepthSpec, PlannerObservation
+from uav_ac.yopo.whole_body.data.scenes import MODEL_ROOT
+from uav_ac.yopo.whole_body.contracts import DepthSpec, PlannerObservation
 from uav_ac.planning.trajectory.aerial_manipulator_minco.flatness import recover_state
 from uav_ac.simulation.depth_observation import IdealDepthObserver
 from uav_ac.tasks.whole_body_reaching import heading_and_rate

@@ -2,11 +2,11 @@ import runpy
 import numpy as np
 import pytest
 import torch
-from uav_ac.yopo.model.primitives import make_anchors, parameter_scales
-from uav_ac.yopo.model.network import WholeBodyPlannerNet
-from uav_ac.yopo.trajectory.minco import decode_direct
-from uav_ac.yopo.model.encoding import Normalization, encode_observation
-from uav_ac.yopo.model.checkpoint import save_checkpoint, load_checkpoint
+from uav_ac.yopo.whole_body.model.primitives import make_anchors, parameter_scales
+from uav_ac.yopo.whole_body.model.network import WholeBodyPlannerNet
+from uav_ac.yopo.whole_body.trajectory.minco import decode_direct
+from uav_ac.yopo.whole_body.model.encoding import Normalization, encode_observation
+from uav_ac.yopo.whole_body.model.checkpoint import save_checkpoint, load_checkpoint
 
 
 def obs():return runpy.run_path('tests/unit/yopo/model/test_rolling.py')['moving_observation']()
@@ -59,11 +59,11 @@ def test_checkpoint_rejects_conflicting_geometry_buffers(tmp_path):
 
 def test_deployment_import_has_no_training_or_map_dependencies():
     import subprocess,sys
-    subprocess.run([sys.executable,'-c',"import sys; from uav_ac.yopo.deployment import YopoPlanner; assert 'uav_ac.yopo.training.runner' not in sys.modules; assert 'uav_ac.yopo.training.legacy' not in sys.modules; assert 'uav_ac.yopo.training.legacy' not in sys.modules"],check=True)
+    subprocess.run([sys.executable,'-c',"import sys; from uav_ac.yopo.whole_body.deployment import YopoPlanner; assert 'uav_ac.yopo.whole_body.training.runner' not in sys.modules; assert 'uav_ac.yopo.whole_body.training.oracle' not in sys.modules; assert 'uav_ac.yopo.whole_body.training.oracle' not in sys.modules"],check=True)
 
 
 def test_camera_rays_sample_stride32_feature_centers():
-    from uav_ac.yopo.model.network import camera_feature_grid
+    from uav_ac.yopo.whole_body.model.network import camera_feature_grid
     # Pixel-index 64,32 is the center of output feature index 2,1.
     xy=torch.tensor([[[2*(64+.5)/160-1,2*(32+.5)/96-1],[0.,0.]]])
     grid=camera_feature_grid(xy,(96,160),(3,5))
@@ -73,7 +73,7 @@ def test_camera_rays_sample_stride32_feature_centers():
 
 def test_fixed_gripper_policy_accepts_small_measured_servo_error(tmp_path):
     from dataclasses import replace
-    from uav_ac.yopo.deployment import YopoPlanner
+    from uav_ac.yopo.whole_body.deployment import YopoPlanner
     o=obs();net=WholeBodyPlannerNet(norm())
     save_checkpoint(tmp_path/'policy',net,{'depth_spec':o.depth_spec.as_mapping(),'candidate_count':1,'gripper_gap':float(o.configuration[11])})
     changed=o.configuration.copy();changed[11]+=.0001
@@ -82,7 +82,7 @@ def test_fixed_gripper_policy_accepts_small_measured_servo_error(tmp_path):
 
 
 def test_speed_scaling_keeps_actual_head_and_candidate_selection(tmp_path):
-    from uav_ac.yopo.deployment import YopoPlanner
+    from uav_ac.yopo.whole_body.deployment import YopoPlanner
     o=obs();net=WholeBodyPlannerNet(norm(),score_mode='ranking')
     path=tmp_path/'policy'
     save_checkpoint(path,net,{'depth_spec':o.depth_spec.as_mapping(),'candidate_count':27,'gripper_gap':float(o.configuration[11])})

@@ -3,8 +3,8 @@ from copy import copy
 from dataclasses import asdict, dataclass, replace
 from types import SimpleNamespace
 import numpy as np
-from uav_ac.yopo.trajectory.legacy import InteriorMap
-from uav_ac.yopo.model.encoding import LocalFrame
+from uav_ac.yopo.whole_body.trajectory.parameterization import InteriorMap
+from uav_ac.yopo.whole_body.model.encoding import LocalFrame
 from uav_ac.planning.trajectory.gcopter.optimization import evaluate_minco_objective, integrate_samples
 from uav_ac.planning.trajectory.aerial_manipulator_minco.config import AerialManipulatorMINCOConfig
 from uav_ac.planning.trajectory.aerial_manipulator_minco.constraints import AerialManipulatorTrajectoryEvaluator
@@ -13,7 +13,7 @@ from uav_ac.planning.geometry.esdf import ESDF
 import torch
 from torch.nn import functional as F
 from scipy.special import logsumexp
-from uav_ac.yopo.trajectory.minco import world_problem
+from uav_ac.yopo.whole_body.trajectory.minco import world_problem
 from uav_ac.planning.trajectory.gcopter.mappings import polynomial_basis_matrix
 from uav_ac.planning.trajectory.aerial_manipulator_minco.flatness import recover_state
 
@@ -109,7 +109,7 @@ class PrivilegedEvaluator:
 class RollingEvaluator(PrivilegedEvaluator):
     """Training-only rolling costs; same whole-body geometry, free terminal PVA/time."""
     def evaluate(self,obs,free_batch):
-        from uav_ac.yopo.trajectory.legacy import RollingMap
+        from uav_ac.yopo.whole_body.trajectory.parameterization import RollingMap
         from uav_ac.planning.trajectory.gcopter.minco import MINCOQuintic
         obs.validate_joints(self.robot.limits.joint_lower,self.robot.limits.joint_upper)
         if not np.isclose(obs.configuration[11],self.gripper_gap):

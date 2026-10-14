@@ -1,6 +1,6 @@
 import numpy as np
 from types import SimpleNamespace
-from uav_ac.yopo.validation.audit import audit_candidates
+from uav_ac.yopo.whole_body.validation.audit import audit_candidates
 
 
 def test_audit_finds_component_gradients_and_detects_wrong_backward():
@@ -19,7 +19,7 @@ def test_audit_finds_component_gradients_and_detects_wrong_backward():
 
 
 def test_promotion_requires_both_dense_feasibility_and_real_reaching():
-    from uav_ac.yopo.validation.acceptance import gate
+    from uav_ac.yopo.whole_body.validation.acceptance import gate
     r={'families':{'free':{'samples':1,'selected_dense_valid_fraction':1.}},'online':{'free':{'success':True,'collision':False,'maximum_handoff_body_rate_difference':.1}}}
     assert gate(r)
     r['online']['free']['success']=False;assert not gate(r)
@@ -27,14 +27,14 @@ def test_promotion_requires_both_dense_feasibility_and_real_reaching():
 
 
 def test_gate_rejects_missing_online_family_and_empty_validation():
-    from uav_ac.yopo.validation.acceptance import gate
+    from uav_ac.yopo.whole_body.validation.acceptance import gate
     r={'families':{'free':{'samples':1,'selected_dense_valid_fraction':1.},'wall':{'samples':1,'selected_dense_valid_fraction':1.}},'online':{'free':{'success':True,'collision':False,'maximum_handoff_body_rate_difference':.1}}}
     assert not gate(r)
     del r['families']['wall'];r['families']['free']['samples']=0;assert not gate(r)
 
 
 def test_online_config_does_not_require_pilot_checkpoint(tmp_path):
-    from uav_ac.yopo.validation.acceptance import online_config
+    from uav_ac.yopo.whole_body.validation.acceptance import online_config
     checkpoint=tmp_path/'checkpoint';checkpoint.mkdir()
     (checkpoint/'metadata.json').write_text('{}');(checkpoint/'weights.pt').write_bytes(b'fixture')
     c=online_config(checkpoint,'free',10.)
@@ -45,10 +45,10 @@ def test_online_config_does_not_require_pilot_checkpoint(tmp_path):
 
 def test_neural_audit_rejects_detached_terminal_positions():
     import torch,runpy
-    from uav_ac.yopo.validation.audit import audit_backward
-    from uav_ac.yopo.model.network import PrimitivePlannerNet
-    from uav_ac.yopo.model.primitives import encode_primitive, primitive_anchors
-    from uav_ac.yopo.model.encoding import Normalization
+    from uav_ac.yopo.whole_body.validation.audit import audit_backward
+    from uav_ac.yopo.whole_body.model.network import PrimitivePlannerNet
+    from uav_ac.yopo.whole_body.model.primitives import encode_primitive, primitive_anchors
+    from uav_ac.yopo.whole_body.model.encoding import Normalization
     class Oracle:
         def evaluate(self,obs,z):return SimpleNamespace(costs=(z*z).sum(1),free_gradients=2*z)
     o=runpy.run_path('tests/unit/yopo/model/test_rolling.py')['moving_observation']()
@@ -73,7 +73,7 @@ def test_fd_audit_accounts_for_intentional_surrogate_derivatives():
 
 
 def test_motion_promotion_does_not_impose_extra_gyro_handoff_threshold():
-    from uav_ac.yopo.validation.acceptance import gate
+    from uav_ac.yopo.whole_body.validation.acceptance import gate
     result={'families':{'free':{'samples':1,'selected_dense_valid_fraction':1.}},
             'online':{'free':{'success':True,'collision':False,'maximum_handoff_body_rate_difference':.8}}}
     assert gate(result)

@@ -3,8 +3,8 @@ from dataclasses import dataclass, asdict
 import numpy as np
 import torch
 from torch import nn
-from uav_ac.yopo.model.primitives import parameter_scales, PROFILE, PrimitiveSpec, geometry, primitive_state, local_body_rotation
-from uav_ac.yopo.contracts import DepthSpec
+from uav_ac.yopo.whole_body.model.primitives import parameter_scales, PROFILE, PrimitiveSpec, geometry, primitive_state, local_body_rotation
+from uav_ac.yopo.whole_body.contracts import DepthSpec
 
 class ResidualBlock(nn.Module):
     def __init__(self,cin,cout,stride=1):

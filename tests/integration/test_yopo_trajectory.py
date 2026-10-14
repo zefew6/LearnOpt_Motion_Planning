@@ -2,11 +2,11 @@ from tests.yopo_scenes import scene_path
 from pathlib import Path
 import numpy as np
 from uav_ac.simulation.mujoco_sim import MujocoSimulation
-from uav_ac.yopo.contracts import PlannerObservation
-from uav_ac.yopo.model.encoding import LocalFrame
-from uav_ac.yopo.trajectory.legacy import InteriorMap
-from uav_ac.yopo.trajectory.legacy import decode_trajectory
-from uav_ac.yopo.training.legacy import PrivilegedEvaluator
+from uav_ac.yopo.whole_body.contracts import PlannerObservation
+from uav_ac.yopo.whole_body.model.encoding import LocalFrame
+from uav_ac.yopo.whole_body.trajectory.parameterization import InteriorMap
+from uav_ac.yopo.whole_body.trajectory.parameterization import decode_trajectory
+from uav_ac.yopo.whole_body.training.oracle import PrivilegedEvaluator
 
 
 def test_real_robot_reference_endpoints_and_exact_geometry():

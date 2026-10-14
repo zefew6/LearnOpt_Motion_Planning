@@ -8,17 +8,17 @@ import xml.etree.ElementTree as ET
 import shutil
 import numpy as np
 from uav_ac.planning.trajectory.aerial_manipulator_minco.flatness import recover_state
-from uav_ac.yopo.contracts import PlannerObservation, DepthSpec
+from uav_ac.yopo.whole_body.contracts import PlannerObservation, DepthSpec
 from uav_ac.simulation.depth_observation import IdealDepthObserver
 from uav_ac.simulation.mujoco_sim import MujocoSimulation
 from dataclasses import replace
-from uav_ac.yopo.training.legacy import PrivilegedEvaluator
+from uav_ac.yopo.whole_body.training.oracle import PrivilegedEvaluator
 from uav_ac.planning.trajectory.aerial_manipulator_minco.config import AerialManipulatorMINCOConfig
 from uav_ac.planning.trajectory.aerial_manipulator_minco.trajectory import AerialManipulatorTrajectory
 from uav_ac.planning.trajectory.gcopter.minco import MINCOQuintic
 from uav_ac.tasks.whole_body_reaching import heading_and_rate
 
-MODEL_ROOT=Path(__file__).resolve().parents[2]/'simulation'
+MODEL_ROOT=Path(__file__).resolve().parents[3]/'simulation'
 FAMILIES=('free','obstacle','low','wall')
 OBSTACLES={
     'free':(),
@@ -94,7 +94,7 @@ def write_scene(directory,index,seed,spec,*,profile='stationary_v1'):
     root.find("worldbody/body/include").set('file','model/aerial_manipulator.xml')
     camera=root.find("worldbody/body/camera")
     # XML camera is a fixed body mount; custom configuration must retain that extrinsic.
-    from uav_ac.yopo.contracts import DepthSpec
+    from uav_ac.yopo.whole_body.contracts import DepthSpec
     if not np.allclose(spec.camera_extrinsics,DepthSpec().camera_extrinsics):
         raise ValueError('dataset camera mount must match the robot XML')
     camera.set('resolution',f'{spec.width} {spec.height}')
@@ -142,9 +142,9 @@ def sample_scene(path,config,seed):
             pva=head[:3]
             if config.profile=='rolling_v2':
                 from types import SimpleNamespace
-                from uav_ac.yopo.model.encoding import LocalFrame
-                from uav_ac.yopo.trajectory.legacy import InteriorMap
-                from uav_ac.yopo.trajectory.legacy import decode_trajectory
+                from uav_ac.yopo.whole_body.model.encoding import LocalFrame
+                from uav_ac.yopo.whole_body.trajectory.parameterization import InteriorMap
+                from uav_ac.yopo.whole_body.trajectory.parameterization import decode_trajectory
                 from uav_ac.planning.trajectory.aerial_manipulator_minco.constraints import PhysicalConstraints
                 from uav_ac.planning.trajectory.aerial_manipulator_minco.config import AerialManipulatorMINCOConfig
                 frame=LocalFrame(start[:3],start[3])

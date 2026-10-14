@@ -3,10 +3,10 @@ from dataclasses import dataclass
 import time
 import numpy as np
 import torch
-from uav_ac.yopo.model.checkpoint import load_checkpoint
-from uav_ac.yopo.model.encoding import encode_observation
-from uav_ac.yopo.model.primitives import make_anchors, primitive_anchors, encode_primitive
-from uav_ac.yopo.trajectory.minco import decode_direct
+from uav_ac.yopo.whole_body.model.checkpoint import load_checkpoint
+from uav_ac.yopo.whole_body.model.encoding import encode_observation
+from uav_ac.yopo.whole_body.model.primitives import make_anchors, primitive_anchors, encode_primitive
+from uav_ac.yopo.whole_body.trajectory.minco import decode_direct
 
 # The fixed opening is a servo target; retain the measured state within 0.5 mm.
 GRIPPER_SERVO_TOLERANCE = .0005

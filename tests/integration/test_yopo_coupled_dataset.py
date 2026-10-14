@@ -1,8 +1,8 @@
 import json
 import numpy as np
-from uav_ac.yopo.data.config import DatasetConfig
-from uav_ac.yopo.data.generate import generate_dataset
-from uav_ac.yopo.data.dataset import PlanningDataset
+from uav_ac.yopo.whole_body.data.config import DatasetConfig
+from uav_ac.yopo.whole_body.data.generate import generate_dataset
+from uav_ac.yopo.whole_body.data.dataset import PlanningDataset
 from uav_ac.planning.trajectory.aerial_manipulator_minco.flatness import recover_state
 
 
@@ -24,10 +24,10 @@ def test_coupled_dataset_retains_validated_sources_and_compatible_observations(t
         assert obs.goal.shape==(8,) and obs.depth_m.shape==(96,160)
     # New observations feed the existing direct_v3 analytic guidance interface.
     import torch
-    from uav_ac.yopo.training.runner import OracleCache
-    from uav_ac.yopo.training.losses import guidance_costs
-    from uav_ac.yopo.model.primitives import make_anchors
-    from uav_ac.yopo.model.encoding import Normalization
+    from uav_ac.yopo.whole_body.training.runner import OracleCache
+    from uav_ac.yopo.whole_body.training.losses import guidance_costs
+    from uav_ac.yopo.whole_body.model.primitives import make_anchors
+    from uav_ac.yopo.whole_body.model.encoding import Normalization
     observation,privileged=ds[1];oracle=OracleCache(ds,0.).get(privileged)
     normalization=Normalization(tuple(oracle.robot.limits.joint_lower),tuple(oracle.robot.limits.joint_upper))
     parameters=torch.tensor(make_anchors(observation,normalization,count=1),requires_grad=True)

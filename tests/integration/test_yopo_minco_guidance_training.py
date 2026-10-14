@@ -1,12 +1,12 @@
 from dataclasses import replace
 import numpy as np
 import pytest
-from uav_ac.yopo.training.runner import TrainingConfig, train, OracleCache
-from uav_ac.yopo.data.config import DatasetConfig
-from uav_ac.yopo.data.generate import generate_dataset
-from uav_ac.yopo.data.dataset import PlanningDataset
-from uav_ac.yopo.model.checkpoint import load_checkpoint
-from uav_ac.yopo.deployment import YopoPlanner
+from uav_ac.yopo.whole_body.training.runner import TrainingConfig, train, OracleCache
+from uav_ac.yopo.whole_body.data.config import DatasetConfig
+from uav_ac.yopo.whole_body.data.generate import generate_dataset
+from uav_ac.yopo.whole_body.data.dataset import PlanningDataset
+from uav_ac.yopo.whole_body.model.checkpoint import load_checkpoint
+from uav_ac.yopo.whole_body.deployment import YopoPlanner
 
 
 def test_new_guidance_training_checkpoint_resume_and_actual_state_decode(tmp_path):
@@ -36,14 +36,14 @@ def test_parallel_guidance_matches_serial_with_coarse_auxiliary_map(tmp_path):
     import torch
     from concurrent.futures import ProcessPoolExecutor
     import multiprocessing
-    from uav_ac.yopo.training.runner import _initialize_guidance_worker, _evaluate_guidance_worker
-    from uav_ac.yopo.training.losses import guidance_costs_from_result
+    from uav_ac.yopo.whole_body.training.runner import _initialize_guidance_worker, _evaluate_guidance_worker
+    from uav_ac.yopo.whole_body.training.losses import guidance_costs_from_result
     generate_dataset(DatasetConfig(profile='rolling_v2',scene_count=3,samples_per_scene=1,split_counts=(1,1,1)),tmp_path/'data')
     data=PlanningDataset(tmp_path/'data/dataset',split='train')
     obs,priv=data[0]
     config=TrainingConfig(guidance_profile='yopo_minco_v1',collision_model='exact_geometry',oracle_map_resolution=.2,guidance_workers=2)
-    from uav_ac.yopo.model.primitives import make_anchors
-    from uav_ac.yopo.model.encoding import Normalization
+    from uav_ac.yopo.whole_body.model.primitives import make_anchors
+    from uav_ac.yopo.whole_body.model.encoding import Normalization
     oracle=OracleCache(data,0.,guidance_profile=config.guidance_profile,guidance=config.guidance).get(priv)
     parameters=make_anchors(obs,Normalization(tuple(oracle.robot.limits.joint_lower),tuple(oracle.robot.limits.joint_upper)),count=1)
     fine=OracleCache(data,0.,guidance_profile=config.guidance_profile,guidance=config.guidance).get(priv).evaluate(obs,parameters)

@@ -2,11 +2,11 @@ from pathlib import Path
 import shutil
 import xml.etree.ElementTree as ET
 import numpy as np
-from uav_ac.yopo.contracts import DepthSpec
+from uav_ac.yopo.whole_body.contracts import DepthSpec
 
 
 def test_legacy_generation_only_requires_current_benchmark(monkeypatch,tmp_path):
-    from uav_ac.yopo.data import scenes as scene_sampling
+    from uav_ac.yopo.whole_body.data import scenes as scene_sampling
     source=tmp_path/'simulation';(source/'models').mkdir(parents=True);(source/'model').mkdir()
     shutil.copyfile('uav_ac/simulation/models/yopo_bamboo.xml',source/'models/yopo_bamboo.xml')
     shutil.copyfile('uav_ac/simulation/model/aerial_manipulator.xml',source/'model/aerial_manipulator.xml')

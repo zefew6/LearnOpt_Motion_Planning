@@ -3,11 +3,11 @@ import runpy
 import numpy as np
 import pytest
 import torch
-from uav_ac.yopo.training.legacy import DirectEvaluator
-from uav_ac.yopo.training.losses import ranking_loss, augment_observation
-from uav_ac.yopo.training.losses import guidance_costs
-from uav_ac.yopo.model.primitives import make_anchors
-from uav_ac.yopo.model.encoding import Normalization
+from uav_ac.yopo.whole_body.training.oracle import DirectEvaluator
+from uav_ac.yopo.whole_body.training.losses import ranking_loss, augment_observation
+from uav_ac.yopo.whole_body.training.losses import guidance_costs
+from uav_ac.yopo.whole_body.model.primitives import make_anchors
+from uav_ac.yopo.whole_body.model.encoding import Normalization
 from uav_ac.simulation.mujoco_sim import MujocoSimulation
 
 
@@ -47,7 +47,7 @@ def test_augmentation_preserves_observed_image_and_robot_pose():
 
 def test_training_proxy_clearance_allows_authored_tangent_connections():
     from dataclasses import replace
-    from uav_ac.yopo.training.runner import TrainingConfig
+    from uav_ac.yopo.whole_body.training.runner import TrainingConfig
     from uav_ac.planning.trajectory.aerial_manipulator_minco.config import AerialManipulatorMINCOConfig
     case=runpy.run_path('tests/unit/yopo/test_guidance_gradient.py')
     sim,o,_=case['setup_case']();n=Normalization(tuple(sim.robot.limits.joint_lower),tuple(sim.robot.limits.joint_upper))
@@ -59,14 +59,14 @@ def test_training_proxy_clearance_allows_authored_tangent_connections():
 
 
 def test_checkpoint_selection_prioritizes_constraint_validity():
-    from uav_ac.yopo.training.runner import checkpoint_priority
+    from uav_ac.yopo.whole_body.training.runner import checkpoint_priority
     safe={'selected_valid_fraction':1.,'selected_cost':1000.}
     unsafe={'selected_valid_fraction':0.,'selected_cost':10.}
     assert checkpoint_priority(safe)<checkpoint_priority(unsafe)
 
 
 def test_curriculum_family_selection_and_training_configuration():
-    from uav_ac.yopo.training.runner import TrainingConfig, subset
+    from uav_ac.yopo.whole_body.training.runner import TrainingConfig, subset
     class Data:
         def __len__(self):return 4
         def family_at(self,i):return ('free','obstacle','low','wall')[i]

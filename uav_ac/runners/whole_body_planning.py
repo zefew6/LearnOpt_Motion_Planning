@@ -8,8 +8,8 @@ from uav_ac.control.aerial_manipulator_controller import AerialManipulatorContro
 from uav_ac.robot.aerial_manipulator import AerialManipulator
 from uav_ac.simulation.mujoco_sim import MujocoSimulation
 from uav_ac.simulation.depth_observation import IdealDepthObserver
-from uav_ac.yopo.deployment import YopoPlanner
-from uav_ac.yopo.trajectory.minco import decode_direct
+from uav_ac.yopo.whole_body.deployment import YopoPlanner
+from uav_ac.yopo.whole_body.trajectory.minco import decode_direct
 from uav_ac.planning.trajectory.aerial_manipulator_minco.flatness import recover_state
 from uav_ac.tasks.whole_body_reaching import WholeBodyReaching
 from uav_ac.runners.whole_body_config import WholeBodySettings, benchmark_endpoints

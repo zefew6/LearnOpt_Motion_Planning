@@ -2,10 +2,10 @@ from tests.yopo_scenes import scene_path
 import runpy
 import numpy as np
 import pytest
-from uav_ac.yopo.training.legacy import RollingEvaluator
+from uav_ac.yopo.whole_body.training.oracle import RollingEvaluator
 from uav_ac.simulation.mujoco_sim import MujocoSimulation
-from uav_ac.yopo.trajectory.legacy import RollingMap
-from uav_ac.yopo.model.encoding import LocalFrame
+from uav_ac.yopo.whole_body.trajectory.parameterization import RollingMap
+from uav_ac.yopo.whole_body.model.encoding import LocalFrame
 
 
 def test_progress_and_dynamic_boundary_gradients_match_finite_difference():

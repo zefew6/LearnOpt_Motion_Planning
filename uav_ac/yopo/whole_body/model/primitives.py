@@ -1,9 +1,9 @@
 """Analytic spatial/arm candidate priors; no environment-map dependency."""
 import numpy as np
-from uav_ac.yopo.model.encoding import LocalFrame, wrap, encode_observation
+from uav_ac.yopo.whole_body.model.encoding import LocalFrame, wrap, encode_observation
 from dataclasses import dataclass
 import torch
-from uav_ac.yopo.contracts import DepthSpec
+from uav_ac.yopo.whole_body.contracts import DepthSpec
 
 def parameter_scales(normalization):
     return np.r_[normalization.scales,np.tile(normalization.scales,3),1.,1.]

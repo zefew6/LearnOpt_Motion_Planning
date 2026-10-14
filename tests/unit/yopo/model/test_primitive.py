@@ -2,10 +2,10 @@ from tests.yopo_scenes import scene_path
 import runpy
 import numpy as np
 import torch
-from uav_ac.yopo.model.encoding import Normalization
-from uav_ac.yopo.model.primitives import PrimitiveSpec, primitive_anchors, encode_primitive, primitive_state
-from uav_ac.yopo.model.network import PrimitivePlannerNet
-from uav_ac.yopo.trajectory.minco import decode_direct
+from uav_ac.yopo.whole_body.model.encoding import Normalization
+from uav_ac.yopo.whole_body.model.primitives import PrimitiveSpec, primitive_anchors, encode_primitive, primitive_state
+from uav_ac.yopo.whole_body.model.network import PrimitivePlannerNet
+from uav_ac.yopo.whole_body.trajectory.minco import decode_direct
 
 
 def observation():return runpy.run_path('tests/unit/yopo/model/test_rolling.py')['moving_observation']()
@@ -43,9 +43,9 @@ def test_network_frustum_parameters_independent_tail_gradients_and_actual_head()
 
 def test_new_and_legacy_checkpoints_roundtrip_and_primitive_contract(tmp_path):
     import json,pytest
-    from uav_ac.yopo.model.checkpoint import save_checkpoint, load_checkpoint
-    from uav_ac.yopo.deployment import YopoPlanner
-    from uav_ac.yopo.model.network import WholeBodyPlannerNet
+    from uav_ac.yopo.whole_body.model.checkpoint import save_checkpoint, load_checkpoint
+    from uav_ac.yopo.whole_body.deployment import YopoPlanner
+    from uav_ac.yopo.whole_body.model.network import WholeBodyPlannerNet
     o=observation();n=normalization();meta={'depth_spec':o.depth_spec.as_mapping(),'candidate_count':27,'gripper_gap':o.configuration[11]}
     new=PrimitivePlannerNet(n,width=4,depth_spec=o.depth_spec)
     save_checkpoint(tmp_path/'new',new,meta)
@@ -70,7 +70,7 @@ def test_independent_terminal_and_primitive_derivative_decode():
     assert torch.equal(initial[0,1:],changed[0,1:])
     assert torch.linalg.norm(initial[0,0,8:11]-changed[0,0,8:11])>.25
     assert torch.equal(initial[0,0,:8],changed[0,0,:8])
-    from uav_ac.yopo.model.primitives import local_body_rotation
+    from uav_ac.yopo.whole_body.model.primitives import local_body_rotation
     expected=local_body_rotation(state)[0]@model.primitive_rotations[0]@torch.tensor([np.tanh(.2)*3,0,0],dtype=torch.float32)
     assert torch.allclose(changed[0,0,16:19],expected,atol=1e-6)
     # Extreme offsets stay in their angular region, with overlap and camera-edge clipping.
@@ -83,8 +83,8 @@ def test_independent_terminal_and_primitive_derivative_decode():
 
 
 def test_guidance_gradient_through_primitive_decode_matches_finite_difference():
-    from uav_ac.yopo.training.legacy import DirectEvaluator
-    from uav_ac.yopo.training.losses import guidance_costs
+    from uav_ac.yopo.whole_body.training.oracle import DirectEvaluator
+    from uav_ac.yopo.whole_body.training.losses import guidance_costs
     from uav_ac.simulation.mujoco_sim import MujocoSimulation
     o=observation();n=normalization();model=PrimitivePlannerNet(n,width=4).double()
     e=encode_primitive(o,n);state=torch.tensor(e.state,dtype=torch.float64)
@@ -108,7 +108,7 @@ def test_camera_cells_and_zero_head_match_physical_anchor_initialization():
     state=torch.tensor(e.state);a=torch.tensor(anchors[None],dtype=torch.float32)
     decoded=model.decode(torch.zeros(1,27,34),state,a)[0].detach().numpy()
     assert np.allclose(decoded,anchors,atol=1e-6)
-    from uav_ac.yopo.model.primitives import local_body_rotation
+    from uav_ac.yopo.whole_body.model.primitives import local_body_rotation
     body=local_body_rotation(state)[0].numpy()
     points=(anchors[::3,:3]@body-model.camera_offset.numpy())@model.camera_rotation.numpy()
     xy=points[:,:2]/points[:,2:3]/model.fov_tangent.numpy()
@@ -128,22 +128,22 @@ def test_prediction_head_does_not_force_identical_zero_terminal_outputs():
 
 
 def test_whole_body_goal_terminal_can_hold_and_move_behind_camera():
-    from uav_ac.yopo.model.network import GoalPrimitivePlannerNet
+    from uav_ac.yopo.whole_body.model.network import GoalPrimitivePlannerNet
     o=observation();n=normalization();net=GoalPrimitivePlannerNet(n,width=4)
     e=encode_primitive(o,n,net.spec);state=torch.tensor(e.state);a=torch.tensor(primitive_anchors(o,n,net.spec)[None],dtype=torch.float32)
     raw=torch.zeros(1,27,34)
     assert torch.equal(net.decode(raw,state,a)[:,:,8:11],torch.zeros(1,27,3))
     raw[:,:,8]=-1.
     tail=net.decode(raw,state,a)[:,:,8:11]
-    from uav_ac.yopo.model.primitives import local_body_rotation
+    from uav_ac.yopo.whole_body.model.primitives import local_body_rotation
     assert (torch.einsum('bni,bij->bnj',tail,local_body_rotation(state))[:,:,0]<0).all()
     assert (torch.linalg.vector_norm(tail,dim=-1)<net.spec.tail_max).all()
 
 
 def test_goal_profile_serialization_preserves_v4_semantics(tmp_path):
-    from uav_ac.yopo.model.network import GoalPrimitivePlannerNet
-    from uav_ac.yopo.model.checkpoint import save_checkpoint, load_checkpoint
-    from uav_ac.yopo.deployment import YopoPlanner
+    from uav_ac.yopo.whole_body.model.network import GoalPrimitivePlannerNet
+    from uav_ac.yopo.whole_body.model.checkpoint import save_checkpoint, load_checkpoint
+    from uav_ac.yopo.whole_body.deployment import YopoPlanner
     o=observation();n=normalization();model=GoalPrimitivePlannerNet(n,width=4)
     save_checkpoint(tmp_path/'goal',model,{'candidate_count':27,'depth_spec':o.depth_spec.as_mapping(),'gripper_gap':.06})
     loaded,info=load_checkpoint(tmp_path/'goal')

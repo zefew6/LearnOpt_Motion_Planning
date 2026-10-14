@@ -1,8 +1,8 @@
 import numpy as np
 import pytest
-from uav_ac.yopo.contracts import PlannerObservation
-from uav_ac.yopo.trajectory.legacy import RollingMap, decode_rolling, observation_at, ReferenceSchedule
-from uav_ac.yopo.model.encoding import LocalFrame
+from uav_ac.yopo.whole_body.contracts import PlannerObservation
+from uav_ac.yopo.whole_body.trajectory.parameterization import RollingMap, decode_rolling, observation_at, ReferenceSchedule
+from uav_ac.yopo.whole_body.model.encoding import LocalFrame
 from uav_ac.planning.trajectory.aerial_manipulator_minco.flatness import recover_state
 
 
@@ -71,7 +71,7 @@ def test_coefficients_match_pinned_official_yopo_minco_matrix():
 
 def test_history_rejects_backwards_observations_and_keeps_only_observed_frames():
     from dataclasses import replace
-    from uav_ac.yopo.trajectory.legacy import ObservationHistory
+    from uav_ac.yopo.whole_body.trajectory.parameterization import ObservationHistory
     first=moving_observation();history=ObservationHistory(2)
     history.append(first);history.append(replace(first,timestamp=.6));history.append(replace(first,timestamp=.7))
     assert [frame.timestamp for frame in history.frames]==[.6,.7]

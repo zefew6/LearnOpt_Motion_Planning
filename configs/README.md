@@ -20,10 +20,10 @@ Quickstart flight:
 Bamboo dataset and CUDA training recipe:
 
 ```bash
-MUJOCO_GL=egl .venv/bin/python -m uav_ac.yopo.data.generate \
+MUJOCO_GL=egl .venv/bin/python -m uav_ac.yopo.whole_body.data.generate \
   --config configs/yopo/dataset/yopo_fixed_dense.yaml \
   --run-dir runs/yopo_whole_body/my_bamboo_data
-.venv/bin/python -m uav_ac.yopo.training \
+.venv/bin/python -m uav_ac.yopo.whole_body.training \
   --config configs/yopo/train/yopo_cuda_large.yaml \
   --dataset runs/yopo_whole_body/my_bamboo_data/dataset \
   --run-dir runs/yopo_whole_body/my_bamboo_training

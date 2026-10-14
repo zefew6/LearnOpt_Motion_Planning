@@ -6,10 +6,10 @@ from uav_ac.runners.config import load_config
 
 def config_file(tmp_path):
     # Run artifacts are not shipped: construct a valid local checkpoint fixture.
-    from uav_ac.yopo.model.network import WholeBodyPlannerNet
-    from uav_ac.yopo.model.encoding import Normalization
-    from uav_ac.yopo.contracts import DepthSpec
-    from uav_ac.yopo.model.checkpoint import save_checkpoint
+    from uav_ac.yopo.whole_body.model.network import WholeBodyPlannerNet
+    from uav_ac.yopo.whole_body.model.encoding import Normalization
+    from uav_ac.yopo.whole_body.contracts import DepthSpec
+    from uav_ac.yopo.whole_body.model.checkpoint import save_checkpoint
     n=Normalization((-2.8,-2.2,-2.4,-2.4),(2.8,2.2,2.4,2.4))
     model=WholeBodyPlannerNet(n,score_mode='ranking',width=4)
     checkpoint=tmp_path/'policy';save_checkpoint(checkpoint,model,{'depth_spec':DepthSpec().as_mapping(),'candidate_count':27,'gripper_gap':.06})
@@ -45,7 +45,7 @@ def test_invalid_online_options_fail_before_viewer(tmp_path):
 def test_viewer_precedes_planning_and_feedback_uses_physics_period(monkeypatch,tmp_path):
     from types import SimpleNamespace
     from uav_ac.runners import whole_body_planning as runner
-    from uav_ac.yopo.contracts import DepthSpec
+    from uav_ac.yopo.whole_body.contracts import DepthSpec
     path,_=config_file(tmp_path);config=load_config(path)
     calls=[];periods=[]
     planner=SimpleNamespace(model=SimpleNamespace(depth_spec=DepthSpec()),plan=lambda obs:calls.append('plan'))

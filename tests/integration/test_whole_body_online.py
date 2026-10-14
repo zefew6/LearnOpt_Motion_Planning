@@ -5,7 +5,7 @@ import numpy as np
 from uav_ac.simulation.mujoco_sim import MujocoSimulation
 from uav_ac.control import CascadedController
 from uav_ac.control.aerial_manipulator_controller import AerialManipulatorController
-from uav_ac.yopo.contracts import DepthSpec
+from uav_ac.yopo.whole_body.contracts import DepthSpec
 from uav_ac.planning.trajectory.gcopter.minco import MINCOQuintic
 from uav_ac.planning.trajectory.aerial_manipulator_minco.trajectory import AerialManipulatorTrajectory
 from uav_ac.planning.trajectory.aerial_manipulator_minco.flatness import recover_state
@@ -96,7 +96,7 @@ def test_pending_inference_keeps_controller_running_and_reports_timeout(capsys):
 
 def test_bamboo_benchmark_has_a_collision_free_whole_body_witness():
     from dataclasses import replace
-    from uav_ac.yopo.training.legacy import PrivilegedEvaluator
+    from uav_ac.yopo.whole_body.training.oracle import PrivilegedEvaluator
     from uav_ac.planning.trajectory.aerial_manipulator_minco.config import AerialManipulatorMINCOConfig
     sim=MujocoSimulation('uav_ac/simulation/models/yopo_bamboo.xml',planning_path_capacity=0,record_actual_trajectory=False)
     states=np.zeros((11,8))

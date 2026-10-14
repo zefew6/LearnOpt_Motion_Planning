@@ -15,15 +15,15 @@ from types import SimpleNamespace
 import numpy as np
 import torch
 import yaml
-from uav_ac.yopo.data.config import _UniqueLoader
-from uav_ac.yopo.data.dataset import PlanningDataset
-from uav_ac.yopo.training.legacy import DirectEvaluator
-from uav_ac.yopo.training.losses import ranking_loss, augment_observation, guidance_costs, guidance_costs_from_result, score_loss, calibrate_cost_scale
-from uav_ac.yopo.training.guidance import MincoGuidanceEvaluator, MincoGuidanceConfig
-from uav_ac.yopo.model.network import WholeBodyPlannerNet, PrimitivePlannerNet, GoalPrimitivePlannerNet
-from uav_ac.yopo.model.primitives import PrimitiveSpec, primitive_anchors, encode_primitive, make_anchors
-from uav_ac.yopo.model.encoding import Normalization, encode_observation
-from uav_ac.yopo.model.checkpoint import save_checkpoint, load_checkpoint
+from uav_ac.yopo.whole_body.data.config import _UniqueLoader
+from uav_ac.yopo.whole_body.data.dataset import PlanningDataset
+from uav_ac.yopo.whole_body.training.oracle import DirectEvaluator
+from uav_ac.yopo.whole_body.training.losses import ranking_loss, augment_observation, guidance_costs, guidance_costs_from_result, score_loss, calibrate_cost_scale
+from uav_ac.yopo.whole_body.training.guidance import MincoGuidanceEvaluator, MincoGuidanceConfig
+from uav_ac.yopo.whole_body.model.network import WholeBodyPlannerNet, PrimitivePlannerNet, GoalPrimitivePlannerNet
+from uav_ac.yopo.whole_body.model.primitives import PrimitiveSpec, primitive_anchors, encode_primitive, make_anchors
+from uav_ac.yopo.whole_body.model.encoding import Normalization, encode_observation
+from uav_ac.yopo.whole_body.model.checkpoint import save_checkpoint, load_checkpoint
 from uav_ac.simulation.mujoco_sim import MujocoSimulation
 from uav_ac.planning.trajectory.aerial_manipulator_minco.config import AerialManipulatorMINCOConfig
 
@@ -123,7 +123,7 @@ class OracleCache:
         return self.entries[privileged.scene_id][1]
 
     def get_torch(self,privileged,device):
-        from uav_ac.yopo.training.cuda import TorchGuidance
+        from uav_ac.yopo.whole_body.training.cuda import TorchGuidance
         oracle=self.get(privileged)
         if not hasattr(oracle,'torch_backend'):
             with torch.inference_mode(False):oracle.torch_backend=TorchGuidance(oracle,device)

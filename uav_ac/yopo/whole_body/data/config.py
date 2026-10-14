@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 import numpy as np
 import yaml
-from uav_ac.yopo.contracts import DepthSpec
+from uav_ac.yopo.whole_body.contracts import DepthSpec
 
 class _UniqueLoader(yaml.SafeLoader):
     pass
