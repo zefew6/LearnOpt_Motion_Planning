@@ -4,7 +4,7 @@ Learning and Optimization for Robot Motion Planning and Control.
 
 LearnOpt implements and explores optimization-based planning and learning-based control for quadrotors in MuJoCo. It provides reusable planning libraries, traditional and reinforcement-learning controllers, wind disturbances, and configurable training and deployment experiments.
 
-Built on [Mdhvince/UAV-Autonomous-control](https://github.com/Mdhvince/UAV-Autonomous-control), the project extends the original simulation and tracking framework with FIRI, GCOPTER/MINCO, GCS, BMTP, nonlinear MPC, and PPO with MLP or differentiable MPC policies.
+Built on [Mdhvince/UAV-Autonomous-control](https://github.com/Mdhvince/UAV-Autonomous-control), the project extends the original simulation and tracking framework with FIRI, GCOPTER/MINCO, GCS, BMTP,YOPO, nonlinear MPC, and PPO with MLP or differentiable MPC policies.
 
 ## Current work and future work
 
@@ -16,6 +16,8 @@ Built on [Mdhvince/UAV-Autonomous-control](https://github.com/Mdhvince/UAV-Auton
 - [x] Integrate differentiable MPC into PPO policies (ACMPC)
 - [x] Independently implement biconvex minimum-time planning (BMTP)
 - [x] Add an aerial manipulator platform for research on whole-body motion planning and control
+- [x] Added a MINCO-inspired whole-body motion planner for aerial manipulators.
+- [x] Integrated YOPO (You Only Plan Once), an end-to-end motion planner for UAVs.
 - [ ] Implement diffusion-based motion planning
 
 The flight CLI supports trajectory tracking; the RL training/evaluation entrypoints also support gate racing without a planner or trajectory bank. Implementation details and experiment workflows are documented in the [planning library guide](uav_ac/planning/README.md), [robot guide](uav_ac/robot/README.md), [RL workflow guide](uav_ac/rl/README.md), [gate racing guide](uav_ac/rl/README.md#gate-racing-details), and [contributor guide](AGENTS.md).
@@ -32,6 +34,12 @@ orange curve is the planned trajectory and the blue curve is the actual flight
 path. Convex regions are not drawn in the videos; they are shown separately in
 the FIRI figures below.
 
+### End2End Planner: You Only Plan Once
+
+https://github.com/user-attachments/assets/a96e0a80-8604-49ef-ab24-f9f1183c55a7
+
+**Planner:** YOPO 
+**Controller:** PID
 
 ### Aerial Manipulator Whole Body Planning
 
@@ -220,16 +228,9 @@ neural trajectories with the aerial-manipulator controller in MuJoCo:
 .venv/bin/python -m uav_ac.main --config configs/flight/yopo.yaml
 ```
 
-It requires the local checkpoint named in the YAML. The outdoor scene contains
-282 distributed bamboo poles of varying height, with a winding passable corridor. Each planning tick
-uses one current depth frame and actual robot state to reach the XML-owned 8-D
-final goal. See [online benchmark details](uav_ac/yopo/README.md#online)
-for timing, settings and current model limitations. The single YOPO preset uses
-CUDA inference and the `primitive_goal_v5` checkpoint `best_17000` from the
-fixed-map CUDA training run. It is selected for online testing based on offline
-validation; online navigation success has not yet been established. See the
-[primitive-frame design](uav_ac/yopo/README.md#primitives) and
-[CUDA training recipe](uav_ac/yopo/README.md#cuda-training).
+An end-to-end planner that takes only robot state and depth information as input.
+Requires the checkpoint specified in the YAML. See the
+[YOPO guide](uav_ac/yopo/README.md#online).
 
 
 ## Optional MPC and RL workflows
@@ -350,36 +351,33 @@ For reusable APIs and extension points, see the [planning guide](uav_ac/planning
 2. Z. Wang, X. Zhou, C. Xu, and F. Gao, “Geometrically Constrained Trajectory
    Optimization for Multicopters,” *IEEE Transactions on Robotics*, vol. 38,
    no. 5, pp. 3259–3278, 2022.  
-   DOI: https://doi.org/10.1109/TRO.2022.3160022
 
 3. Q. Wang, Z. Wang, M. Wang, J. Ji, Z. Han, T. Wu, R. Jin, Y. Gao, C. Xu, and
    F. Gao, “Fast Iterative Region Inflation for Computing Large 2-D/3-D Convex
    Regions of Obstacle-Free Space,” *IEEE Transactions on Robotics*, vol. 41,
    pp. 3223–3243, 2025.  
-   DOI: https://doi.org/10.1109/TRO.2025.3562482
 
 4. T. Marcucci, M. Petersen, D. von Wrangel, and R. Tedrake, “Motion Planning
    around Obstacles with Convex Optimization,” *Science Robotics*, vol. 8,
    no. 84, eadf7843, 2023.  
-   DOI: https://doi.org/10.1126/scirobotics.adf7843
 
 5. D. Mellinger and V. Kumar, “Minimum Snap Trajectory Generation and Control
    for Quadrotors,” in *2011 IEEE International Conference on Robotics and
    Automation (ICRA)*, pp. 2520–2525, 2011.  
-   DOI: https://doi.org/10.1109/ICRA.2011.5980409
 
 6. R. Verschueren, G. Frison, D. Kouzoupis, J. Frey, N. van Duijkeren,
    A. Zanelli, B. Novoselnik, T. Albin, R. Quirynen, and M. Diehl,
    “acados—a modular open-source framework for fast embedded optimal control,”
    *Mathematical Programming Computation*, vol. 14, no. 1, pp. 147–183, 2022.  
-   DOI: https://doi.org/10.1007/s12532-021-00208-8
 
 7. P. Werner, T. Marcucci, and D. Rus, “Biconvex Optimization for Smooth
    Minimum-Time Trajectories around Convex Obstacles,” *arXiv preprint
    arXiv:2608.02834*, 2026.
-   https://arxiv.org/abs/2608.02834
 
 8. A. Romero, E. Aljalbout, Y. Song, and D. Scaramuzza, “Actor–Critic Model
    Predictive Control: Differentiable Optimization Meets Reinforcement Learning
    for Agile Flight,” *IEEE Transactions on Robotics*, 2025.
-   DOI: https://doi.org/10.1109/TRO.2025.3644945
+
+9. J. Lu, X. Zhang, H. Shen, L. Xu, and B. Tian, “You Only Plan Once: A Learning-
+   Based One-Stage Planner With Guidance Learning,” *IEEE Robotics and Automation Letters*
+   vol. 9, no. 7, pp. 6083–6090, 2024.

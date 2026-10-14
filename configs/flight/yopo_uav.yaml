@@ -10,9 +10,9 @@ follow_camera: true
 wind: none
 yopo_uav:
   checkpoint: ../../runs/yopo_uav/official_minco_v1
-  device: cuda:0
-  velocity: 3.0
-  replan_dt: 0.1
+  device: cuda
+  velocity: 5.0
+  replan_dt: 1.0
   planning_timeout: 1.0
   max_plan_age: 0.5
   goal_tolerance: 0.5
