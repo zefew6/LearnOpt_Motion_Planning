@@ -38,12 +38,12 @@ MUJOCO_GL=egl .venv/bin/python -m uav_ac.yopo.data.generate \
 .venv/bin/python -m uav_ac.main --config configs/flight/yopo.yaml
 ```
 
-The flight YAML selects the checkpoint and the single interactive XML. Dataset
+The flight YAML selects the checkpoint and `simulation/models/yopo_bamboo.xml`: a
+24×12 m outdoor bamboo map with varied pole heights and an open winding passage. Dataset
 artifacts and old checkpoints remain untouched when the scene/package is changed.
 A working graphical desktop is required for the live viewer.
 
 See [guidance design](../../docs/yopo/GUIDANCE_MINCO.md),
 [CUDA training](../../docs/yopo/CUDA_TRAINING.md),
 [primitive design](../../docs/yopo/PRIMITIVE_V4.md),
-[source mapping](../../docs/yopo/SOURCE.md), and
-[historical experiments](../../docs/yopo/experiments/).
+[source mapping](../../docs/yopo/SOURCE.md).

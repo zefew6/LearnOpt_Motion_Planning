@@ -34,16 +34,15 @@ control. Its feedback and integral period equal the XML physics timestep;
 reference sampling follows YAML `control_dt` (default 10 ms). No robot resets
 occur during motion. Viewer reset reinitializes the episode.
 
-Scene geometry and start/goal live in `simulation/models/whole_body_dense_outdoor.xml`.
+Scene geometry and start/goal live in `simulation/models/yopo_bamboo.xml`.
 XML `whole_body_start` and `whole_body_goal` are
 `[x,y,z,yaw,q1,q2,q3,q4]` in NED/radians. `whole_body_gripper` fixes the commanded
 opening; no manipulation action or object target is present. `planning_bounds`
-sets the task workspace. The scene covers about 24 × 12 m, with 154 distributed trunks (0.9–3.9 m
-high), crowns, five industrial machine/frame remains and five varied-height
-low stumps. Four ruined walls each contain five openings, including stepped
-openings. The base height workspace spans 0.8–3.4 m. A winding route retains
-whole-body clearance across the scene; obstacle generation does not concentrate
-all dense geometry into a few clusters. XML is the source of scene geometry.
+sets the task workspace. The scene covers about 24 × 12 m and contains 282
+bamboo cylinders, 1.09–3.30 m high, with radii 0.045–0.10 m. Poles are spread
+across the map. Shorter poles can intersect the arm below the base; taller poles
+require base avoidance. A winding passage retains whole-body clearance.
+The base height workspace spans 0.8–3.4 m. XML owns all geometry.
 
 `yopo.checkpoint` resolves relative to the YAML; `device` selects CPU/CUDA.
 Checkpoint camera/robot contracts are checked. The physical gripper servo may
@@ -59,19 +58,6 @@ PVA. It increases commanded physical motion rather than viewer playback speed.
 The original network ranking is retained; this is not speed-conditioned training
 or a new collision/dynamics certificate. Nonzero actual start derivatives mean
 the resulting path need not be a uniform time-rescaling of the original curve.
-
-A 5 s real-physics smoke test with factor 1.3 progressed about 2.13 m toward the
-goal, versus about 1.59 m at factor 1.0. Peak actual base speed was 0.58 m/s;
-25 replans were accepted, without collision during this short check. Maximum
-base tracking error increased from 3.50 to 4.73 mm and joint error to 0.00931 rad.
-
-At factor 1.0 the first 3 s always selected candidate 4. The candidates themselves
-were distinct (initial intermediate lateral/vertical standard deviations about
-0.28/0.21 m, with differing arm waypoints). Replacing the depth frame with all
-no-return pixels changed parameters by up to 0.188 in their mixed physical
-units but did not change the selected index. This is a sensitivity probe, not
-proof of adequate visual obstacle avoidance. The overlay exposes the current
-ranking preference without introducing a map-based fallback.
 
 `whole_body` options (defaults in `runners/whole_body_config.py`):
 
@@ -109,70 +95,12 @@ This is soft real time: Python, rendering and the desktop viewer do not guarante
 hard deadlines. A timed-out native inference cannot be forcibly killed inside a
 thread; closing/resetting does not wait for it, and its result is discarded.
 
-## Current validation and limitations
+## Validation limits
 
-The enlarged scene has a ten-piece, stop-at-knot whole-body witness tested in
-`tests/integration/test_whole_body_online.py`. Its NED route alternates between
-wall openings and folds the arm above low obstacles. It is an offline
-geometry/kinematics feasibility check, not a controller-tracked success or an
-optimizer comparison, and is never supplied to the neural planner.
-
-The existing `p4_portal_forest_seed23_v1/best_100` checkpoint was smoke-tested
-at speed factor 1.0 for 5 simulated seconds on this enlarged scene: 25 plans accepted, no collision,
-maximum base tracking error 3.50 mm and joint error 0.00454 rad. The diagnostic
-ended at its configured 5 s limit; this does not establish full-task arrival.
-The goal is initially 22.9 m away, beyond the short-range training distribution.
-Normal interactive runs allow 180 s and display terminal success/failure.
-A desktop run of the enlarged scene continued to 13.52 s and reported a
-physical collision. With factor 1.3 and the candidate overlay, the desktop run
-reported collision at 10.19 s; the current checkpoint still does not solve the
-benchmark. Faster timing improves motion speed, not the learned avoidance quality.
-
-The previous smaller scene's full unit/integration test run had 728 passed,
-2 skipped and three pre-existing failures (gate-racing timing and two fake-viewer
-cycle/reset expectations). Those unrelated behaviors were not changed here.
-
-For the enlarged scene and `yopo` selector, the focused runner/end2end/depth/online
-checks passed (46 tests), and the dense whole-body witness test passed separately.
-The updated graphical entry point was launched on the desktop.
-
-Speed adjustment and actual-head continuity, configuration, runner, depth and
-online tracking checks passed (48 focused tests); real graphical execution also
-exercised the multi-candidate and grasp-frame overlay.
-
-
-## Candidate repetition and curved grasp path investigation
-
-The current checkpoint is a small pilot (72 training examples, best at step
-100), not a demonstrated long-task solution. On the factory start observation:
-
-- All 27 analytic anchor terminal positions are identical; the spatial fan is
-  formed by intermediate waypoints. Predicted terminal x standard deviation is
-  only 0.00066 m (lateral/vertical 0.047/0.038 m).
-- Replacing depth with all no-return pixels changes intermediate xyz parameters
-  by at most 0.046 m and retains selected index 4. This probe establishes limited
-  output response on this observation, not that the depth branch is unused.
-- Two thirds of intermediate xyz residual logits have magnitude above 3, where
-  tanh is nearly saturated. A short 1.5 m goal also retains index 4 and about
-  63% saturation; long-goal distribution mismatch is not the sole explanation.
-- The actual 22.9 m goal becomes an input of 45.8 under the current 0.5 m
-  normalization, versus 3.0 for a 1.5 m goal. The anchor travel distance itself
-  is capped at 1.5 m, so this mismatch does not extend the local horizon.
-- At stationary start, the selected curve's peak jerk rises from 3.55 to
-  7.81 m/s³ when factor 1.3 is applied. Its geometry at stationary start stays
-  unchanged; the factor magnifies its derivatives. With moving actual heads,
-  re-solving can also alter geometry. The default was restored to 1.0.
-
-MINCO gives continuous piecewise curves, but continuity alone does not establish
-reasonable geometry, collision avoidance, or smooth reference handoffs. The
-orange grasp-frame path combines base motion with arm FK; it can turn back even
-when the base path does not. It is a model-predicted path, not an authored
-end-effector objective. Start jerk/body-rate consistency is a soft training
-penalty; it is not enforced as an exact boundary condition at every replan.
-
-Required follow-up before calling this a working planner: redesign diverse
-terminal state primitives with a shared training/deployment representation;
-verify cost/score behavior and residual saturation on held-out depth changes;
-retrain with a substantially broader set of independent current-state samples;
-and validate base/arm geometry, jerk and handoff errors in online actual-physics
-runs. Showing diverse anchor priors is not evidence of learned visual planning.
+The bamboo scene has a ten-piece whole-body collision-free witness in
+`tests/integration/test_whole_body_online.py`. This checks scene feasibility;
+the witness is never supplied to the neural planner. Passing it or successfully
+loading a checkpoint does not establish successful online navigation.
+The selected checkpoint was trained on the earlier wall/tree dataset; changing
+the interactive scene does not retrain it. Observe actual base/arm tracking,
+collisions and final success/failure in the live viewer.

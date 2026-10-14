@@ -1,4 +1,4 @@
-"""Independent single-frame states in fixed, large forest/factory maps.
+"""Independent single-frame states in fixed, large bamboo maps.
 
 No expert trajectories, rollouts or claim of global start-to-goal reachability.
 Each map stays fixed while its initial states vary. Validation/test use other maps.
@@ -17,27 +17,26 @@ def write_fixed_dense_scene(directory,index,seed,spec):
     directory=Path(directory);directory.mkdir(parents=True,exist_ok=True)
     model=directory/'model';model.mkdir(exist_ok=True)
     if not (model/'aerial_manipulator.xml').exists():shutil.copyfile(MODEL_ROOT/'model/aerial_manipulator.xml',model/'aerial_manipulator.xml')
-    root=ET.parse(MODEL_ROOT/'models/whole_body_dense_outdoor.xml').getroot()
+    root=ET.parse(MODEL_ROOT/'models/yopo_bamboo.xml').getroot()
     sid=f'scene_{index:03d}';root.set('model',sid)
     root.find('worldbody/body/include').set('file','model/aerial_manipulator.xml')
     if not np.allclose(spec.camera_extrinsics,DepthSpec().camera_extrinsics):raise ValueError('fixed dense camera mount mismatch')
     camera=root.find('worldbody/body/camera');camera.set('resolution',f'{spec.width} {spec.height}')
     camera.set('focalpixel',f'{spec.intrinsics[0,0]:.12g} {spec.intrinsics[1,1]:.12g}')
-    # Keep the authored portals/passages. Vary complete tree positions together
-    # with their crown, and reflect maps to obtain scene-disjoint geometry.
+    # Reflect and jitter the bamboo poles to obtain scene-disjoint maps.
+    # Each generated map stays fixed while independent states are sampled.
     rng=np.random.default_rng(seed);offsets={}
     for geom in root.findall('worldbody/geom'):
         name=geom.get('name','')
         if not name.startswith('obstacle_'):continue
         pos=np.fromstring(geom.get('pos'),sep=' ')
         if index%2:pos[1]=-pos[1]
-        if 'tree' in name or 'crown' in name or 'bamboo' in name:
-            key=name.replace('trunk','tree').replace('crown','tree')
+        if 'bamboo' in name:
+            key=name
             if key not in offsets:offsets[key]=rng.uniform(-.12,.12,2)
             offset=offsets[key]
             pos[:2]+=offset
         # Unique geometry across maps, even if obstacle names differ from above.
-        if 'wall' in name:pos[0]+=.025*index
         geom.set('pos',' '.join(map(str,pos)))
     ET.indent(root,space='  ');path=directory/f'{sid}.xml';ET.ElementTree(root).write(path,encoding='unicode')
     return sid,'dense',path

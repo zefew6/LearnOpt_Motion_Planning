@@ -31,7 +31,7 @@ OBSTACLES={
 
 def stage_scene_root(family,*,model_root=MODEL_ROOT):
     if family not in FAMILIES:raise ValueError('unknown guidance scene family')
-    root=ET.parse(Path(model_root)/'models/whole_body_dense_outdoor.xml').getroot()
+    root=ET.parse(Path(model_root)/'models/yopo_bamboo.xml').getroot()
     root.set('model',f'yopo_stage_{family}')
     world=root.find('worldbody');custom=root.find('custom')
     for geom in list(world.findall('geom')):

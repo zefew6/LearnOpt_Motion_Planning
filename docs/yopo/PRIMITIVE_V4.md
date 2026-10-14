@@ -69,7 +69,7 @@ Dataset generation, oracle guidance and training stay under `uav_ac/yopo`.
 Training selects `profile: primitive_v4` and requires 27 candidates.
 
 ```bash
-MUJOCO_GL=egl .venv/bin/python -m uav_ac.yopo.training.runner \
+MUJOCO_GL=egl .venv/bin/python -m uav_ac.yopo.training \
   --config configs/yopo/train/yopo_primitive_pilot.yaml \
   --dataset runs/yopo_whole_body/wall_portals_forest_v4/dataset \
   --run-dir runs/yopo_whole_body/my_primitive_pilot
@@ -96,41 +96,10 @@ weights and datasets remain available. Ordinary viewer runs write no artifacts.
 The entry point uses the existing controller, scene and live overlays, without
 a classical map-based fallback.
 
-## Verification and limits
+## Validation limits
 
-Regression tests cover calibrated cell/feature correspondence, right-handed
-frames, unchanged joint features, primitive derivative rotations, independent
-endpoint prediction, inner angular bounds, zero-head initialization/calibration
-agreement, MINCO moving-head continuity, finite-difference guidance gradients,
-legacy/new checkpoint round trips, geometry metadata rejection, train/save/load/
-deploy and resume normalization. A final independent review found a non-default
-resume spec issue; it was reproduced and fixed with a regression test.
-
-The engineering pilot used 24 independent training samples, 6 held-out samples,
-32 optimizer steps, batch size 2, width16 and learning rate 0.0003. Training
-mean cost fell from 307211 to 262542 (14.5%). Held-out selected/candidate constraint
-validity was **0%**. This is evidence that the chain trains and serializes, not
-that it has learned obstacle avoidance. The real-physics diagnostic accepted
-9 plans and collided at 1.79 s; maximum base tracking error was 0.0251 m, joint
-error 0.0865 rad, and handoff body-rate discrepancy 5.26 rad/s. Further data,
-training and constraint/handoff evaluation are required before treating this
-checkpoint as a usable navigation policy. No success claim is made.
-
-The small initial pilot's samples all have zero relative goal yaw. A later
-calibration regression also verifies nonzero relative goal yaw; its anchor yaw
-initialization was corrected without changing the reported pilot's encoding.
-
-References: original YOPO II-A (https://tju-air-lab.github.io/projects/YOPO/YOPO.pdf),
-YOPO-MINCO II-A–C and official branch
-(https://github.com/TJU-Aerial-Robotics/YOPO/tree/YOPO-MINCO).
-
-The desktop YAML/main entry point also ran the new profile, showing selected
-candidate changes (12→3) and reporting collision at 2.71 s. An isolated depth
-sensitivity probe changed the initial selection from 12 to 4 when replacing
-actual depth by all no-return pixels. These establish that the learned output
-and selection are not simply fixed by cell ID; they do not establish good
-avoidance. Different asynchronous runs collided at different times, so the
-single-run 1.79 s diagnostic is not a stable performance estimate.
-
-Final relevant checks: 81 passed, with two unrelated witness tests excluded
-(the scene was unchanged). `git diff --check` passed.
+The tests cover primitive/camera alignment, independent endpoints, current-head
+MINCO continuity, cost gradients, checkpoint round trips and training resume.
+These checks establish interface and numerical consistency; they do not establish
+successful obstacle avoidance or controller-tracked navigation. The current
+flight configuration is for online testing. See the [online task guide](../../uav_ac/tasks/WHOLE_BODY_ONLINE.md).

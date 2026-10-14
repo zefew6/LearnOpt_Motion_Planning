@@ -1,6 +1,6 @@
 # CUDA-trained primitive_goal_v5; best offline checkpoint, for online testing.
 task: whole_body_planning
-scene: whole_body_dense_outdoor
+scene: yopo_bamboo
 planner: yopo
 controller: cascaded
 control_dt: 0.01

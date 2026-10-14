@@ -1,0 +1,329 @@
+<mujoco model="yopo_bamboo">
+  <compiler angle="radian" autolimits="true" />
+  <default>
+    <default class="quadrotor_parts">
+      <geom contype="1" conaffinity="1" />
+    </default>
+  </default>
+  <option timestep="0.001" gravity="0 0 -9.81" integrator="Euler" />
+  <size nuser_site="1" />
+  <statistic center="12 0 1.8" extent="14" />
+  <custom>
+    <numeric name="planning_bounds" data="-.8 -5.8 -3.4 24 5.8 -.8" />
+    <numeric name="flight_limits" data="3 2 8 12 0.7" />
+    <numeric name="whole_body_start" data=".1 0 -1.9 0 0 0 0 0" />
+    <numeric name="whole_body_goal" data="23 0 -1.9 0 0 .15 -.2 .1" />
+    <numeric name="whole_body_gripper" data=".06" />
+  </custom>
+  <visual>
+    <global azimuth="135" elevation="-25" />
+    <map znear=".0001" zfar="100" />
+    <quality offsamples="4" />
+  </visual>
+  <asset>
+    <texture name="ground_grid" type="2d" builtin="checker" width="512" height="512" rgb1="0.55 0.55 0.55" rgb2="0.35 0.35 0.35" />
+    <material name="ground" texture="ground_grid" texrepeat="8 8" texuniform="true" reflectance="0.1" />
+  </asset>
+  <worldbody>
+    <light name="sun" pos="2.5 0 8" dir="-0.3 0.2 -1" directional="true" />
+    <geom name="ground" type="plane" size="16 8 .1" material="ground" pos="12 0 0" />
+    <body name="quadrotor" pos=".1 0 1.9" childclass="quadrotor_parts">
+      <include file="../model/aerial_manipulator.xml" />
+      <camera name="yopo_depth" pos=".13 0 0" xyaxes="0 -1 0 0 0 1" sensorsize="2 2" resolution="160 96" focalpixel="80 83.1384387633" />
+    </body>
+    <site name="start" pos=".1 0 1.9" size=".06" rgba=".1 .8 .9 1" />
+    <site name="goal" pos="23 0 1.9" size=".06" rgba=".8 .2 .9 1" />
+    <geom name="obstacle_bamboo_0" type="cylinder" pos="1.40163 -5.30837 1.36819" size="0.05138 1.36819" rgba="0.132 0.318 0.105 1" />
+    <geom name="obstacle_bamboo_1" type="cylinder" pos="1.32402 -4.45995 1.64597" size="0.07404 1.64597" rgba="0.152 0.371 0.101 1" />
+    <geom name="obstacle_bamboo_2" type="cylinder" pos="1.25168 -3.67566 1.27179" size="0.07103 1.27179" rgba="0.190 0.324 0.076 1" />
+    <geom name="obstacle_bamboo_3" type="cylinder" pos="1.43895 -2.94636 1.30446" size="0.09730 1.30446" rgba="0.158 0.371 0.080 1" />
+    <geom name="obstacle_bamboo_4" type="cylinder" pos="1.40814 -1.40633 1.63771" size="0.09251 1.63771" rgba="0.176 0.401 0.083 1" />
+    <geom name="obstacle_bamboo_5" type="cylinder" pos="1.18629 1.50048 0.67301" size="0.06354 0.67301" rgba="0.171 0.325 0.116 1" />
+    <geom name="obstacle_bamboo_6" type="cylinder" pos="1.40703 2.42425 1.18967" size="0.07713 1.18967" rgba="0.156 0.334 0.095 1" />
+    <geom name="obstacle_bamboo_7" type="cylinder" pos="1.24533 2.87476 1.30407" size="0.06184 1.30407" rgba="0.182 0.403 0.081 1" />
+    <geom name="obstacle_bamboo_8" type="cylinder" pos="1.32542 3.72580 1.18882" size="0.06920 1.18882" rgba="0.186 0.410 0.117 1" />
+    <geom name="obstacle_bamboo_9" type="cylinder" pos="1.43928 5.36965 0.70807" size="0.08171 0.70807" rgba="0.160 0.358 0.113 1" />
+    <geom name="obstacle_bamboo_10" type="cylinder" pos="2.14640 -2.86663 0.66494" size="0.09251 0.66494" rgba="0.144 0.311 0.079 1" />
+    <geom name="obstacle_bamboo_11" type="cylinder" pos="2.01226 -2.39202 1.36860" size="0.08912 1.36860" rgba="0.146 0.338 0.084 1" />
+    <geom name="obstacle_bamboo_12" type="cylinder" pos="2.06750 -1.51627 1.21229" size="0.08592 1.21229" rgba="0.153 0.428 0.109 1" />
+    <geom name="obstacle_bamboo_13" type="cylinder" pos="1.95105 0.60362 0.73490" size="0.08040 0.73490" rgba="0.159 0.319 0.120 1" />
+    <geom name="obstacle_bamboo_14" type="cylinder" pos="1.92553 1.34396 0.77840" size="0.05562 0.77840" rgba="0.153 0.373 0.075 1" />
+    <geom name="obstacle_bamboo_15" type="cylinder" pos="2.22676 2.25857 0.58697" size="0.08256 0.58697" rgba="0.151 0.392 0.114 1" />
+    <geom name="obstacle_bamboo_16" type="cylinder" pos="2.17652 4.38618 0.58168" size="0.06088 0.58168" rgba="0.165 0.358 0.098 1" />
+    <geom name="obstacle_bamboo_17" type="cylinder" pos="1.97816 5.42943 0.72959" size="0.08130 0.72959" rgba="0.143 0.345 0.071 1" />
+    <geom name="obstacle_bamboo_18" type="cylinder" pos="2.69037 -5.19567 0.78448" size="0.04986 0.78448" rgba="0.148 0.410 0.082 1" />
+    <geom name="obstacle_bamboo_19" type="cylinder" pos="2.92184 -4.48536 0.81870" size="0.06429 0.81870" rgba="0.192 0.381 0.113 1" />
+    <geom name="obstacle_bamboo_20" type="cylinder" pos="3.03912 -3.65244 1.35789" size="0.06685 1.35789" rgba="0.158 0.410 0.089 1" />
+    <geom name="obstacle_bamboo_21" type="cylinder" pos="2.87339 -2.42269 0.67744" size="0.06195 0.67744" rgba="0.172 0.396 0.082 1" />
+    <geom name="obstacle_bamboo_22" type="cylinder" pos="2.92581 -1.68315 1.46129" size="0.05375 1.46129" rgba="0.140 0.390 0.087 1" />
+    <geom name="obstacle_bamboo_23" type="cylinder" pos="2.74043 0.07062 1.50112" size="0.08129 1.50112" rgba="0.188 0.361 0.111 1" />
+    <geom name="obstacle_bamboo_24" type="cylinder" pos="2.70802 0.60348 0.63792" size="0.06639 0.63792" rgba="0.182 0.320 0.080 1" />
+    <geom name="obstacle_bamboo_25" type="cylinder" pos="2.97494 1.62357 1.30660" size="0.09044 1.30660" rgba="0.175 0.342 0.092 1" />
+    <geom name="obstacle_bamboo_26" type="cylinder" pos="2.79551 2.37717 0.86039" size="0.05216 0.86039" rgba="0.180 0.335 0.077 1" />
+    <geom name="obstacle_bamboo_27" type="cylinder" pos="2.87871 2.90292 0.65979" size="0.04718 0.65979" rgba="0.139 0.330 0.073 1" />
+    <geom name="obstacle_bamboo_28" type="cylinder" pos="2.74363 3.94180 0.75146" size="0.04987 0.75146" rgba="0.159 0.363 0.094 1" />
+    <geom name="obstacle_bamboo_29" type="cylinder" pos="2.90874 5.46789 0.78623" size="0.09157 0.78623" rgba="0.196 0.381 0.071 1" />
+    <geom name="obstacle_bamboo_30" type="cylinder" pos="3.77535 -5.37931 0.78302" size="0.09516 0.78302" rgba="0.179 0.359 0.087 1" />
+    <geom name="obstacle_bamboo_31" type="cylinder" pos="3.52116 -3.90011 0.72703" size="0.08198 0.72703" rgba="0.169 0.414 0.112 1" />
+    <geom name="obstacle_bamboo_32" type="cylinder" pos="3.52907 -3.09595 1.45691" size="0.07880 1.45691" rgba="0.146 0.316 0.079 1" />
+    <geom name="obstacle_bamboo_33" type="cylinder" pos="3.56381 -2.36723 1.37980" size="0.09381 1.37980" rgba="0.171 0.362 0.112 1" />
+    <geom name="obstacle_bamboo_34" type="cylinder" pos="3.81063 0.93273 1.24666" size="0.08596 1.24666" rgba="0.197 0.429 0.108 1" />
+    <geom name="obstacle_bamboo_35" type="cylinder" pos="3.65381 2.34899 1.36751" size="0.07037 1.36751" rgba="0.189 0.360 0.075 1" />
+    <geom name="obstacle_bamboo_36" type="cylinder" pos="3.54265 3.83623 0.70451" size="0.07568 0.70451" rgba="0.199 0.380 0.115 1" />
+    <geom name="obstacle_bamboo_37" type="cylinder" pos="3.51995 4.39154 1.20069" size="0.07450 1.20069" rgba="0.163 0.369 0.107 1" />
+    <geom name="obstacle_bamboo_38" type="cylinder" pos="3.76944 5.19677 1.43126" size="0.06888 1.43126" rgba="0.131 0.372 0.087 1" />
+    <geom name="obstacle_bamboo_39" type="cylinder" pos="4.48187 -5.21769 1.29400" size="0.06274 1.29400" rgba="0.140 0.353 0.093 1" />
+    <geom name="obstacle_bamboo_40" type="cylinder" pos="4.50828 -4.62701 0.62054" size="0.07644 0.62054" rgba="0.200 0.415 0.091 1" />
+    <geom name="obstacle_bamboo_41" type="cylinder" pos="4.55645 -3.66388 1.25185" size="0.08411 1.25185" rgba="0.172 0.405 0.074 1" />
+    <geom name="obstacle_bamboo_42" type="cylinder" pos="4.25087 -3.11080 0.62452" size="0.09159 0.62452" rgba="0.172 0.402 0.091 1" />
+    <geom name="obstacle_bamboo_43" type="cylinder" pos="4.49299 -2.34007 1.53820" size="0.07539 1.53820" rgba="0.162 0.386 0.087 1" />
+    <geom name="obstacle_bamboo_44" type="cylinder" pos="4.51080 -0.06902 1.34388" size="0.09928 1.34388" rgba="0.198 0.343 0.119 1" />
+    <geom name="obstacle_bamboo_45" type="cylinder" pos="4.45527 1.67699 1.57734" size="0.06807 1.57734" rgba="0.170 0.414 0.102 1" />
+    <geom name="obstacle_bamboo_46" type="cylinder" pos="4.49661 4.37298 0.75179" size="0.07479 0.75179" rgba="0.147 0.396 0.118 1" />
+    <geom name="obstacle_bamboo_47" type="cylinder" pos="4.31283 5.38660 1.28453" size="0.06444 1.28453" rgba="0.195 0.399 0.085 1" />
+    <geom name="obstacle_bamboo_48" type="cylinder" pos="5.07240 -4.68208 1.42924" size="0.07145 1.42924" rgba="0.140 0.317 0.077 1" />
+    <geom name="obstacle_bamboo_49" type="cylinder" pos="5.17991 -3.10833 0.70324" size="0.06698 0.70324" rgba="0.177 0.328 0.115 1" />
+    <geom name="obstacle_bamboo_50" type="cylinder" pos="5.17215 -2.40270 1.49630" size="0.04982 1.49630" rgba="0.188 0.348 0.120 1" />
+    <geom name="obstacle_bamboo_51" type="cylinder" pos="5.24475 -1.49099 1.39256" size="0.08926 1.39256" rgba="0.161 0.359 0.120 1" />
+    <geom name="obstacle_bamboo_52" type="cylinder" pos="5.02949 0.13400 1.58209" size="0.07804 1.58209" rgba="0.165 0.387 0.091 1" />
+    <geom name="obstacle_bamboo_53" type="cylinder" pos="5.25444 1.45776 1.36183" size="0.06896 1.36183" rgba="0.193 0.377 0.103 1" />
+    <geom name="obstacle_bamboo_54" type="cylinder" pos="5.26525 3.19390 0.87482" size="0.08559 0.87482" rgba="0.156 0.361 0.110 1" />
+    <geom name="obstacle_bamboo_55" type="cylinder" pos="5.08037 3.62888 1.34411" size="0.07282 1.34411" rgba="0.147 0.327 0.117 1" />
+    <geom name="obstacle_bamboo_56" type="cylinder" pos="5.35064 5.24834 1.26227" size="0.07785 1.26227" rgba="0.168 0.398 0.118 1" />
+    <geom name="obstacle_bamboo_57" type="cylinder" pos="6.13954 -5.23165 1.26621" size="0.05372 1.26621" rgba="0.191 0.370 0.112 1" />
+    <geom name="obstacle_bamboo_58" type="cylinder" pos="6.09480 -4.72225 0.68500" size="0.05205 0.68500" rgba="0.156 0.323 0.097 1" />
+    <geom name="obstacle_bamboo_59" type="cylinder" pos="5.91962 -1.46915 1.34452" size="0.08975 1.34452" rgba="0.153 0.318 0.098 1" />
+    <geom name="obstacle_bamboo_60" type="cylinder" pos="5.89598 1.44039 1.22482" size="0.09265 1.22482" rgba="0.197 0.385 0.084 1" />
+    <geom name="obstacle_bamboo_61" type="cylinder" pos="6.05225 2.43195 1.20379" size="0.07088 1.20379" rgba="0.163 0.315 0.071 1" />
+    <geom name="obstacle_bamboo_62" type="cylinder" pos="5.89688 3.12027 1.36895" size="0.07323 1.36895" rgba="0.183 0.360 0.110 1" />
+    <geom name="obstacle_bamboo_63" type="cylinder" pos="6.13967 3.80008 0.62877" size="0.05075 0.62877" rgba="0.136 0.316 0.107 1" />
+    <geom name="obstacle_bamboo_64" type="cylinder" pos="6.08601 4.48249 1.33290" size="0.05358 1.33290" rgba="0.173 0.381 0.098 1" />
+    <geom name="obstacle_bamboo_65" type="cylinder" pos="5.97451 5.36009 0.61996" size="0.09534 0.61996" rgba="0.152 0.327 0.096 1" />
+    <geom name="obstacle_bamboo_66" type="cylinder" pos="6.88290 -5.27434 1.35578" size="0.08907 1.35578" rgba="0.166 0.350 0.113 1" />
+    <geom name="obstacle_bamboo_67" type="cylinder" pos="6.60174 -4.50743 1.34668" size="0.05810 1.34668" rgba="0.133 0.375 0.083 1" />
+    <geom name="obstacle_bamboo_68" type="cylinder" pos="6.59495 -3.67182 1.44916" size="0.09094 1.44916" rgba="0.183 0.372 0.107 1" />
+    <geom name="obstacle_bamboo_69" type="cylinder" pos="6.91127 -2.92652 1.44151" size="0.05546 1.44151" rgba="0.134 0.356 0.110 1" />
+    <geom name="obstacle_bamboo_70" type="cylinder" pos="6.71952 -2.12192 1.47363" size="0.06842 1.47363" rgba="0.167 0.428 0.113 1" />
+    <geom name="obstacle_bamboo_71" type="cylinder" pos="6.64159 -1.66498 0.58675" size="0.06625 0.58675" rgba="0.188 0.337 0.087 1" />
+    <geom name="obstacle_bamboo_72" type="cylinder" pos="6.87857 -0.62421 0.65500" size="0.06274 0.65500" rgba="0.190 0.388 0.117 1" />
+    <geom name="obstacle_bamboo_73" type="cylinder" pos="6.62126 2.20428 0.61084" size="0.06434 0.61084" rgba="0.132 0.418 0.074 1" />
+    <geom name="obstacle_bamboo_74" type="cylinder" pos="6.67177 2.88560 1.40103" size="0.07489 1.40103" rgba="0.193 0.404 0.075 1" />
+    <geom name="obstacle_bamboo_75" type="cylinder" pos="6.74775 3.81443 0.77367" size="0.08791 0.77367" rgba="0.155 0.362 0.102 1" />
+    <geom name="obstacle_bamboo_76" type="cylinder" pos="6.94841 4.62565 1.22760" size="0.08127 1.22760" rgba="0.153 0.371 0.070 1" />
+    <geom name="obstacle_bamboo_77" type="cylinder" pos="7.71188 -3.79578 0.79913" size="0.05148 0.79913" rgba="0.192 0.420 0.099 1" />
+    <geom name="obstacle_bamboo_78" type="cylinder" pos="7.69068 -2.90206 0.85071" size="0.08322 0.85071" rgba="0.189 0.410 0.083 1" />
+    <geom name="obstacle_bamboo_79" type="cylinder" pos="7.63350 -1.40269 1.20912" size="0.04832 1.20912" rgba="0.187 0.374 0.077 1" />
+    <geom name="obstacle_bamboo_80" type="cylinder" pos="7.64918 1.34453 1.46976" size="0.08439 1.46976" rgba="0.171 0.372 0.117 1" />
+    <geom name="obstacle_bamboo_81" type="cylinder" pos="7.44611 2.38115 1.30195" size="0.07536 1.30195" rgba="0.182 0.362 0.072 1" />
+    <geom name="obstacle_bamboo_82" type="cylinder" pos="7.54434 3.69607 1.41319" size="0.05326 1.41319" rgba="0.182 0.340 0.097 1" />
+    <geom name="obstacle_bamboo_83" type="cylinder" pos="7.69753 4.45243 1.22439" size="0.04834 1.22439" rgba="0.160 0.405 0.088 1" />
+    <geom name="obstacle_bamboo_84" type="cylinder" pos="7.62727 5.44816 0.70173" size="0.05145 0.70173" rgba="0.161 0.391 0.077 1" />
+    <geom name="obstacle_bamboo_85" type="cylinder" pos="8.15452 -5.27568 1.50365" size="0.08746 1.50365" rgba="0.147 0.403 0.089 1" />
+    <geom name="obstacle_bamboo_86" type="cylinder" pos="8.18915 -2.36168 0.77054" size="0.07357 0.77054" rgba="0.199 0.399 0.085 1" />
+    <geom name="obstacle_bamboo_87" type="cylinder" pos="8.34972 -1.57406 1.63050" size="0.09088 1.63050" rgba="0.186 0.361 0.071 1" />
+    <geom name="obstacle_bamboo_88" type="cylinder" pos="8.15598 -0.63405 1.21309" size="0.05388 1.21309" rgba="0.196 0.391 0.072 1" />
+    <geom name="obstacle_bamboo_89" type="cylinder" pos="8.22960 -0.16513 0.54964" size="0.05411 0.54964" rgba="0.136 0.320 0.096 1" />
+    <geom name="obstacle_bamboo_90" type="cylinder" pos="8.21525 2.10132 1.21182" size="0.06535 1.21182" rgba="0.141 0.330 0.094 1" />
+    <geom name="obstacle_bamboo_91" type="cylinder" pos="8.23539 2.85775 1.37507" size="0.06095 1.37507" rgba="0.184 0.413 0.086 1" />
+    <geom name="obstacle_bamboo_92" type="cylinder" pos="8.24465 3.69044 0.57303" size="0.08449 0.57303" rgba="0.162 0.420 0.088 1" />
+    <geom name="obstacle_bamboo_93" type="cylinder" pos="8.24503 5.23711 1.55348" size="0.08393 1.55348" rgba="0.167 0.350 0.118 1" />
+    <geom name="obstacle_bamboo_94" type="cylinder" pos="9.04036 -4.49083 1.50484" size="0.09563 1.50484" rgba="0.142 0.326 0.079 1" />
+    <geom name="obstacle_bamboo_95" type="cylinder" pos="9.27989 -3.64337 1.47693" size="0.06224 1.47693" rgba="0.139 0.374 0.101 1" />
+    <geom name="obstacle_bamboo_96" type="cylinder" pos="9.20360 -2.91239 0.60095" size="0.09523 0.60095" rgba="0.198 0.399 0.119 1" />
+    <geom name="obstacle_bamboo_97" type="cylinder" pos="9.09619 -2.24161 1.23938" size="0.05071 1.23938" rgba="0.181 0.350 0.072 1" />
+    <geom name="obstacle_bamboo_98" type="cylinder" pos="9.02779 -0.77722 1.55747" size="0.09591 1.55747" rgba="0.186 0.329 0.083 1" />
+    <geom name="obstacle_bamboo_99" type="cylinder" pos="9.18213 0.10302 1.21799" size="0.09858 1.21799" rgba="0.131 0.345 0.074 1" />
+    <geom name="obstacle_bamboo_100" type="cylinder" pos="9.01869 2.12182 1.42918" size="0.06913 1.42918" rgba="0.199 0.330 0.099 1" />
+    <geom name="obstacle_bamboo_101" type="cylinder" pos="9.11425 3.16959 1.20727" size="0.07575 1.20727" rgba="0.192 0.319 0.115 1" />
+    <geom name="obstacle_bamboo_102" type="cylinder" pos="9.15085 3.95254 0.80964" size="0.05068 0.80964" rgba="0.177 0.425 0.091 1" />
+    <geom name="obstacle_bamboo_103" type="cylinder" pos="9.23442 4.68155 1.30673" size="0.07085 1.30673" rgba="0.195 0.385 0.118 1" />
+    <geom name="obstacle_bamboo_104" type="cylinder" pos="9.02083 5.20516 1.50250" size="0.05443 1.50250" rgba="0.176 0.386 0.082 1" />
+    <geom name="obstacle_bamboo_105" type="cylinder" pos="9.99842 -5.18166 1.54978" size="0.09253 1.54978" rgba="0.198 0.312 0.108 1" />
+    <geom name="obstacle_bamboo_106" type="cylinder" pos="9.88935 -4.41132 0.55046" size="0.08283 0.55046" rgba="0.135 0.360 0.090 1" />
+    <geom name="obstacle_bamboo_107" type="cylinder" pos="9.80075 -3.75373 0.77100" size="0.04965 0.77100" rgba="0.196 0.402 0.087 1" />
+    <geom name="obstacle_bamboo_108" type="cylinder" pos="9.99575 -1.64143 1.27250" size="0.06708 1.27250" rgba="0.141 0.354 0.113 1" />
+    <geom name="obstacle_bamboo_109" type="cylinder" pos="10.04911 3.10128 1.35590" size="0.06593 1.35590" rgba="0.171 0.373 0.086 1" />
+    <geom name="obstacle_bamboo_110" type="cylinder" pos="9.95814 3.80165 0.56927" size="0.09540 0.56927" rgba="0.190 0.318 0.103 1" />
+    <geom name="obstacle_bamboo_111" type="cylinder" pos="9.98248 4.53624 1.36163" size="0.05958 1.36163" rgba="0.138 0.316 0.119 1" />
+    <geom name="obstacle_bamboo_112" type="cylinder" pos="10.68490 -5.36501 1.62334" size="0.09433 1.62334" rgba="0.175 0.427 0.113 1" />
+    <geom name="obstacle_bamboo_113" type="cylinder" pos="10.59370 -2.90969 1.34771" size="0.06648 1.34771" rgba="0.165 0.383 0.098 1" />
+    <geom name="obstacle_bamboo_114" type="cylinder" pos="10.53002 -2.16997 0.56195" size="0.05565 0.56195" rgba="0.131 0.320 0.087 1" />
+    <geom name="obstacle_bamboo_115" type="cylinder" pos="10.81745 -1.50907 1.48791" size="0.08361 1.48791" rgba="0.149 0.427 0.088 1" />
+    <geom name="obstacle_bamboo_116" type="cylinder" pos="10.79753 -0.63730 0.82484" size="0.09129 0.82484" rgba="0.132 0.337 0.107 1" />
+    <geom name="obstacle_bamboo_117" type="cylinder" pos="10.78579 1.69182 0.83414" size="0.09196 0.83414" rgba="0.151 0.341 0.106 1" />
+    <geom name="obstacle_bamboo_118" type="cylinder" pos="10.63048 2.26423 0.79315" size="0.07986 0.79315" rgba="0.160 0.360 0.074 1" />
+    <geom name="obstacle_bamboo_119" type="cylinder" pos="10.77226 3.63192 1.30573" size="0.08029 1.30573" rgba="0.180 0.394 0.082 1" />
+    <geom name="obstacle_bamboo_120" type="cylinder" pos="10.68288 4.39196 0.65416" size="0.06988 0.65416" rgba="0.172 0.402 0.107 1" />
+    <geom name="obstacle_bamboo_121" type="cylinder" pos="10.59742 5.42772 0.81269" size="0.06909 0.81269" rgba="0.174 0.372 0.113 1" />
+    <geom name="obstacle_bamboo_122" type="cylinder" pos="11.33010 -5.34820 1.46944" size="0.05395 1.46944" rgba="0.187 0.387 0.095 1" />
+    <geom name="obstacle_bamboo_123" type="cylinder" pos="11.54590 -4.64647 1.31208" size="0.09841 1.31208" rgba="0.144 0.361 0.072 1" />
+    <geom name="obstacle_bamboo_124" type="cylinder" pos="11.34559 -3.73419 0.80063" size="0.08319 0.80063" rgba="0.156 0.319 0.077 1" />
+    <geom name="obstacle_bamboo_125" type="cylinder" pos="11.46558 -2.09322 0.54587" size="0.05684 0.54587" rgba="0.195 0.409 0.070 1" />
+    <geom name="obstacle_bamboo_126" type="cylinder" pos="11.41511 -1.41081 1.56110" size="0.09382 1.56110" rgba="0.140 0.333 0.074 1" />
+    <geom name="obstacle_bamboo_127" type="cylinder" pos="11.38922 0.84411 0.66042" size="0.08283 0.66042" rgba="0.193 0.363 0.108 1" />
+    <geom name="obstacle_bamboo_128" type="cylinder" pos="11.32572 1.49472 1.36908" size="0.05516 1.36908" rgba="0.187 0.368 0.091 1" />
+    <geom name="obstacle_bamboo_129" type="cylinder" pos="11.61118 2.99439 1.42727" size="0.05562 1.42727" rgba="0.166 0.353 0.108 1" />
+    <geom name="obstacle_bamboo_130" type="cylinder" pos="11.42009 3.72918 0.57827" size="0.05638 0.57827" rgba="0.153 0.417 0.088 1" />
+    <geom name="obstacle_bamboo_131" type="cylinder" pos="11.58557 4.70452 0.61236" size="0.08564 0.61236" rgba="0.148 0.378 0.120 1" />
+    <geom name="obstacle_bamboo_132" type="cylinder" pos="12.41295 -5.19689 1.45210" size="0.05553 1.45210" rgba="0.197 0.376 0.086 1" />
+    <geom name="obstacle_bamboo_133" type="cylinder" pos="12.31838 -4.39399 1.18494" size="0.04814 1.18494" rgba="0.135 0.414 0.101 1" />
+    <geom name="obstacle_bamboo_134" type="cylinder" pos="12.22662 -3.92954 0.57715" size="0.08070 0.57715" rgba="0.148 0.383 0.091 1" />
+    <geom name="obstacle_bamboo_135" type="cylinder" pos="12.10934 -2.14069 0.83899" size="0.05920 0.83899" rgba="0.157 0.365 0.091 1" />
+    <geom name="obstacle_bamboo_136" type="cylinder" pos="12.41869 -1.49001 1.27382" size="0.07694 1.27382" rgba="0.184 0.355 0.074 1" />
+    <geom name="obstacle_bamboo_137" type="cylinder" pos="12.34630 0.68229 1.60800" size="0.06541 1.60800" rgba="0.192 0.375 0.101 1" />
+    <geom name="obstacle_bamboo_138" type="cylinder" pos="12.10491 1.61759 1.30341" size="0.07324 1.30341" rgba="0.136 0.382 0.117 1" />
+    <geom name="obstacle_bamboo_139" type="cylinder" pos="12.26390 3.02273 1.44644" size="0.05070 1.44644" rgba="0.168 0.415 0.098 1" />
+    <geom name="obstacle_bamboo_140" type="cylinder" pos="12.06991 3.92623 0.71810" size="0.09082 0.71810" rgba="0.166 0.338 0.111 1" />
+    <geom name="obstacle_bamboo_141" type="cylinder" pos="12.24949 5.12269 1.60992" size="0.08419 1.60992" rgba="0.131 0.400 0.082 1" />
+    <geom name="obstacle_bamboo_142" type="cylinder" pos="13.08770 -4.39250 0.57889" size="0.04728 0.57889" rgba="0.149 0.373 0.075 1" />
+    <geom name="obstacle_bamboo_143" type="cylinder" pos="13.17810 -3.76729 1.32707" size="0.05300 1.32707" rgba="0.186 0.419 0.089 1" />
+    <geom name="obstacle_bamboo_144" type="cylinder" pos="12.94398 -3.06765 0.58697" size="0.08841 0.58697" rgba="0.193 0.367 0.085 1" />
+    <geom name="obstacle_bamboo_145" type="cylinder" pos="13.02307 -2.38534 1.35289" size="0.09533 1.35289" rgba="0.189 0.340 0.099 1" />
+    <geom name="obstacle_bamboo_146" type="cylinder" pos="12.91801 -1.50791 0.59411" size="0.09951 0.59411" rgba="0.199 0.366 0.071 1" />
+    <geom name="obstacle_bamboo_147" type="cylinder" pos="13.09828 0.92006 1.46847" size="0.05817 1.46847" rgba="0.172 0.379 0.085 1" />
+    <geom name="obstacle_bamboo_148" type="cylinder" pos="12.91322 1.45008 1.46930" size="0.04688 1.46930" rgba="0.144 0.336 0.116 1" />
+    <geom name="obstacle_bamboo_149" type="cylinder" pos="13.00161 2.26881 1.63006" size="0.07654 1.63006" rgba="0.174 0.378 0.076 1" />
+    <geom name="obstacle_bamboo_150" type="cylinder" pos="12.90447 3.04586 0.62672" size="0.06152 0.62672" rgba="0.182 0.395 0.087 1" />
+    <geom name="obstacle_bamboo_151" type="cylinder" pos="12.89571 3.63905 1.60686" size="0.07372 1.60686" rgba="0.158 0.310 0.094 1" />
+    <geom name="obstacle_bamboo_152" type="cylinder" pos="13.75809 -5.13105 1.64663" size="0.07957 1.64663" rgba="0.177 0.349 0.072 1" />
+    <geom name="obstacle_bamboo_153" type="cylinder" pos="13.84583 -4.40107 0.68509" size="0.08486 0.68509" rgba="0.199 0.404 0.073 1" />
+    <geom name="obstacle_bamboo_154" type="cylinder" pos="13.82392 -3.81665 1.49608" size="0.06018 1.49608" rgba="0.148 0.407 0.092 1" />
+    <geom name="obstacle_bamboo_155" type="cylinder" pos="13.84951 -2.37987 0.74545" size="0.08309 0.74545" rgba="0.189 0.317 0.084 1" />
+    <geom name="obstacle_bamboo_156" type="cylinder" pos="13.86085 -0.16957 0.67712" size="0.07279 0.67712" rgba="0.160 0.391 0.107 1" />
+    <geom name="obstacle_bamboo_157" type="cylinder" pos="13.90400 0.64314 1.38022" size="0.06719 1.38022" rgba="0.157 0.389 0.100 1" />
+    <geom name="obstacle_bamboo_158" type="cylinder" pos="13.81103 1.62221 1.44280" size="0.09311 1.44280" rgba="0.156 0.323 0.104 1" />
+    <geom name="obstacle_bamboo_159" type="cylinder" pos="13.70058 2.41705 0.85162" size="0.05041 0.85162" rgba="0.152 0.390 0.083 1" />
+    <geom name="obstacle_bamboo_160" type="cylinder" pos="13.97568 2.95871 0.58765" size="0.04757 0.58765" rgba="0.139 0.411 0.074 1" />
+    <geom name="obstacle_bamboo_161" type="cylinder" pos="13.84066 4.43402 0.86893" size="0.08684 0.86893" rgba="0.157 0.342 0.070 1" />
+    <geom name="obstacle_bamboo_162" type="cylinder" pos="14.69711 -5.46936 0.65711" size="0.08938 0.65711" rgba="0.177 0.420 0.074 1" />
+    <geom name="obstacle_bamboo_163" type="cylinder" pos="14.69688 -2.44249 0.70143" size="0.05998 0.70143" rgba="0.135 0.327 0.099 1" />
+    <geom name="obstacle_bamboo_164" type="cylinder" pos="14.45307 -0.05035 0.68670" size="0.08563 0.68670" rgba="0.197 0.344 0.083 1" />
+    <geom name="obstacle_bamboo_165" type="cylinder" pos="14.65104 0.78594 0.64983" size="0.07488 0.64983" rgba="0.178 0.316 0.117 1" />
+    <geom name="obstacle_bamboo_166" type="cylinder" pos="14.63312 1.64281 1.61971" size="0.06328 1.61971" rgba="0.168 0.376 0.093 1" />
+    <geom name="obstacle_bamboo_167" type="cylinder" pos="14.48152 2.34423 1.31730" size="0.06515 1.31730" rgba="0.179 0.385 0.104 1" />
+    <geom name="obstacle_bamboo_168" type="cylinder" pos="14.62253 2.96499 0.82346" size="0.06042 0.82346" rgba="0.194 0.413 0.116 1" />
+    <geom name="obstacle_bamboo_169" type="cylinder" pos="14.70793 3.78521 1.24809" size="0.04965 1.24809" rgba="0.160 0.346 0.074 1" />
+    <geom name="obstacle_bamboo_170" type="cylinder" pos="14.62837 4.52682 1.40397" size="0.06324 1.40397" rgba="0.182 0.384 0.115 1" />
+    <geom name="obstacle_bamboo_171" type="cylinder" pos="14.45945 5.45682 0.63721" size="0.07474 0.63721" rgba="0.144 0.334 0.077 1" />
+    <geom name="obstacle_bamboo_172" type="cylinder" pos="15.23836 -5.40700 0.75286" size="0.08231 0.75286" rgba="0.142 0.353 0.104 1" />
+    <geom name="obstacle_bamboo_173" type="cylinder" pos="15.42463 -4.44371 0.86292" size="0.04628 0.86292" rgba="0.158 0.317 0.111 1" />
+    <geom name="obstacle_bamboo_174" type="cylinder" pos="15.53487 -3.81664 0.86448" size="0.05321 0.86448" rgba="0.137 0.423 0.073 1" />
+    <geom name="obstacle_bamboo_175" type="cylinder" pos="15.43658 -2.87319 1.63088" size="0.06580 1.63088" rgba="0.191 0.418 0.075 1" />
+    <geom name="obstacle_bamboo_176" type="cylinder" pos="15.44316 -2.41386 1.38028" size="0.06093 1.38028" rgba="0.179 0.410 0.095 1" />
+    <geom name="obstacle_bamboo_177" type="cylinder" pos="15.47045 -1.68862 1.49768" size="0.08112 1.49768" rgba="0.174 0.332 0.088 1" />
+    <geom name="obstacle_bamboo_178" type="cylinder" pos="15.25575 0.65829 1.39915" size="0.05958 1.39915" rgba="0.163 0.358 0.071 1" />
+    <geom name="obstacle_bamboo_179" type="cylinder" pos="15.38396 1.40832 1.53494" size="0.05925 1.53494" rgba="0.143 0.418 0.105 1" />
+    <geom name="obstacle_bamboo_180" type="cylinder" pos="15.38620 2.29003 0.82372" size="0.08983 0.82372" rgba="0.197 0.368 0.110 1" />
+    <geom name="obstacle_bamboo_181" type="cylinder" pos="15.31301 3.10357 0.67690" size="0.05673 0.67690" rgba="0.199 0.353 0.077 1" />
+    <geom name="obstacle_bamboo_182" type="cylinder" pos="15.45207 5.46320 1.62831" size="0.06981 1.62831" rgba="0.178 0.351 0.077 1" />
+    <geom name="obstacle_bamboo_183" type="cylinder" pos="16.08333 -5.29839 1.60159" size="0.07127 1.60159" rgba="0.193 0.387 0.081 1" />
+    <geom name="obstacle_bamboo_184" type="cylinder" pos="16.06500 -4.69165 1.34352" size="0.08472 1.34352" rgba="0.191 0.326 0.099 1" />
+    <geom name="obstacle_bamboo_185" type="cylinder" pos="16.18571 -2.96284 1.61487" size="0.05212 1.61487" rgba="0.184 0.400 0.080 1" />
+    <geom name="obstacle_bamboo_186" type="cylinder" pos="16.06339 -2.36980 1.30443" size="0.06065 1.30443" rgba="0.143 0.332 0.117 1" />
+    <geom name="obstacle_bamboo_187" type="cylinder" pos="16.10548 -1.43593 1.50312" size="0.05136 1.50312" rgba="0.171 0.315 0.081 1" />
+    <geom name="obstacle_bamboo_188" type="cylinder" pos="16.05286 1.37035 0.71456" size="0.07524 0.71456" rgba="0.163 0.348 0.117 1" />
+    <geom name="obstacle_bamboo_189" type="cylinder" pos="15.98642 2.19863 0.59813" size="0.06251 0.59813" rgba="0.166 0.383 0.101 1" />
+    <geom name="obstacle_bamboo_190" type="cylinder" pos="16.25865 3.01781 0.81305" size="0.05557 0.81305" rgba="0.150 0.353 0.091 1" />
+    <geom name="obstacle_bamboo_191" type="cylinder" pos="16.23882 3.95775 1.43422" size="0.08192 1.43422" rgba="0.183 0.312 0.072 1" />
+    <geom name="obstacle_bamboo_192" type="cylinder" pos="16.23568 5.24793 0.60358" size="0.06374 0.60358" rgba="0.137 0.379 0.094 1" />
+    <geom name="obstacle_bamboo_193" type="cylinder" pos="16.81972 -5.39604 1.59618" size="0.07915 1.59618" rgba="0.158 0.417 0.101 1" />
+    <geom name="obstacle_bamboo_194" type="cylinder" pos="16.77016 -4.64017 1.59533" size="0.08954 1.59533" rgba="0.185 0.322 0.117 1" />
+    <geom name="obstacle_bamboo_195" type="cylinder" pos="16.84993 -3.78364 1.24742" size="0.05613 1.24742" rgba="0.192 0.329 0.074 1" />
+    <geom name="obstacle_bamboo_196" type="cylinder" pos="16.89970 -2.43678 1.24879" size="0.06099 1.24879" rgba="0.135 0.371 0.119 1" />
+    <geom name="obstacle_bamboo_197" type="cylinder" pos="16.84256 -1.66459 0.87340" size="0.07228 0.87340" rgba="0.157 0.411 0.082 1" />
+    <geom name="obstacle_bamboo_198" type="cylinder" pos="16.79493 -0.76614 0.80969" size="0.09213 0.80969" rgba="0.145 0.427 0.117 1" />
+    <geom name="obstacle_bamboo_199" type="cylinder" pos="16.92970 1.59756 1.18580" size="0.06899 1.18580" rgba="0.195 0.406 0.106 1" />
+    <geom name="obstacle_bamboo_200" type="cylinder" pos="16.96485 2.14665 1.64867" size="0.04631 1.64867" rgba="0.176 0.370 0.119 1" />
+    <geom name="obstacle_bamboo_201" type="cylinder" pos="16.91813 3.00538 1.40304" size="0.09272 1.40304" rgba="0.195 0.327 0.072 1" />
+    <geom name="obstacle_bamboo_202" type="cylinder" pos="16.86307 3.85466 0.78341" size="0.08117 0.78341" rgba="0.197 0.347 0.106 1" />
+    <geom name="obstacle_bamboo_203" type="cylinder" pos="16.79318 4.52195 1.45981" size="0.05205 1.45981" rgba="0.169 0.363 0.114 1" />
+    <geom name="obstacle_bamboo_204" type="cylinder" pos="17.04925 5.24667 0.63024" size="0.06270 0.63024" rgba="0.139 0.382 0.105 1" />
+    <geom name="obstacle_bamboo_205" type="cylinder" pos="17.88646 -5.21825 0.80564" size="0.08909 0.80564" rgba="0.160 0.319 0.073 1" />
+    <geom name="obstacle_bamboo_206" type="cylinder" pos="17.83616 -4.56085 1.30561" size="0.08847 1.30561" rgba="0.160 0.365 0.107 1" />
+    <geom name="obstacle_bamboo_207" type="cylinder" pos="17.72858 -3.92684 1.26683" size="0.08715 1.26683" rgba="0.182 0.384 0.113 1" />
+    <geom name="obstacle_bamboo_208" type="cylinder" pos="17.85236 -3.02877 1.41236" size="0.07632 1.41236" rgba="0.172 0.353 0.080 1" />
+    <geom name="obstacle_bamboo_209" type="cylinder" pos="17.64564 -2.27490 1.56021" size="0.05021 1.56021" rgba="0.185 0.403 0.076 1" />
+    <geom name="obstacle_bamboo_210" type="cylinder" pos="17.70223 -0.59341 0.58731" size="0.09089 0.58731" rgba="0.162 0.341 0.108 1" />
+    <geom name="obstacle_bamboo_211" type="cylinder" pos="17.85230 1.60730 1.60601" size="0.04930 1.60601" rgba="0.171 0.428 0.109 1" />
+    <geom name="obstacle_bamboo_212" type="cylinder" pos="17.68420 2.13458 0.83805" size="0.09800 0.83805" rgba="0.168 0.365 0.115 1" />
+    <geom name="obstacle_bamboo_213" type="cylinder" pos="17.80947 3.87828 1.49975" size="0.09830 1.49975" rgba="0.145 0.412 0.096 1" />
+    <geom name="obstacle_bamboo_214" type="cylinder" pos="17.88411 4.71444 0.74082" size="0.06205 0.74082" rgba="0.183 0.342 0.113 1" />
+    <geom name="obstacle_bamboo_215" type="cylinder" pos="18.58339 -4.57635 1.24849" size="0.09270 1.24849" rgba="0.173 0.387 0.090 1" />
+    <geom name="obstacle_bamboo_216" type="cylinder" pos="18.53042 -3.89784 1.47858" size="0.04517 1.47858" rgba="0.183 0.421 0.081 1" />
+    <geom name="obstacle_bamboo_217" type="cylinder" pos="18.33981 -2.41864 1.62290" size="0.04616 1.62290" rgba="0.146 0.360 0.110 1" />
+    <geom name="obstacle_bamboo_218" type="cylinder" pos="18.36343 -1.36766 0.86117" size="0.04514 0.86117" rgba="0.197 0.354 0.103 1" />
+    <geom name="obstacle_bamboo_219" type="cylinder" pos="18.31816 -0.80192 1.26684" size="0.06670 1.26684" rgba="0.189 0.411 0.086 1" />
+    <geom name="obstacle_bamboo_220" type="cylinder" pos="18.38446 -0.06140 1.39381" size="0.09242 1.39381" rgba="0.153 0.386 0.080 1" />
+    <geom name="obstacle_bamboo_221" type="cylinder" pos="18.52363 2.31805 1.32980" size="0.08456 1.32980" rgba="0.180 0.318 0.074 1" />
+    <geom name="obstacle_bamboo_222" type="cylinder" pos="18.31682 2.95831 0.61022" size="0.05057 0.61022" rgba="0.150 0.387 0.112 1" />
+    <geom name="obstacle_bamboo_223" type="cylinder" pos="19.35644 -5.27889 1.45588" size="0.05883 1.45588" rgba="0.143 0.311 0.101 1" />
+    <geom name="obstacle_bamboo_224" type="cylinder" pos="19.11025 -4.71751 1.57671" size="0.09405 1.57671" rgba="0.167 0.429 0.091 1" />
+    <geom name="obstacle_bamboo_225" type="cylinder" pos="19.38763 -3.78134 0.63993" size="0.05168 0.63993" rgba="0.152 0.322 0.111 1" />
+    <geom name="obstacle_bamboo_226" type="cylinder" pos="19.34142 -2.98355 1.23682" size="0.07151 1.23682" rgba="0.191 0.368 0.089 1" />
+    <geom name="obstacle_bamboo_227" type="cylinder" pos="19.10601 -2.13534 0.77100" size="0.07827 0.77100" rgba="0.184 0.353 0.087 1" />
+    <geom name="obstacle_bamboo_228" type="cylinder" pos="19.29816 -1.34868 0.85405" size="0.05023 0.85405" rgba="0.180 0.362 0.112 1" />
+    <geom name="obstacle_bamboo_229" type="cylinder" pos="19.30536 -0.86159 0.78388" size="0.08127 0.78388" rgba="0.156 0.381 0.080 1" />
+    <geom name="obstacle_bamboo_230" type="cylinder" pos="19.22404 -0.12573 1.50328" size="0.08205 1.50328" rgba="0.180 0.340 0.095 1" />
+    <geom name="obstacle_bamboo_231" type="cylinder" pos="19.37155 3.08149 1.50777" size="0.09309 1.50777" rgba="0.168 0.384 0.117 1" />
+    <geom name="obstacle_bamboo_232" type="cylinder" pos="19.30537 3.68837 0.67318" size="0.05534 0.67318" rgba="0.133 0.367 0.112 1" />
+    <geom name="obstacle_bamboo_233" type="cylinder" pos="19.17778 4.71125 0.64394" size="0.06978 0.64394" rgba="0.165 0.332 0.082 1" />
+    <geom name="obstacle_bamboo_234" type="cylinder" pos="19.23475 5.34260 1.40639" size="0.06269 1.40639" rgba="0.140 0.408 0.084 1" />
+    <geom name="obstacle_bamboo_235" type="cylinder" pos="20.18526 -2.24678 0.80514" size="0.04969 0.80514" rgba="0.196 0.365 0.097 1" />
+    <geom name="obstacle_bamboo_236" type="cylinder" pos="20.20555 -1.45132 1.63993" size="0.04589 1.63993" rgba="0.198 0.349 0.110 1" />
+    <geom name="obstacle_bamboo_237" type="cylinder" pos="20.08840 -0.86366 1.26601" size="0.06818 1.26601" rgba="0.137 0.382 0.106 1" />
+    <geom name="obstacle_bamboo_238" type="cylinder" pos="20.01915 -0.14308 0.87195" size="0.08520 0.87195" rgba="0.167 0.402 0.099 1" />
+    <geom name="obstacle_bamboo_239" type="cylinder" pos="20.03606 2.33252 0.79668" size="0.06065 0.79668" rgba="0.140 0.390 0.090 1" />
+    <geom name="obstacle_bamboo_240" type="cylinder" pos="19.93758 3.71230 0.60293" size="0.08180 0.60293" rgba="0.165 0.415 0.110 1" />
+    <geom name="obstacle_bamboo_241" type="cylinder" pos="19.88586 4.66482 0.72193" size="0.09309 0.72193" rgba="0.173 0.349 0.078 1" />
+    <geom name="obstacle_bamboo_242" type="cylinder" pos="20.21530 5.33543 1.25689" size="0.08433 1.25689" rgba="0.141 0.319 0.088 1" />
+    <geom name="obstacle_bamboo_243" type="cylinder" pos="20.95917 -5.43507 0.70709" size="0.05663 0.70709" rgba="0.197 0.374 0.108 1" />
+    <geom name="obstacle_bamboo_244" type="cylinder" pos="20.97463 -4.39527 0.60754" size="0.06307 0.60754" rgba="0.145 0.344 0.084 1" />
+    <geom name="obstacle_bamboo_245" type="cylinder" pos="20.69684 -3.86791 1.53774" size="0.08449 1.53774" rgba="0.135 0.358 0.085 1" />
+    <geom name="obstacle_bamboo_246" type="cylinder" pos="20.66281 -2.96248 1.37296" size="0.09443 1.37296" rgba="0.160 0.362 0.101 1" />
+    <geom name="obstacle_bamboo_247" type="cylinder" pos="20.69445 -2.26611 1.19592" size="0.07031 1.19592" rgba="0.185 0.378 0.077 1" />
+    <geom name="obstacle_bamboo_248" type="cylinder" pos="20.96723 -1.68322 1.46668" size="0.06158 1.46668" rgba="0.149 0.358 0.083 1" />
+    <geom name="obstacle_bamboo_249" type="cylinder" pos="20.91216 -0.67399 0.58001" size="0.07282 0.58001" rgba="0.145 0.422 0.082 1" />
+    <geom name="obstacle_bamboo_250" type="cylinder" pos="20.86039 1.41954 1.45301" size="0.09001 1.45301" rgba="0.182 0.319 0.110 1" />
+    <geom name="obstacle_bamboo_251" type="cylinder" pos="20.71659 2.11294 1.57578" size="0.07142 1.57578" rgba="0.180 0.379 0.091 1" />
+    <geom name="obstacle_bamboo_252" type="cylinder" pos="20.77874 2.91393 0.73846" size="0.08239 0.73846" rgba="0.165 0.334 0.110 1" />
+    <geom name="obstacle_bamboo_253" type="cylinder" pos="20.85756 4.37438 1.41743" size="0.08323 1.41743" rgba="0.181 0.339 0.100 1" />
+    <geom name="obstacle_bamboo_254" type="cylinder" pos="20.77824 5.22866 1.40800" size="0.08390 1.40800" rgba="0.180 0.367 0.117 1" />
+    <geom name="obstacle_bamboo_255" type="cylinder" pos="21.47424 -5.12593 1.21771" size="0.07732 1.21771" rgba="0.196 0.348 0.079 1" />
+    <geom name="obstacle_bamboo_256" type="cylinder" pos="21.74970 -4.44110 0.62678" size="0.06295 0.62678" rgba="0.140 0.398 0.105 1" />
+    <geom name="obstacle_bamboo_257" type="cylinder" pos="21.45989 -3.00841 0.75653" size="0.05457 0.75653" rgba="0.165 0.326 0.077 1" />
+    <geom name="obstacle_bamboo_258" type="cylinder" pos="21.72252 -2.25882 0.80640" size="0.07269 0.80640" rgba="0.141 0.376 0.100 1" />
+    <geom name="obstacle_bamboo_259" type="cylinder" pos="21.79208 -1.38773 0.76436" size="0.06411 0.76436" rgba="0.191 0.313 0.111 1" />
+    <geom name="obstacle_bamboo_260" type="cylinder" pos="21.48053 -0.65904 1.46404" size="0.05194 1.46404" rgba="0.171 0.353 0.118 1" />
+    <geom name="obstacle_bamboo_261" type="cylinder" pos="21.62018 1.39217 1.36679" size="0.06954 1.36679" rgba="0.178 0.362 0.082 1" />
+    <geom name="obstacle_bamboo_262" type="cylinder" pos="21.69170 2.11985 0.62033" size="0.06973 0.62033" rgba="0.144 0.325 0.082 1" />
+    <geom name="obstacle_bamboo_263" type="cylinder" pos="21.58775 3.09236 0.58755" size="0.09108 0.58755" rgba="0.185 0.346 0.080 1" />
+    <geom name="obstacle_bamboo_264" type="cylinder" pos="21.68529 3.94555 1.23845" size="0.09321 1.23845" rgba="0.174 0.347 0.096 1" />
+    <geom name="obstacle_bamboo_265" type="cylinder" pos="22.36954 -5.15193 1.26802" size="0.07814 1.26802" rgba="0.140 0.314 0.107 1" />
+    <geom name="obstacle_bamboo_266" type="cylinder" pos="22.36649 -4.58460 1.35756" size="0.07880 1.35756" rgba="0.181 0.329 0.091 1" />
+    <geom name="obstacle_bamboo_267" type="cylinder" pos="22.46328 -3.80931 1.48904" size="0.05539 1.48904" rgba="0.160 0.404 0.083 1" />
+    <geom name="obstacle_bamboo_268" type="cylinder" pos="22.36684 -2.93840 1.38769" size="0.06428 1.38769" rgba="0.183 0.337 0.101 1" />
+    <geom name="obstacle_bamboo_269" type="cylinder" pos="22.34831 -2.31509 0.62712" size="0.09831 0.62712" rgba="0.149 0.410 0.074 1" />
+    <geom name="obstacle_bamboo_270" type="cylinder" pos="22.46199 -1.68043 1.57780" size="0.05767 1.57780" rgba="0.164 0.363 0.119 1" />
+    <geom name="obstacle_bamboo_271" type="cylinder" pos="22.39868 -0.72301 0.57070" size="0.06171 0.57070" rgba="0.175 0.395 0.078 1" />
+    <geom name="obstacle_bamboo_272" type="cylinder" pos="22.52525 1.37552 1.58631" size="0.07258 1.58631" rgba="0.180 0.322 0.109 1" />
+    <geom name="obstacle_bamboo_273" type="cylinder" pos="22.55533 2.20240 0.83707" size="0.05237 0.83707" rgba="0.137 0.360 0.077 1" />
+    <geom name="obstacle_bamboo_274" type="cylinder" pos="22.46381 2.93247 0.83803" size="0.08820 0.83803" rgba="0.131 0.343 0.082 1" />
+    <geom name="obstacle_bamboo_275" type="cylinder" pos="22.45915 3.76897 0.58787" size="0.08644 0.58787" rgba="0.154 0.351 0.102 1" />
+    <geom name="obstacle_bamboo_276" type="cylinder" pos="22.33333 4.37726 0.73829" size="0.07126 0.73829" rgba="0.154 0.336 0.089 1" />
+    <geom name="obstacle_bamboo_277" type="cylinder" pos="22.34371 5.45452 1.20233" size="0.05868 1.20233" rgba="0.136 0.325 0.098 1" />
+    <geom name="obstacle_bamboo_278" type="cylinder" pos="4.00000 0.00000 1.55000" size="0.09000 1.55000" rgba="0.141 0.310 0.110 1" />
+    <geom name="obstacle_bamboo_279" type="cylinder" pos="9.00000 0.00000 1.55000" size="0.09000 1.55000" rgba="0.168 0.324 0.075 1" />
+    <geom name="obstacle_bamboo_280" type="cylinder" pos="14.00000 0.00000 1.55000" size="0.09000 1.55000" rgba="0.130 0.421 0.078 1" />
+    <geom name="obstacle_bamboo_281" type="cylinder" pos="19.00000 0.00000 1.55000" size="0.09000 1.55000" rgba="0.166 0.383 0.080 1" />
+  </worldbody>
+  <actuator>
+    <motor name="arm_motor_0" joint="arm_joint_0" ctrlrange="-0.8 0.8" ctrllimited="true" />
+    <motor name="arm_motor_1" joint="arm_joint_1" ctrlrange="-0.8 0.8" ctrllimited="true" />
+    <motor name="arm_motor_2" joint="arm_joint_2" ctrlrange="-0.6 0.6" ctrllimited="true" />
+    <motor name="arm_motor_3" joint="arm_joint_3" ctrlrange="-0.4 0.4" ctrllimited="true" />
+    <position name="gripper_position" joint="gripper_left_joint" kp="120" kv="3" ctrlrange="0 0.025" ctrllimited="true" forcerange="-2 2" forcelimited="true" />
+  </actuator>
+  <equality>
+    <joint name="gripper_finger_sync" joint1="gripper_right_joint" joint2="gripper_left_joint" polycoef="0 1 0 0 0" />
+  </equality>
+</mujoco>

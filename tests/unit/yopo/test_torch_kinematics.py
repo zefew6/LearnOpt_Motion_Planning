@@ -6,7 +6,7 @@ from uav_ac.planning.trajectory.aerial_manipulator_minco.flatness import recover
 
 def test_torch_fk_matches_public_robot_positions_and_jacobians():
     from uav_ac.yopo.model.kinematics import TorchKinematics, flatness_rotation
-    sim=MujocoSimulation('uav_ac/simulation/models/whole_body_dense_outdoor.xml',planning_path_capacity=0,record_actual_trajectory=False)
+    sim=MujocoSimulation('uav_ac/simulation/models/yopo_bamboo.xml',planning_path_capacity=0,record_actual_trajectory=False)
     kin=TorchKinematics(sim.robot.kinematic_description())
     geoms=sim.robot.collision_geometries();names=[g['body'] for g in geoms]
     points=torch.tensor(np.stack([g['local_start'] for g in geoms]),dtype=torch.float64)

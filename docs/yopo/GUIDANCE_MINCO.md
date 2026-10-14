@@ -2,8 +2,7 @@
 
 All tracked `configs/yopo/train/*.yaml` now select `guidance_profile:
 yopo_minco_v1`. This recipe excludes terminal stopping and initial gyro-matching
-costs. Data generation, network parameterization, scene geometry, controllers
-and flight checkpoint paths are unchanged. Each training item is one current
+costs. Each training item is one current
 state and depth image. Online replanning is a deployment operation.
 
 ## Reference and adaptations
@@ -101,13 +100,14 @@ raw-decoder FD. It still detects accidentally detached terminal outputs.
 
 `TrainingConfig` defaults to `legacy_direct_v3` only for historical API and
 checkpoint compatibility. Legacy `DirectEvaluator`/rolling/static objectives
-remain unchanged. The new profile requires `collision_model: exact_geometry`
-and rejects nonzero legacy `goal_stop_weight` or `peak_weight`. Resume requires
+remain unchanged. The CPU reference backend uses `collision_model: exact_geometry`; the CUDA
+backend uses `collision_model: esdf_spheres`. Both reject nonzero legacy
+`goal_stop_weight` or `peak_weight`. Resume requires
 matching recipe/settings; warm-start transfers compatible network weights
 and resets optimizer/calibration.
 
 ```bash
-MUJOCO_GL=egl .venv/bin/python -m uav_ac.yopo.training.runner \
+MUJOCO_GL=egl .venv/bin/python -m uav_ac.yopo.training \
   --config configs/yopo/train/yopo_stage_free.yaml \
   --dataset runs/yopo_whole_body/staged_repair_v1/curriculum_closed_loop_states/dataset \
   --run-dir runs/yopo_whole_body/<new-run>
@@ -118,7 +118,7 @@ MUJOCO_GL=egl .venv/bin/python -m uav_ac.yopo.validation.audit \
   --samples 3 --epsilon 1e-5 --output <new-audit.json>
 ```
 
-Use `YOPO.evaluation --guidance-profile yopo_minco_v1` for an explicitly common
+Use `python -m uav_ac.yopo.validation.evaluation --guidance-profile yopo_minco_v1` for an explicitly common
 new objective when comparing checkpoints. The existing acceptance tool runs
 selected dense validation plus actual MuJoCo/controller tracking. Training or
 audit success does not promote a checkpoint to the live benchmark.
@@ -127,17 +127,3 @@ The `local_motion_v1` acceptance gate requires >=90% selected dense validity
 per family and actual reaching without collision. The former 0.5 rad/s gyro
 handoff gate has been removed; that quantity remains an execution diagnostic.
 Historical acceptance reports retain their original rules and results.
-
-## Bounded verification run
-
-`runs/yopo_whole_body/guidance_minco_v1/smoke_exact_acceleration` contains the
-16-step run on the unchanged current-state dataset. Training cost decreased
-from 5.47960 to 5.21962 (4.74%). The saved checkpoint's three-scene/nine-candidate
-full 34-variable and neural-backward audits passed (maximum relative FD error
-1.21e-5). Selected dense feasibility passed 4/4 observations. Actual controller
-tracking failed with a workspace violation at 5.34 s, position error 1.484 m
-and joint error 1.045 rad; maximum base tracking error was 6.1 mm. It is an
-interface/gradient smoke checkpoint, not a qualified navigation policy.
-
-`gate_local_motion_v1.json` reclassifies those same actual measurements under
-the updated gate and still fails. Flight checkpoint presets are unchanged.

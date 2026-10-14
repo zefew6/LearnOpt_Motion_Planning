@@ -184,4 +184,8 @@ For configuration changes, test both valid selections and inactive-option failur
 
 Trajectory banks, checkpoints, videos, generated acados/Cython code, caches, and local environments are artifacts and should not be committed. Keep generated work under `runs/`, `docs/videos/`, or ignored build directories as appropriate.
 
+Track Markdown intended for users and contributors: setup, usage, API contracts,
+and method/source documentation. Keep internal plans, stage reports and debug
+notes under ignored `runs/` or `docs/superpowers/`, not alongside source files.
+
 Inspect `git status --short` before editing. Do not use destructive cleanup commands, overwrite user runs, or change unrelated planner/controller behavior as part of a structural refactor.

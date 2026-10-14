@@ -1,7 +1,7 @@
 # Formal CUDA whole-body guidance training
 
 This recipe trains independent single-frame observations, not motion rollouts.
-Every fixed forest/factory map supplies many different collision-free current
+Every fixed map supplies many different collision-free current
 states and one fixed eight-dimensional goal from XML. Full geometry supplies
 training-only whole-body costs/gradients. No expert trajectory is required.
 Start-to-goal global reachability is not certified for every random state.
@@ -9,8 +9,10 @@ Start-to-goal global reachability is not certified for every random state.
 ## Data and model
 
 `configs/yopo/dataset/yopo_fixed_dense.yaml` creates 20,000 frames in ten fixed
-maps: 14,000 train, 4,000 validation, 2,000 test. Each map contains the large
-multi-portal walls and varying-height trees from the authored outdoor benchmark.
+maps: 14,000 train, 4,000 validation, 2,000 test. New generation uses the
+bamboo-only `yopo_bamboo.xml` benchmark. Existing formal_cuda artifacts retain
+the original wall/tree geometry copied into their datasets; they are not rebuilt
+by this change.
 Small static map variations belong to different splits; maps stay fixed while
 current states change. Frames retain self-occlusion. Current positions span the
 map, headings point roughly towards the goal with variation, arm configurations
@@ -89,7 +91,7 @@ MUJOCO_GL=egl OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 .venv/bin/python -m uav_a
 Train:
 
 ```bash
-MUJOCO_GL=egl OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 .venv/bin/python -m uav_ac.yopo.training.runner \
+MUJOCO_GL=egl OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 .venv/bin/python -m uav_ac.yopo.training \
   --config configs/yopo/train/yopo_cuda_large.yaml \
   --dataset runs/yopo_whole_body/<data-run>/dataset \
   --run-dir runs/yopo_whole_body/<train-run>
@@ -98,7 +100,7 @@ MUJOCO_GL=egl OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 .venv/bin/python -m uav_a
 Resume into a **new** run directory, preserving the existing run:
 
 ```bash
-MUJOCO_GL=egl OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 .venv/bin/python -m uav_ac.yopo.training.runner \
+MUJOCO_GL=egl OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 .venv/bin/python -m uav_ac.yopo.training \
   --config configs/yopo/train/yopo_cuda_large.yaml \
   --dataset runs/yopo_whole_body/<data-run>/dataset \
   --resume runs/yopo_whole_body/<train-run>/latest \

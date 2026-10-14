@@ -22,8 +22,8 @@ The flight CLI supports trajectory tracking; the RL training/evaluation entrypoi
 
 Aerial-manipulator depth-to-whole-body guidance learning has an independent
 [YOPO dataset, training and map-free prediction workflow](uav_ac/yopo/README.md).
-Its P3/P4 stages provide offline learning and candidate selection; physical
-closed-loop integration remains a separate stage.
+It provides offline guidance learning and online replanning with actual
+controller tracking; navigation success must be assessed in the live task.
 
 ## Experiment videos
 
@@ -221,7 +221,7 @@ neural trajectories with the aerial-manipulator controller in MuJoCo:
 ```
 
 It requires the local checkpoint named in the YAML. The outdoor scene contains
-four ruined walls with twenty openings, distributed trees, industrial remains and varied low obstacles. Each planning tick
+282 distributed bamboo poles of varying height, with a winding passable corridor. Each planning tick
 uses one current depth frame and actual robot state to reach the XML-owned 8-D
 final goal. See [online benchmark details](uav_ac/tasks/WHOLE_BODY_ONLINE.md)
 for timing, settings and current model limitations. The single YOPO preset uses
@@ -319,6 +319,7 @@ uav_ac/
 │   ├── corridor/firi/        Convex safe-corridor construction
 │   ├── trajectory/           GCOPTER, GCS, BMTP, and Minimum Snap
 │   └── pipeline/             Mission composition and initialized planning contexts
+├── yopo/                     Whole-body neural planning, data, training and validation
 ├── control/                  Controller factory, control laws, and tracking interfaces
 ├── rl/
 │   ├── training.py           Unified task-aware MLP/ACMPC training entry point

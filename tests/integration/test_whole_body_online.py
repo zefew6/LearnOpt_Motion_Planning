@@ -94,11 +94,11 @@ def test_pending_inference_keeps_controller_running_and_reports_timeout(capsys):
     task.close()
 
 
-def test_outdoor_benchmark_has_a_collision_free_whole_body_witness():
+def test_bamboo_benchmark_has_a_collision_free_whole_body_witness():
     from dataclasses import replace
     from uav_ac.yopo.training.legacy import PrivilegedEvaluator
     from uav_ac.planning.trajectory.aerial_manipulator_minco.config import AerialManipulatorMINCOConfig
-    sim=MujocoSimulation('uav_ac/simulation/models/whole_body_dense_outdoor.xml',planning_path_capacity=0,record_actual_trajectory=False)
+    sim=MujocoSimulation('uav_ac/simulation/models/yopo_bamboo.xml',planning_path_capacity=0,record_actual_trajectory=False)
     states=np.zeros((11,8))
     states[:,0]=[.1,1.3,4,6.5,9,11.5,14,16.5,19,21.5,23]
     states[:,1]=[0,.35,1.1,0,-1.1,0,1.1,0,-1.1,-.5,0];states[:,2]=-1.9
