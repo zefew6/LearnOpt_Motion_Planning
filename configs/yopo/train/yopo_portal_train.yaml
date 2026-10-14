@@ -7,7 +7,8 @@ width: 16
 seed: 23
 learning_rate: 0.001
 device: cpu
-peak_weight: 1.0
 self_clearance: 0.0
 evaluation_interval: 50
 threads: 2
+guidance_profile: yopo_minco_v1
+collision_model: exact_geometry

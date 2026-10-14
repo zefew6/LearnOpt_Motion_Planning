@@ -23,11 +23,14 @@ def audit_candidates(observation,oracle,parameters,indices,*,epsilon=1e-6,tolera
             a=oracle.evaluate(observation,plus[None]);b=oracle.evaluate(observation,minus[None])
             fd[column]=(a.costs[0]-b.costs[0])/(2*epsilon)
             for name in components:components[name][column]=(a.components[name][0]-b.components[name][0])/(2*epsilon)
-        analytic=original.free_gradients[0]
+        excluded=getattr(original,'detached_gradients',None)
+        excluded=np.zeros(34) if excluded is None else excluded[0]
+        analytic=original.free_gradients[0]+excluded
         error=np.abs(fd-analytic)/np.maximum(1.,np.maximum(abs(fd),abs(analytic)))
         records.append({'index':int(index),'cost':float(original.costs[0]),'max_relative_gradient_error':float(error.max()),
             'analytic_terminal_gradient_norm':float(np.linalg.norm(analytic[8:32])),
             'analytic_gradient_physical_34':analytic.tolist(),'fd_gradient_physical_34':fd.tolist(),'relative_gradient_error_by_column':error.tolist(),
+            'guidance_gradient_physical_34':original.free_gradients[0].tolist(),'intentionally_detached_gradient_physical_34':excluded.tolist(),
             'component_costs':{name:float(value[0]) for name,value in original.components.items()},
             'component_terminal_gradient_norm':{name:float(np.linalg.norm(value[8:32])) for name,value in components.items()},
             'component_gradient_physical_34':{name:value.tolist() for name,value in components.items()},
@@ -37,7 +40,9 @@ def audit_candidates(observation,oracle,parameters,indices,*,epsilon=1e-6,tolera
 
 def audit_backward(output,observation,oracle,model,state,anchors,indices,*,epsilon=1e-6,tolerance=5e-4):
     output.parameters.retain_grad();output.raw_parameters.retain_grad()
-    expected=oracle.evaluate(observation,output.parameters[0].detach().numpy()).free_gradients/27
+    baseline=oracle.evaluate(observation,output.parameters[0].detach().numpy())
+    expected=baseline.free_gradients/27
+    excluded=getattr(baseline,'detached_gradients',None)
     model.zero_grad();guidance_costs(output.parameters[0],observation,oracle).mean().backward()
     actual=output.parameters.grad[0].detach().numpy()
     error=np.abs(actual-expected)/np.maximum(1.,np.maximum(abs(actual),abs(expected)))
@@ -50,6 +55,7 @@ def audit_backward(output,observation,oracle,model,state,anchors,indices,*,epsil
             za=decoder.decode(plus,s,a)[0,index:index+1].detach().numpy()
             zb=decoder.decode(minus,s,a)[0,index:index+1].detach().numpy()
             fd=float((oracle.evaluate(observation,za).costs[0]-oracle.evaluate(observation,zb).costs[0])/(2*epsilon*27))
+            if excluded is not None:fd-=float(excluded[index]@((za[0]-zb[0])/(2*epsilon)))/27
             ad=float(output.raw_parameters.grad[0,index,column])
             numeric.append(fd);analytic.append(ad);errors.append(abs(fd-ad)/max(1.,abs(fd),abs(ad)))
         rows.append({'index':int(index),'raw_terminal_xyz_fd_gradient':numeric,'raw_terminal_xyz_autograd':analytic,'max_relative_error':max(errors)})
@@ -69,7 +75,7 @@ def audit(dataset_path,*,checkpoint=None,samples=3,seed=23,epsilon=1e-6):
         settings=json.loads((Path(checkpoint)/'metadata.json').read_text()).get('training_config',{})
     objective={name:settings.get(name,default) for name,default in
         (('peak_weight',1.),('self_clearance',0.),('goal_stop_weight',0.),
-         ('goal_stop_distance',1.5),('collision_model','planning_spheres'))}
+         ('goal_stop_distance',1.5),('collision_model','planning_spheres'),('guidance_profile','legacy_direct_v3'),('guidance',{}))}
     cache=OracleCache(data,**objective)
     robot=cache.get(records[0][1]).robot
     normalization=Normalization(tuple(robot.limits.joint_lower),tuple(robot.limits.joint_upper))

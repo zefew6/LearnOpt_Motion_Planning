@@ -4,6 +4,11 @@ The three stages are ordered. A trained checkpoint is an experiment artifact;
 it is promoted only after its stage gate passes. The forest flight presets keep
 their previous checkpoint paths until a replacement qualifies.
 
+The subsequent user-approved redesign supersedes the objective below for new
+training: all tracked training presets now use [yopo_minco_v1](GUIDANCE_MINCO.md),
+without stopping or gyro-matching losses. The experiments documented here used
+the previous objective; their checkpoints/reports retain those semantics.
+
 ## 1. Candidate initialization and guidance gradients
 
 The shared prediction head now uses ordinary nonzero convolution initialization.

@@ -9,4 +9,6 @@ learning_rate: 0.001
 device: cpu
 evaluation_interval: 25
 threads: 2
-self_clearance: 0.0  # authored sphere proxies may touch at joint connections
+self_clearance: 0.0
+guidance_profile: yopo_minco_v1
+collision_model: exact_geometry

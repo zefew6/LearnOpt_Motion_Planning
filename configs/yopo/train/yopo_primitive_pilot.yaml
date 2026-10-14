@@ -1,4 +1,3 @@
-# Engineering pilot: independent current-state samples, not a converged policy.
 profile: primitive_v4
 steps: 32
 train_samples: 24
@@ -9,7 +8,8 @@ width: 16
 seed: 23
 learning_rate: 0.0003
 device: cpu
-peak_weight: 1.0
 self_clearance: 0.0
 evaluation_interval: 16
 threads: 2
+guidance_profile: yopo_minco_v1
+collision_model: exact_geometry

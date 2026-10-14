@@ -1,6 +1,6 @@
 """Independent-sample guidance training; no online physics or expert labels."""
 import argparse
-from dataclasses import dataclass,asdict,replace
+from dataclasses import dataclass,asdict,replace,field
 from pathlib import Path
 import json,random,time
 import numpy as np
@@ -9,6 +9,7 @@ import yaml
 from .config import _UniqueLoader
 from .dataset import PlanningDataset
 from .learning import DirectEvaluator,ranking_loss,augment_observation
+from .minco_guidance import MincoGuidanceEvaluator,MincoGuidanceConfig
 from .losses import guidance_costs,score_loss,calibrate_cost_scale
 from uav_ac.planning.end2end.network import WholeBodyPlannerNet
 from uav_ac.planning.end2end.primitive_network import PrimitivePlannerNet
@@ -25,6 +26,8 @@ from uav_ac.planning.trajectory.aerial_manipulator_minco.config import AerialMan
 @dataclass(frozen=True)
 class TrainingConfig:
     profile: str = 'direct_v3'
+    guidance_profile: str = 'legacy_direct_v3'
+    guidance: dict = field(default_factory=dict)
     collision_model: str = 'planning_spheres'
     families: tuple = ()
     steps: int = 100
@@ -46,6 +49,12 @@ class TrainingConfig:
     threads: int = 2
 
     def __post_init__(self):
+        if self.guidance_profile not in ('legacy_direct_v3','yopo_minco_v1'):raise ValueError('unknown guidance profile')
+        if self.guidance_profile=='yopo_minco_v1':
+            object.__setattr__(self,'guidance',asdict(MincoGuidanceConfig.from_mapping(self.guidance)))
+            if self.collision_model!='exact_geometry':raise ValueError('new guidance requires exact_geometry')
+            if self.goal_stop_weight or self.peak_weight:raise ValueError('new guidance excludes stopping and duplicate peak loss')
+        elif self.guidance:raise ValueError('guidance settings require yopo_minco_v1')
         if self.collision_model not in ('planning_spheres','exact_geometry'):raise ValueError('unknown collision model')
         if not isinstance(self.families,(tuple,list)) or any(f not in ('free','obstacle','low','wall') for f in self.families) or len(set(self.families))!=len(self.families):raise ValueError('invalid curriculum families')
         object.__setattr__(self,'families',tuple(self.families))
@@ -71,11 +80,15 @@ def load_training_config(path):
 
 
 class OracleCache:
-    def __init__(self,dataset,peak_weight,self_clearance=0.,goal_stop_weight=0.,goal_stop_distance=1.5,collision_model='planning_spheres'):
-        self.dataset=dataset;self.entries={};self.peak_weight=peak_weight;self.self_clearance=self_clearance;self.goal_stop_weight=goal_stop_weight;self.goal_stop_distance=goal_stop_distance;self.collision_model=collision_model
+    def __init__(self,dataset,peak_weight,self_clearance=0.,goal_stop_weight=0.,goal_stop_distance=1.5,collision_model='planning_spheres',guidance_profile='legacy_direct_v3',guidance=None):
+        self.dataset=dataset;self.entries={};self.peak_weight=peak_weight;self.self_clearance=self_clearance;self.goal_stop_weight=goal_stop_weight;self.goal_stop_distance=goal_stop_distance;self.collision_model=collision_model;self.guidance_profile=guidance_profile;self.guidance=guidance or {}
     def get(self,privileged):
         if privileged.scene_id not in self.entries:
             sim=MujocoSimulation(privileged.scene_path,planning_path_capacity=0,record_actual_trajectory=False)
+            if self.guidance_profile=='yopo_minco_v1':
+                oracle=MincoGuidanceEvaluator.from_simulation(sim,gripper_gap=self.dataset.manifest['gripper_gap'],config=replace(AerialManipulatorMINCOConfig(),self_clearance=self.self_clearance),guidance=MincoGuidanceConfig.from_mapping(self.guidance))
+                self.entries[privileged.scene_id]=(sim,oracle)
+                return oracle
             self.entries[privileged.scene_id]=(sim,DirectEvaluator.from_simulation(sim,
                 gripper_gap=self.dataset.manifest['gripper_gap'],config=replace(
                     AerialManipulatorMINCOConfig(),
@@ -111,11 +124,14 @@ def evaluate(model,samples,cache,count,device):
             output=model(*tensors([obs],model.normalization,count,device,getattr(model,'profile','direct_v3'),getattr(model,'spec',None)))
             result=cache.get(priv).evaluate(obs,output.parameters[0].cpu().numpy())
             score=output.scores[0].cpu().numpy();index=int(np.argmin(score) if model.score_mode=='cost' else np.argmax(score))
-            unsafe=(result.components['environment']>1e-6)|(result.components['self']>1e-6)|(result.components['physical']>1e-6)
-            for name,values in selected_violations.items():values.append(float(result.components[name][index]>1e-6))
+            unsafe=result.collided if result.collided is not None else (result.components['environment']>1e-6)|(result.components['self']>1e-6)|(result.components['physical']>1e-6)
+            physical_bad=result.violations>1e-8 if result.collided is not None else result.components['physical']>1e-6
+            for name,values in selected_violations.items():
+                values.append(float(physical_bad[index]) if name=='physical' else float(result.collision_components[name][index]) if result.collision_components is not None and name in result.collision_components else float(result.components[name][index]>1e-6))
             tier_order=np.lexsort((result.costs,unsafe.astype(int)));oracle_index=int(tier_order[0])
             costs.append(float(result.costs.mean()));selected.append(float(result.costs[index]));best.append(float(result.costs[oracle_index]))
-            valid.append(float(np.mean(~unsafe)));selected_valid.append(float(not unsafe[index]));ranks.append(int(np.flatnonzero(tier_order==index)[0]));random_cost.append(float(result.costs.mean()))
+            feasible=~unsafe & ~physical_bad
+            valid.append(float(np.mean(feasible)));selected_valid.append(float(feasible[index]));ranks.append(int(np.flatnonzero(tier_order==index)[0]));random_cost.append(float(result.costs.mean()))
             regret.append(float(result.costs[index]-result.costs[oracle_index]))
     return dict(mean_cost=float(np.mean(costs)),selected_cost=float(np.mean(selected)),oracle_best_cost=float(np.mean(best)),
                 candidate_valid_fraction=float(np.mean(valid)),selected_valid_fraction=float(np.mean(selected_valid)),
@@ -130,7 +146,7 @@ def train(config,dataset_path,run_dir,*,resume=None,warm_start=None):
     torch.set_num_threads(config.threads);torch.manual_seed(config.seed);np.random.seed(config.seed);random.seed(config.seed)
     data=PlanningDataset(dataset_path,split='train');validation=PlanningDataset(dataset_path,split='validation')
     samples=subset(data,config.train_samples,families=config.families);val_samples=subset(validation,config.validation_samples,families=config.families)
-    cache=OracleCache(data,config.peak_weight,config.self_clearance,config.goal_stop_weight,config.goal_stop_distance,config.collision_model);val_cache=OracleCache(validation,config.peak_weight,config.self_clearance,config.goal_stop_weight,config.goal_stop_distance,config.collision_model)
+    cache=OracleCache(data,config.peak_weight,config.self_clearance,config.goal_stop_weight,config.goal_stop_distance,config.collision_model,config.guidance_profile,config.guidance);val_cache=OracleCache(validation,config.peak_weight,config.self_clearance,config.goal_stop_weight,config.goal_stop_distance,config.collision_model,config.guidance_profile,config.guidance)
     first_oracle=cache.get(samples[0][1]);robot=first_oracle.robot
     normalization=Normalization(tuple(robot.limits.joint_lower),tuple(robot.limits.joint_upper))
     mode='cost' if config.candidate_count==1 else 'ranking'
@@ -148,7 +164,7 @@ def train(config,dataset_path,run_dir,*,resume=None,warm_start=None):
         if metadata['candidate_count']!=config.candidate_count or model.width!=config.width:raise ValueError('resume architecture mismatch')
         previous=metadata['training_config']
         for name,value in asdict(config).items():
-            previous_value=tuple(previous.get(name,())) if name=='families' else previous.get(name,{'profile':'direct_v3','goal_stop_weight':0.,'goal_stop_distance':1.5,'collision_model':'planning_spheres'}.get(name))
+            previous_value=tuple(previous.get(name,())) if name=='families' else previous.get(name,{'profile':'direct_v3','goal_stop_weight':0.,'goal_stop_distance':1.5,'collision_model':'planning_spheres','guidance_profile':'legacy_direct_v3','guidance':{}}.get(name))
             if name not in ('steps','evaluation_interval','threads','device') and previous_value!=value:
                 raise ValueError(f'resume training setting mismatch: {name}')
         if metadata.get('dataset_path')!=str(Path(dataset_path).resolve()) or metadata.get('gripper_gap')!=data.manifest['gripper_gap']:
@@ -188,9 +204,10 @@ def train(config,dataset_path,run_dir,*,resume=None,warm_start=None):
             result=oracle.last_result;raw_cost.append(float(result.costs.mean()))
             if mode=='cost':loss=loss+costs.mean()+score_loss(output.scores[i],costs)
             else:
-                unsafe=torch.as_tensor((result.components['environment']>1e-6)|(result.components['self']>1e-6)|(result.components['physical']>1e-6),device=config.device)
-                rank,_=ranking_loss(output.scores[i:i+1],costs[None],unsafe[None])
+                unsafe=torch.as_tensor(result.collided if result.collided is not None else (result.components['environment']>1e-6)|(result.components['self']>1e-6)|(result.components['physical']>1e-6),device=config.device)
                 weights=torch.nn.functional.softplus(output.scores[i].detach()).clamp(min=.001)
+                scores=torch.nn.functional.softplus(output.scores[i:i+1]) if config.guidance_profile=='yopo_minco_v1' else output.scores[i:i+1]
+                rank,_=ranking_loss(scores,costs[None],unsafe[None])
                 normalized=costs/costs.detach().mean().clamp(min=.001)
                 loss=loss+(normalized*weights).mean()+rank
         loss=loss/len(records)

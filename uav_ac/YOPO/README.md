@@ -2,6 +2,8 @@
 
 This package owns ideal-depth datasets, privileged MINCO guidance, training and offline evaluation. Network definitions and learned deployment live in `planning/end2end`; live physics/controller orchestration lives in `runners` and `tasks`. Training and deployment are implemented; the existing prototype checkpoints have not passed the simple-scene closed-loop promotion gate. See [staged repair and curriculum](STAGED_REPAIR.md) for the current workflow. The P0–P2 sections below describe the earlier decoder contracts retained for compatibility.
 
+Current tracked training presets use the [YOPO-MINCO guidance recipe](GUIDANCE_MINCO.md): focused whole-body safety, jerk/acceleration/time smoothing, peak feasibility and anisotropic target progress, with collision-aware goal-gradient blocking and ranking. It contains no target stopping or initial gyro-matching term. Dataset distribution and flight checkpoint paths are unchanged.
+
 Run from the repository root with the existing Python 3.13 environment:
 
 ```bash

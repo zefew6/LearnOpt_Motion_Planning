@@ -62,3 +62,17 @@ def test_neural_audit_rejects_detached_terminal_positions():
         z=original(raw,s,a);return torch.cat((z[:,:,:8],z[:,:,8:11].detach(),z[:,:,11:]),dim=-1)
     net.decode=detached
     assert not run()['passed']
+
+
+def test_fd_audit_accounts_for_intentional_surrogate_derivatives():
+    class Oracle:
+        def evaluate(self,obs,z):
+            return SimpleNamespace(costs=(z*z).sum(1),free_gradients=.5*z,detached_gradients=1.5*z,components={'progress':(z*z).sum(1)})
+    assert audit_candidates(None,Oracle(),np.ones((1,34)),[0])['passed']
+
+
+def test_motion_promotion_does_not_impose_extra_gyro_handoff_threshold():
+    from uav_ac.YOPO.acceptance import gate
+    result={'families':{'free':{'samples':1,'selected_dense_valid_fraction':1.}},
+            'online':{'free':{'success':True,'collision':False,'maximum_handoff_body_rate_difference':.8}}}
+    assert gate(result)

@@ -18,6 +18,9 @@ class GuidanceBatch:
     free_gradients: np.ndarray
     components: dict
     violations: np.ndarray
+    collided: np.ndarray | None = None
+    detached_gradients: np.ndarray | None = None
+    collision_components: dict | None = None
 
 
 class PrivilegedEvaluator:

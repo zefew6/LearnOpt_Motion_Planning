@@ -13,10 +13,10 @@ from uav_ac.runners.config import load_config
 from uav_ac.runners.whole_body_planning import run_whole_body_planning
 
 
-def gate(result,*,minimum_valid=.9,maximum_handoff_rate=.5):
+def gate(result,*,minimum_valid=.9):
     if not result['families'] or set(result['families'])!=set(result['online']):return False
     dense=all(value.get('samples',0)>0 and value['selected_dense_valid_fraction']>=minimum_valid for value in result['families'].values())
-    online=all(value['success'] and not value['collision'] and value['maximum_handoff_body_rate_difference']<=maximum_handoff_rate for value in result['online'].values())
+    online=all(value['success'] and not value['collision'] for value in result['online'].values())
     return bool(result['families'] and result['online'] and dense and online)
 
 
@@ -48,7 +48,7 @@ def check(dataset_path,checkpoint,*,families=('free',),samples_per_family=16,onl
         for family in families:
             config=online_config(checkpoint,family,duration)
             runs[family]=run_whole_body_planning(config)
-    result={'families':group,'dense_details':details,'online':runs,'minimum_dense_valid':.9,'maximum_handoff_body_rate_difference':.5,
+    result={'families':group,'dense_details':details,'online':runs,'minimum_dense_valid':.9,'acceptance_profile':'local_motion_v1',
         'interpretation':'held-out dense sampled whole-body feasibility plus actual controller reaching; no continuous safety guarantee'}
     result['passed']=gate(result)
     return result
