@@ -2,15 +2,15 @@ from dataclasses import replace
 import numpy as np
 import pytest
 from uav_ac.yopo.whole_body.training.runner import TrainingConfig, train, OracleCache
-from uav_ac.yopo.whole_body.data.config import DatasetConfig
-from uav_ac.yopo.whole_body.data.generate import generate_dataset
+
+from tests.yopo_dataset import write_dataset
 from uav_ac.yopo.whole_body.data.dataset import PlanningDataset
 from uav_ac.yopo.whole_body.model.checkpoint import load_checkpoint
 from uav_ac.yopo.whole_body.deployment import YopoPlanner
 
 
 def test_new_guidance_training_checkpoint_resume_and_actual_state_decode(tmp_path):
-    generate_dataset(DatasetConfig(profile='rolling_v2',scene_count=3,samples_per_scene=1,split_counts=(1,1,1)),tmp_path/'data')
+    write_dataset(tmp_path/'data', samples_per_scene=1)
     dataset=tmp_path/'data/dataset'
     config=TrainingConfig(guidance_profile='yopo_minco_v1',collision_model='exact_geometry',profile='primitive_v4',width=4,candidate_count=27,steps=1,train_samples=1,validation_samples=1,batch_size=1)
     report=train(config,dataset,tmp_path/'train');assert np.isfinite(report['final_train_cost'])
@@ -38,7 +38,7 @@ def test_parallel_guidance_matches_serial_with_coarse_auxiliary_map(tmp_path):
     import multiprocessing
     from uav_ac.yopo.whole_body.training.runner import _initialize_guidance_worker, _evaluate_guidance_worker
     from uav_ac.yopo.whole_body.training.losses import guidance_costs_from_result
-    generate_dataset(DatasetConfig(profile='rolling_v2',scene_count=3,samples_per_scene=1,split_counts=(1,1,1)),tmp_path/'data')
+    write_dataset(tmp_path/'data', samples_per_scene=1)
     data=PlanningDataset(tmp_path/'data/dataset',split='train')
     obs,priv=data[0]
     config=TrainingConfig(guidance_profile='yopo_minco_v1',collision_model='exact_geometry',oracle_map_resolution=.2,guidance_workers=2)
@@ -67,7 +67,7 @@ def test_parallel_guidance_matches_serial_with_coarse_auxiliary_map(tmp_path):
 def test_torch_esdf_cuda_train_resume_and_deploy(tmp_path):
     import torch
     if not torch.cuda.is_available():pytest.skip('CUDA required')
-    generate_dataset(DatasetConfig(profile='rolling_v2',scene_count=3,samples_per_scene=2,split_counts=(1,1,1)),tmp_path/'data')
+    write_dataset(tmp_path/'data', samples_per_scene=2)
     data=tmp_path/'data/dataset'
     cfg=TrainingConfig(profile='primitive_goal_v5',guidance_profile='yopo_minco_v1',guidance_backend='torch_esdf',collision_model='esdf_spheres',
         device='cuda:0',steps=2,width=8,candidate_count=27,batch_size=2,train_samples=0,train_evaluation_samples=1,validation_samples=1,oracle_map_resolution=.1,checkpoint_interval=1,sampling='shuffle')

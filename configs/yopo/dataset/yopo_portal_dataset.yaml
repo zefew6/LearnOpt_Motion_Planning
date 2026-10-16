@@ -1,6 +1,0 @@
-profile: portal_v4
-seed: 61
-scene_count: 9
-samples_per_scene: 24
-split_counts: [3, 3, 3]
-gripper_gap: 0.06

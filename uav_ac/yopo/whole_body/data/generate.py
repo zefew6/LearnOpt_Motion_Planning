@@ -1,104 +1,113 @@
-"""Prepare a self-contained, scene-disjoint ideal-depth dataset."""
+"""Collect full-body states in official YOPO maps; no expert trajectories."""
 import argparse
-from dataclasses import asdict
 from pathlib import Path
 import json
-import time
+import subprocess
+
 import numpy as np
+import yaml
+
+from uav_ac.yopo.common.collection import RUNS_ROOT, SIMULATOR
+from uav_ac.yopo.common.depth import DepthSpec
+from uav_ac.yopo.whole_body.contracts import PlannerObservation
 from uav_ac.yopo.whole_body.data.config import load_config
-from uav_ac.yopo.whole_body.data.dataset import FIELDS, DYNAMIC_FIELDS, file_hash
-from uav_ac.yopo.whole_body.data.scenes import write_scene, sample_scene
+from uav_ac.yopo.whole_body.data.dataset import DYNAMIC_FIELDS, file_hash
+from uav_ac.yopo.whole_body.data.maps import read_points, write_scene
 from uav_ac.yopo.whole_body.model.encoding import STATE_LAYOUT
 
-def generate_dataset(config,output_dir):
-    output=Path(output_dir).resolve();output.mkdir(parents=True,exist_ok=False)
-    dataset=output/'dataset';scenes_dir=dataset/'scenes';shards=dataset/'shards';shards.mkdir(parents=True)
-    started=time.perf_counter();scene_entries=[];start_states=[];goal_states=[]
-    split_names=['train']*config.split_counts[0]+['validation']*config.split_counts[1]+['test']*config.split_counts[2]
+
+def sample_scene(sim, config, seed):
+    """Sample independent collision-free endpoints with consistent derivatives."""
+    from uav_ac.planning.trajectory.aerial_manipulator_minco.flatness import recover_state
+    from uav_ac.simulation.depth_observation import IdealDepthObserver
+    rng=np.random.default_rng(seed);bounds=np.asarray(config.bounds)
+    lower,upper=sim.robot.limits.joint_lower,sim.robot.limits.joint_upper
+    observations=[];rejected={'start_collision':0,'goal_collision':0,'invalid_state':0}
+    def clear(q):
+        return not sim.robot.check_collision(q,clearance=config.clearance,self_clearance=config.self_clearance)['pairs']
+    with IdealDepthObserver(sim.model,sim.data,spec=DepthSpec()) as camera:
+        for _ in range(config.samples_per_scene*config.max_attempts_per_sample):
+            position=rng.uniform(*bounds)
+            goal=np.r_[rng.uniform(*bounds),rng.uniform(-np.pi,np.pi),rng.uniform(lower,upper)]
+            direction=goal[:3]-position
+            if np.linalg.norm(direction)<.3:continue
+            yaw=np.arctan2(direction[1],direction[0])+rng.uniform(-.8,.8)
+            derivatives=np.zeros((4,8));derivatives[0]=np.r_[position,yaw,rng.uniform(lower,upper)]
+            speed=0. if rng.random()<.2 else rng.uniform(.1,2.)
+            derivatives[1,:3]=speed*direction/np.linalg.norm(direction)
+            derivatives[1,3:]=rng.uniform(-.4,.4,5)
+            derivatives[2,:3]=rng.uniform(-1.,1.,3)
+            derivatives[2,3:]=rng.uniform(-.5,.5,5)
+            derivatives[3,:3]=rng.uniform(-2.,2.,3)
+            try:
+                q,v=recover_state(derivatives,config.gripper_gap)
+                qgoal,_=recover_state(np.vstack((goal,np.zeros((3,8)))),config.gripper_gap)
+                if not clear(q):rejected['start_collision']+=1;continue
+                if not clear(qgoal):rejected['goal_collision']+=1;continue
+                sim.robot.reset(q,v);depth,mask=camera.observe()
+                observations.append(PlannerObservation(depth,mask,sim.robot.configuration,sim.robot.velocity,
+                    derivatives[:3],goal,DepthSpec(),0.,derivatives[3],'augmentation'))
+            except ValueError:
+                rejected['invalid_state']+=1;continue
+            if len(observations)==config.samples_per_scene:return observations,rejected
+    raise RuntimeError(f'whole-body sampling exhausted: {rejected}, accepted={len(observations)}')
+
+
+def generate_dataset(config, run_dir, *, map_binary=None, prepare_only=False):
+    """Prepare a new run or execute the official-map/full-body collection path."""
+    run=Path(run_dir).resolve()
+    if run==Path(RUNS_ROOT).resolve() or not run.is_relative_to(Path(RUNS_ROOT).resolve()):
+        raise ValueError('collection run must be a new directory beneath runs/')
+    binary=Path(map_binary) if map_binary is not None else Path(RUNS_ROOT)/'yopo/build/map_generator'
+    if not prepare_only and not binary.is_file():raise FileNotFoundError('build official map_generator first')
+    settings=config.official_settings()
+    settings.update(save_path=str(run/'dataset/maps'),tree_file=str(SIMULATOR/'assets/tree.ply'))
+    run.mkdir(parents=True,exist_ok=False)
+    collection=run/'map_collection.yaml'
+    collection.write_text(yaml.safe_dump(settings,sort_keys=False))
+    (run/'sampling.yaml').write_text(yaml.safe_dump(config.as_mapping(),sort_keys=False))
+    if prepare_only:return collection
+    subprocess.run([str(binary.resolve()),str(collection)],check=True)
+    from uav_ac.simulation.mujoco_sim import MujocoSimulation
+    dataset=run/'dataset';shards=dataset/'shards';shards.mkdir()
+    split_names=[name for name,count in zip(('train','validation','test'),config.split_counts) for _ in range(count)]
+    entries=[]
     for i,split in enumerate(split_names):
-        seed=config.seed+i*1009
-        coupled=config.profile in ('coupled_v3','portal_v4','curriculum_v5')
-        source_metadata={}
-        if config.profile=='fixed_dense_v6':
-            from uav_ac.yopo.whole_body.data.fixed import write_fixed_dense_scene, sample_fixed_dense_scene
-            from uav_ac.simulation.mujoco_sim import MujocoSimulation
-            scene_id,family,path=write_fixed_dense_scene(scenes_dir,i,seed,config.depth)
-            sim=MujocoSimulation(path,planning_path_capacity=0,record_actual_trajectory=False)
-            samples,rejected=sample_fixed_dense_scene(sim,config,seed+1,path)
-        elif coupled:
-            from uav_ac.yopo.whole_body.data.sampling import write_coupled_scene
-            from uav_ac.yopo.whole_body.data.sampling import sample_coupled_scene
-            from uav_ac.simulation.mujoco_sim import MujocoSimulation
-            if config.profile=='curriculum_v5':
-                from uav_ac.yopo.whole_body.data.scenes import write_curriculum_scene
-                scene_id,family,path=write_curriculum_scene(scenes_dir,i,seed,config.depth)
-            elif config.profile=='portal_v4':
-                from uav_ac.yopo.whole_body.data.sampling import write_portal_scene
-                scene_id,family,path=write_portal_scene(scenes_dir,i,seed,config.depth)
-            else:scene_id,family,path=write_coupled_scene(scenes_dir,i,seed,config.depth)
-            sim=MujocoSimulation(path,planning_path_capacity=0,record_actual_trajectory=False)
-            if config.profile=='curriculum_v5':
-                from uav_ac.yopo.whole_body.data.scenes import sample_curriculum_scene
-                samples,sources,records=sample_curriculum_scene(sim,config,seed+1,family)
-            else:samples,sources,records=sample_coupled_scene(sim,config,seed+1)
-            rejected={}
-            witnesses=dataset/'sources';witnesses.mkdir(exist_ok=True)
-            numeric=witnesses/f'{scene_id}.npz';diagnostics=witnesses/f'{scene_id}.json'
-            np.savez_compressed(numeric,durations=np.stack([t.durations for t,_ in sources]),
-                coefficients=np.stack([t.coefficients for t,_ in sources]),waypoints=np.stack([t.rrt_path for t,_ in sources]))
-            diagnostics.write_text(json.dumps({'sources':[d for _,d in sources],'samples':records},indent=2)+'\n')
-            source_metadata=dict(source_count=len(sources),source_numeric=str(numeric.relative_to(dataset)),
-                source_numeric_sha256=file_hash(numeric),source_diagnostics=str(diagnostics.relative_to(dataset)),
-                source_diagnostics_sha256=file_hash(diagnostics))
-        else:
-            scene_id,family,path=write_scene(scenes_dir,i,seed,config.depth,profile=config.profile)
-            samples,rejected=sample_scene(path,config,seed+1)
-        shard=shards/f'{scene_id}.npz'
-        fields=FIELDS if config.profile=='stationary_v1' else DYNAMIC_FIELDS
-        np.savez_compressed(shard,**{name:np.stack([getattr(obs,name) for obs in samples]).astype(np.float32) if name=='depth_m' else np.stack([getattr(obs,name) for obs in samples]) for name in fields})
-        scene_entries.append(dict(scene_id=scene_id,family=family,split=split,seed=seed,
-            xml=str(path.relative_to(dataset)),xml_sha256=file_hash(path),shard=str(shard.relative_to(dataset)),
-            shard_sha256=file_hash(shard),count=len(samples),rejected=rejected,path_validated=coupled,**source_metadata))
-        print(f'generated {scene_id}: {len(samples)} {split} samples',flush=True)
-        start_states.extend(obs.start_pva[0] for obs in samples);goal_states.extend(obs.goal for obs in samples)
-    dynamic=config.profile!='stationary_v1'
-    manifest=dict(schema_version=2 if dynamic else 1,profile=config.profile,sampling_config=config.as_mapping(),seed=config.seed,depth_spec=config.depth.as_mapping(),
-        state_layout=list(STATE_LAYOUT),coordinates='NED/FRD; start-yaw local frame',
-        trajectory_profile=('rolling two-piece MINCO; local terminal PVA and two variable durations'
-                            if dynamic else 'stationary four-piece MINCO; durations [.75,.75,.75,.75]'),
-        derivative_provenance=('sampled existing reference trajectory; no physics rollout' if dynamic else 'stationary'),
-        gripper_gap=config.gripper_gap,robot_xml='scenes/model/aerial_manipulator.xml',
-        robot_sha256=file_hash(scenes_dir/'model'/'aerial_manipulator.xml'),scenes=scene_entries)
-    manifest_path=dataset/'manifest.json';manifest_path.write_text(json.dumps(manifest,indent=2)+'\n')
-    if config.profile in ('coupled_v3','portal_v4','curriculum_v5'):
-        manifest.update(source_profile='authored six-piece full-body MINCO; not optimized',
-            derivative_provenance='densely validated reference snapshots; no physics rollout',
-            trajectory_profile='training decoder unchanged: direct_v3 two-piece; source references are six-piece',
-            interpretation='same-base frozen-arm collision witnesses; not proof that all fixed-arm routes are infeasible')
-        manifest_path.write_text(json.dumps(manifest,indent=2)+'\n')
-    if config.profile=='curriculum_v5':
-        manifest.update(source_profile='offline two-piece feasibility witness; not a training label',interpretation='independent current states; witnesses establish one route only, not universal reachability',derivative_provenance='independent current-state PVA augmentation; no rollout or reference sampling',trajectory_profile='physical MINCO34; network profile selected in training configuration')
-        manifest_path.write_text(json.dumps(manifest,indent=2)+'\n')
-    if config.profile=='fixed_dense_v6':
-        manifest.update(derivative_provenance='independent current-state PVA; no rollout or reference sampling',
-            interpretation='fixed goal, collision-free starts; global reachability unconfirmed',
-            trajectory_profile='physical MINCO34; network profile selected in training configuration')
-        manifest_path.write_text(json.dumps(manifest,indent=2)+'\n')
-    start_states=np.asarray(start_states);goal_states=np.asarray(goal_states)
-    report=dict(samples=len(start_states),scenes=len(scene_entries),seconds=time.perf_counter()-started,
-        starts_min=start_states.min(axis=0).tolist(),starts_max=start_states.max(axis=0).tolist(),
-        goals_min=goal_states.min(axis=0).tolist(),goals_max=goal_states.max(axis=0).tolist(),
-        rejected={k:sum(s['rejected'][k] for s in scene_entries) for k in scene_entries[0]['rejected']},
-        path_feasibility=('all source paths densely exact-geometry/physical checked; not continuous certification'
-                          if config.profile in ('coupled_v3','portal_v4','curriculum_v5') else 'unconfirmed; only endpoint limits/exact geometry checked'),
-        observation='first-hit ideal depth; self-occlusion retained, hidden geometry unavailable to network')
-    (output/'generation_report.json').write_text(json.dumps(report,indent=2)+'\n')
-    return manifest_path
+        sid=f'scene_{i:03d}';cloud=dataset/f'maps/pointcloud-{i}.ply'
+        scene,box_count,translation=write_scene(dataset/'scenes',sid,read_points(cloud),config)
+        sim=MujocoSimulation(scene,planning_path_capacity=0,record_actual_trajectory=False)
+        samples,rejected=sample_scene(sim,config,config.seed+i*1009)
+        shard=shards/f'{sid}.npz'
+        np.savez_compressed(shard,**{name:np.stack([getattr(o,name) for o in samples]).astype(np.float32)
+            if name=='depth_m' else np.stack([getattr(o,name) for o in samples]) for name in DYNAMIC_FIELDS})
+        entries.append(dict(scene_id=sid,family='official',split=split,seed=config.seed+i,
+            xml=str(scene.relative_to(dataset)),xml_sha256=file_hash(scene),
+            pointcloud=str(cloud.relative_to(dataset)),pointcloud_sha256=file_hash(cloud),
+            pointcloud_translation_nwu=translation,
+            shard=str(shard.relative_to(dataset)),shard_sha256=file_hash(shard),count=len(samples),
+            obstacle_boxes=box_count,rejected=rejected,path_validated=False))
+        print(f'{sid}: {len(samples)} {split} observations, {box_count} voxel boxes',flush=True)
+    robot=dataset/'scenes/model/aerial_manipulator.xml'
+    manifest=dict(schema_version=2,profile='official_maps_whole_body_v1',map_source='official_yopo',
+        sampling_config=config.as_mapping(),depth_spec=DepthSpec().as_mapping(),
+        state_layout=list(STATE_LAYOUT),coordinates='NED/FRD; raw PLY maps are NWU',
+        gripper_gap=config.gripper_gap,robot_xml=str(robot.relative_to(dataset)),robot_sha256=file_hash(robot),
+        geometry_representation='occupied point-cloud voxels, merged only along contiguous z; ground plane',
+        voxel_resolution=config.voxel_resolution,derivative_provenance='independent flatness-consistent PVA/jerk augmentation',
+        interpretation='variable 8-D goals; collision-free endpoints; global reachability unconfirmed',
+        upstream_commit='d5e1e60f83cc991602f142d9b6b96204a24d6b9f',scenes=entries)
+    path=dataset/'manifest.json';path.write_text(json.dumps(manifest,indent=2)+'\n')
+    return path
 
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--config',required=True);parser.add_argument('--run-dir',required=True)
-    args=parser.parse_args();print(generate_dataset(load_config(args.config),args.run_dir))
+    parser.add_argument('--config',required=True)
+    parser.add_argument('--run-dir',required=True)
+    parser.add_argument('--map-binary',type=Path)
+    parser.add_argument('--prepare-only',action='store_true')
+    args=parser.parse_args()
+    print(generate_dataset(load_config(args.config),args.run_dir,map_binary=args.map_binary,prepare_only=args.prepare_only))
+
 
 if __name__=='__main__':main()

@@ -52,6 +52,8 @@ class PlanningDataset:
                 xml_paths.add(xml);xml_hashes.add(identity);shard_paths.add(shard)
                 if identity!=scene['xml_sha256'] or file_hash(shard)!=scene['shard_sha256']:
                     raise ValueError('dataset file checksum mismatch')
+                if 'pointcloud' in scene and file_hash(_inside(self.path,scene['pointcloud']))!=scene['pointcloud_sha256']:
+                    raise ValueError('pointcloud checksum mismatch')
                 if self.manifest.get('profile') in ('coupled_v3','portal_v4','curriculum_v5'):
                     for resource in ('source_numeric','source_diagnostics'):
                         source=_inside(self.path,scene[resource])

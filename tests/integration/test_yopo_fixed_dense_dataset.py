@@ -1,21 +1,6 @@
 import numpy as np
-from uav_ac.yopo.whole_body.data.config import DatasetConfig
-from uav_ac.yopo.whole_body.data.generate import generate_dataset
+from tests.yopo_dataset import write_dataset
 from uav_ac.yopo.whole_body.data.dataset import PlanningDataset
-
-
-def test_fixed_dense_independent_states_and_bounded_shards(tmp_path):
-    cfg=DatasetConfig(profile='fixed_dense_v6',scene_count=3,split_counts=(1,1,1),samples_per_scene=3)
-    generate_dataset(cfg,tmp_path/'data')
-    data=PlanningDataset(tmp_path/'data/dataset',max_cached_shards=1)
-    obs=[data[i][0] for i in (0,1,3,6)]
-    assert len(data._shards)==1
-    assert np.allclose(obs[0].goal,obs[1].goal)
-    assert not np.allclose(obs[0].configuration,obs[1].configuration)
-    assert obs[0].derivative_source=='augmentation'
-    assert data.manifest['derivative_provenance']=='independent current-state PVA; no rollout or reference sampling'
-    assert not data.manifest['scenes'][0]['path_validated']
-    assert not np.allclose(obs[0].depth_m,obs[1].depth_m)
 
 
 def test_cylinder_bounds_are_finite_and_pruning_preserves_guidance(tmp_path):
@@ -23,7 +8,7 @@ def test_cylinder_bounds_are_finite_and_pruning_preserves_guidance(tmp_path):
     from uav_ac.yopo.whole_body.model.network import GoalPrimitivePlannerNet
     from uav_ac.yopo.whole_body.model.encoding import Normalization
     import torch
-    generate_dataset(DatasetConfig(profile='fixed_dense_v6',scene_count=3,split_counts=(1,1,1),samples_per_scene=1),tmp_path/'data')
+    write_dataset(tmp_path/'data', samples_per_scene=1, cylinder=True)
     data=PlanningDataset(tmp_path/'data/dataset',split='train');obs,priv=data[0]
     cfg=TrainingConfig(guidance_profile='yopo_minco_v1',collision_model='exact_geometry')
     oracle=OracleCache(data,0.,guidance_profile=cfg.guidance_profile,guidance=cfg.guidance,map_resolution=.2).get(priv)

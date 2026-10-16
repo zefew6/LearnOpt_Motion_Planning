@@ -9,9 +9,8 @@ from uav_ac.yopo.whole_body.model.encoding import Normalization
 
 def test_torch_physical_terms_match_cpu_and_esdf_backward(tmp_path):
     from uav_ac.yopo.whole_body.training.cuda import TorchGuidance
-    from uav_ac.yopo.whole_body.data.generate import generate_dataset
-    from uav_ac.yopo.whole_body.data.config import DatasetConfig
-    generate_dataset(DatasetConfig(profile='rolling_v2',scene_count=3,split_counts=(1,1,1),samples_per_scene=1),tmp_path/'data')
+    from tests.yopo_dataset import write_dataset
+    write_dataset(tmp_path/'data', samples_per_scene=1)
     data=PlanningDataset(tmp_path/'data/dataset',split='train');obs,priv=data[0]
     cfg=TrainingConfig(guidance_profile='yopo_minco_v1',collision_model='exact_geometry')
     oracle=OracleCache(data,0.,guidance_profile=cfg.guidance_profile,guidance=cfg.guidance,map_resolution=.1).get(priv)

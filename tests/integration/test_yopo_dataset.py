@@ -1,6 +1,5 @@
 import numpy as np
-from uav_ac.yopo.whole_body.data.config import DatasetConfig
-from uav_ac.yopo.whole_body.data.generate import generate_dataset
+from tests.yopo_dataset import write_dataset
 from uav_ac.yopo.whole_body.data.dataset import PlanningDataset
 from uav_ac.simulation.mujoco_sim import MujocoSimulation
 from uav_ac.simulation.depth_observation import IdealDepthObserver
@@ -8,7 +7,7 @@ from uav_ac.simulation.depth_observation import IdealDepthObserver
 
 def test_numeric_dataset_reconstructs_robot_depth_and_disjoint_scenes(tmp_path):
     root=tmp_path/'dataset_run'
-    generate_dataset(DatasetConfig(scene_count=3,samples_per_scene=1,split_counts=(1,1,1)),root)
+    write_dataset(root, samples_per_scene=1)
     split_ids=[]
     for split in ('train','validation','test'):
         dataset=PlanningDataset(root/'dataset',split=split);assert len(dataset)==1

@@ -1,7 +1,7 @@
 import json
 import numpy as np
-from uav_ac.yopo.whole_body.data.config import DatasetConfig
-from uav_ac.yopo.whole_body.data.generate import generate_dataset
+
+from tests.yopo_dataset import write_dataset
 from uav_ac.yopo.whole_body.training.runner import TrainingConfig, train
 from uav_ac.yopo.whole_body.model.checkpoint import load_checkpoint
 from uav_ac.yopo.whole_body.deployment import YopoPlanner
@@ -9,7 +9,7 @@ from uav_ac.yopo.whole_body.data.dataset import PlanningDataset
 
 
 def test_train_save_resume_and_map_free_prediction(tmp_path):
-    root=tmp_path/'data';generate_dataset(DatasetConfig(profile='rolling_v2',scene_count=3,samples_per_scene=2,split_counts=(1,1,1)),root)
+    root=tmp_path/'data';write_dataset(root, samples_per_scene=2)
     dataset=root/'dataset';config=TrainingConfig(steps=2,train_samples=2,validation_samples=1,batch_size=1,width=4)
     result=train(config,dataset,tmp_path/'train')
     assert np.isfinite(result['final_train_cost'])
@@ -39,7 +39,7 @@ def test_train_save_resume_and_map_free_prediction(tmp_path):
 def test_ranking_training_and_gripper_contract(tmp_path):
     from dataclasses import replace
     import pytest
-    root=tmp_path/'data';generate_dataset(DatasetConfig(profile='rolling_v2',scene_count=3,samples_per_scene=1,split_counts=(1,1,1)),root)
+    root=tmp_path/'data';write_dataset(root, samples_per_scene=1)
     dataset=root/'dataset';config=TrainingConfig(steps=1,train_samples=1,validation_samples=1,batch_size=1,width=4,candidate_count=27)
     result=train(config,dataset,tmp_path/'train')
     assert result['candidate_count']==27 and np.isfinite(result['validation']['selected_cost'])
@@ -57,7 +57,7 @@ def test_ranking_training_and_gripper_contract(tmp_path):
 def test_primitive_training_save_load_deploy_and_profile_resume_guard(tmp_path):
     import pytest
     root=tmp_path/'data'
-    generate_dataset(DatasetConfig(profile='rolling_v2',scene_count=3,samples_per_scene=1,split_counts=(1,1,1)),root)
+    write_dataset(root, samples_per_scene=1)
     config=TrainingConfig(profile='primitive_v4',steps=1,train_samples=1,validation_samples=1,batch_size=1,width=4,candidate_count=27)
     report=train(config,root/'dataset',tmp_path/'primitive')
     assert np.isfinite(report['final_train_cost'])
@@ -79,7 +79,7 @@ def test_primitive_resume_keeps_saved_observation_normalization(tmp_path,monkeyp
     from uav_ac.yopo.whole_body.model.network import PrimitivePlannerNet
     from uav_ac.yopo.whole_body.model.checkpoint import save_checkpoint
     root=tmp_path/'data'
-    generate_dataset(DatasetConfig(profile='rolling_v2',scene_count=3,samples_per_scene=1,split_counts=(1,1,1)),root)
+    write_dataset(root, samples_per_scene=1)
     config=TrainingConfig(profile='primitive_v4',steps=1,train_samples=1,validation_samples=1,batch_size=1,width=4,candidate_count=27)
     train(config,root/'dataset',tmp_path/'initial')
     old,meta=load_checkpoint(tmp_path/'initial'/'last')

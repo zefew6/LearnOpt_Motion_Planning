@@ -10,7 +10,7 @@ def test_old_and_new_whole_body_imports_share_module_and_class_identity():
         old=importlib.import_module('uav_ac.yopo.'+suffix)
         new=importlib.import_module('uav_ac.yopo.whole_body.'+suffix)
         assert old is new
-    for old_suffix,new_suffix in (('data.legacy','data.sampling'),('training.legacy','training.oracle'),('trajectory.legacy','trajectory.parameterization')):
+    for old_suffix,new_suffix in (('training.legacy','training.oracle'),('trajectory.legacy','trajectory.parameterization')):
         assert importlib.import_module('uav_ac.yopo.'+old_suffix) is importlib.import_module('uav_ac.yopo.whole_body.'+new_suffix)
     from uav_ac.yopo.common.depth import DepthSpec
     from uav_ac.yopo.contracts import DepthSpec as OldDepthSpec
@@ -18,7 +18,7 @@ def test_old_and_new_whole_body_imports_share_module_and_class_identity():
 
 
 def test_old_and_new_cli_entrypoints_accept_help():
-    for suffix in ('training','data.generate'):
+    for suffix in ('training',):
         for prefix in ('uav_ac.yopo.','uav_ac.yopo.whole_body.'):
             result=subprocess.run([sys.executable,'-m',prefix+suffix,'--help'],capture_output=True,text=True)
             assert result.returncode==0,result.stderr

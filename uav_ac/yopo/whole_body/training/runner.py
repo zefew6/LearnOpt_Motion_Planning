@@ -15,7 +15,7 @@ from types import SimpleNamespace
 import numpy as np
 import torch
 import yaml
-from uav_ac.yopo.whole_body.data.config import _UniqueLoader
+from uav_ac.yopo.common.config import _UniqueLoader
 from uav_ac.yopo.whole_body.data.dataset import PlanningDataset
 from uav_ac.yopo.whole_body.training.oracle import DirectEvaluator
 from uav_ac.yopo.whole_body.training.losses import ranking_loss, augment_observation, guidance_costs, guidance_costs_from_result, score_loss, calibrate_cost_scale

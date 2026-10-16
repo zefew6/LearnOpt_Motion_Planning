@@ -40,6 +40,10 @@ def test_pinned_vendor_hashes_and_incompatible_checkpoint_rejection(tmp_path):
     manifest=json.loads((root/'provenance.json').read_text())
     for name,record in manifest['files'].items():
         assert hashlib.sha256((root/name).read_bytes()).hexdigest()==record['local_sha256']
+    simulator=root.parent/'yopo_simulator'
+    sources=json.loads((simulator/'provenance.json').read_text())
+    for name,record in sources['files'].items():
+        assert hashlib.sha256((simulator/name).read_bytes()).hexdigest()==record['local_sha256']
     (tmp_path/'metadata.json').write_text(json.dumps({'profile':'primitive_goal_v5'}))
     with pytest.raises(ValueError,match='profile/version'):load_checkpoint(tmp_path)
     (tmp_path/'metadata.json').write_text(json.dumps({'profile':'uav_official_minco_v1','upstream_commit':manifest['commit'],'weights_sha256':'invalid'}))

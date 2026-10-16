@@ -39,6 +39,18 @@ uav_ac = [
     "yopo/vendor/yopo_minco/LICENSE*",
     "yopo/vendor/yopo_minco/provenance.json",
     "yopo/vendor/yopo_minco/config/*.yaml",
+    "yopo/vendor/yopo_simulator/CMakeLists.txt",
+    "yopo/vendor/yopo_simulator/LICENSE",
+    "yopo/vendor/yopo_simulator/SOURCE.md",
+    "yopo/vendor/yopo_simulator/provenance.json",
+    "yopo/vendor/yopo_simulator/assets/*.ply",
+    "yopo/vendor/yopo_simulator/include/*.hpp",
+    "yopo/vendor/yopo_simulator/include/*.cuh",
+    "yopo/vendor/yopo_simulator/include/cuda_toolkit/*",
+    "yopo/vendor/yopo_simulator/include/simsense/*.h",
+    "yopo/vendor/yopo_simulator/src/*.cpp",
+    "yopo/vendor/yopo_simulator/src/*.cu",
+    "yopo/vendor/yopo_simulator/src/simsense/*.cu",
 ]
 
 [tool.pytest.ini_options]

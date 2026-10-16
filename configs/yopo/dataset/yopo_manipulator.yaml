@@ -1,0 +1,22 @@
+# Small starting recipe: independent full-body observations in official maps.
+# This is not a large training collection. Increase counts only for a new run.
+map_config: yopo_uav.yaml
+map_options:
+  maze_type: 6
+  x_length: 12
+  y_length: 12
+  z_length: 5
+  room_number: 3
+  max_windows: 2
+  window_size_min: 1.2
+  window_size_max: 2.0
+  add_ceiling: 0
+seed: 47
+split_counts: [1, 1, 1]
+samples_per_scene: 8
+max_attempts_per_sample: 300
+voxel_resolution: 0.15
+bounds: [[-4.0, -4.0, -3.2], [4.0, 4.0, -1.2]]
+gripper_gap: 0.06
+clearance: 0.05
+self_clearance: 0.015

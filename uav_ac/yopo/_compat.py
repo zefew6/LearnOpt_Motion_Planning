@@ -10,7 +10,7 @@ import sys
 
 _ROOT = 'uav_ac.yopo.'
 _OWNERS = {'model', 'data', 'training', 'trajectory', 'validation', 'contracts', 'deployment'}
-_RENAMED = {'data.legacy': 'data.sampling', 'training.legacy': 'training.oracle',
+_RENAMED = {'training.legacy': 'training.oracle',
             'trajectory.legacy': 'trajectory.parameterization'}
 
 

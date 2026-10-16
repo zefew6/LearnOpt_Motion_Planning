@@ -1,0 +1,219 @@
+{
+  "repository": "https://github.com/TJU-Aerial-Robotics/YOPO",
+  "commit": "d5e1e60f83cc991602f142d9b6b96204a24d6b9f",
+  "branch": "YOPO-MINCO",
+  "upstream_root": "Simulator/src",
+  "files": {
+    "CMakeLists.txt": {
+      "upstream_sha256": "a0bd7b35b9c80c4aaaae3e6f71d77651e07af5de5044da21a05b324808ade5f6",
+      "local_sha256": "dff62c78bd8cb0eacf6a8defbef25b9c0c00a3745137e5bbb82e7b1ae7de702a"
+    },
+    "LICENSE": {
+      "upstream_sha256": "ec49e110d9ee9a1dcf8d46cc1140b97001dc1b4922b272254c62d9d7838219a0",
+      "local_sha256": "ec49e110d9ee9a1dcf8d46cc1140b97001dc1b4922b272254c62d9d7838219a0"
+    },
+    "src/dataset_generator.cpp": {
+      "upstream_sha256": "f76c3c52f58ffb459340283e578f974b1f86bec2798c992737ad5cf275aab44f",
+      "local_sha256": "fcf8c68ca642a4c6d37f7e3564f400f3e107b78634fc14c814d2dde90d33e810"
+    },
+    "src/sensor_simulator.cu": {
+      "upstream_sha256": "0f763e10ccf72eb6236a20dd82f9ecd06682beb014653b619133f67f48c267ad",
+      "local_sha256": "d0b4f9e3ba96c6c6b04e91e107089475388618dc9e5581ac718c05ff72d2b45d"
+    },
+    "src/perlinnoise.cpp": {
+      "upstream_sha256": "88bfc344738684a8dc3defc3de073e6476191af0328ee4beed5a107a286ffd17",
+      "local_sha256": "88bfc344738684a8dc3defc3de073e6476191af0328ee4beed5a107a286ffd17"
+    },
+    "src/maps.cpp": {
+      "upstream_sha256": "1a473bdea5b6aa89e3ee67f07fb7c8f75426e8c9dc5bb0391e6f05b0061ab21b",
+      "local_sha256": "1654b4393ade28ad29c27eb911ac7308b5b2bcb9a5a9cc6ee5fea32a81222c95"
+    },
+    "include/sensor_simulator.cuh": {
+      "upstream_sha256": "89a4355d48bb6dd6ff49c70ee135ea0a7da382f11e1ccc1c00427ce17c64ac26",
+      "local_sha256": "89a4355d48bb6dd6ff49c70ee135ea0a7da382f11e1ccc1c00427ce17c64ac26"
+    },
+    "include/perlinnoise.hpp": {
+      "upstream_sha256": "d1d53588fd98bc199aa4f98b4ccb67a771f33f27052c47475e597d09cfd82796",
+      "local_sha256": "d1d53588fd98bc199aa4f98b4ccb67a771f33f27052c47475e597d09cfd82796"
+    },
+    "include/maps.hpp": {
+      "upstream_sha256": "426bbd1815167f578411d617c4c8fbfdce79749b604f65baaa5e60d595fe072b",
+      "local_sha256": "67e6e6eb5620cb551bae01df092f7e467a1c0de5e41312cc8656c9fb00ef673c"
+    },
+    "include/cuda_toolkit/helper_math.h": {
+      "upstream_sha256": "ef4883e9bfa2ca27b1a9c4c16ca2f421795a860fe7476bac1090a046c719bdfb",
+      "local_sha256": "22da68939239ef4d3ccf5296a4b9389b1e834c7793ad4b65a478bb382d61c39e"
+    },
+    "include/cuda_toolkit/se3.cuh": {
+      "upstream_sha256": "7ffe5d1be3515453f41e42532b63bc93bc8f39104edb544a37ed4ad41b36a5cf",
+      "local_sha256": "5390368fd6edff149e514be9e58c08b8c5f9586c3febe764a8eefe4025af5e18"
+    },
+    "include/cuda_toolkit/matrix.cuh": {
+      "upstream_sha256": "59136d8ce46c35c20f516926607145ca07d9ecde46a48dec8b13fec1f571c0c1",
+      "local_sha256": "de444d07ac31a67debfce39eea6d6f6cbe301d5897b8e3a45ea43b938a9a4c35"
+    },
+    "include/simsense/cost.h": {
+      "upstream_sha256": "bc0ffdd278ff66858c227733f633864f620326e19754b93c6c9b230db07cef87",
+      "local_sha256": "bc0ffdd278ff66858c227733f633864f620326e19754b93c6c9b230db07cef87"
+    },
+    "include/simsense/wta.h": {
+      "upstream_sha256": "7af233e1b271984b6d08fabd11df8489408dda429d658f384dd6696308ca3811",
+      "local_sha256": "7af233e1b271984b6d08fabd11df8489408dda429d658f384dd6696308ca3811"
+    },
+    "include/simsense/lrcheck.h": {
+      "upstream_sha256": "acbf7094b75181543527d35987fbe5656dc74e500c7ea95880d6dbd355252081",
+      "local_sha256": "acbf7094b75181543527d35987fbe5656dc74e500c7ea95880d6dbd355252081"
+    },
+    "include/simsense/aggr.h": {
+      "upstream_sha256": "c41a5a69c6af3f90af59b68c1933a833c49414fad2b2682a87bf3d1aaee78103",
+      "local_sha256": "c41a5a69c6af3f90af59b68c1933a833c49414fad2b2682a87bf3d1aaee78103"
+    },
+    "include/simsense/filter.h": {
+      "upstream_sha256": "1bcdd93da07a02c52d0b1fa485eec2cf1243af7d091fef94357044b12fe91fd9",
+      "local_sha256": "1bcdd93da07a02c52d0b1fa485eec2cf1243af7d091fef94357044b12fe91fd9"
+    },
+    "include/simsense/config.h": {
+      "upstream_sha256": "d3675c6a72605f86a8a9267ab06ecbd5491cf252143c58f8c1be82543b41a222",
+      "local_sha256": "d3675c6a72605f86a8a9267ab06ecbd5491cf252143c58f8c1be82543b41a222"
+    },
+    "include/simsense/csct.h": {
+      "upstream_sha256": "3969bde26ec26a91288f4134654becbe4f8c7cc95f181663f50d4c07c2393f3e",
+      "local_sha256": "72dd70cde0bb639ae83cddd709f446e5b01487e07984c8a49c6b1ce2d4b5e009"
+    },
+    "include/simsense/core.h": {
+      "upstream_sha256": "03048bae30ab16b7c9e9f51a78482f876edcd712070f50becda5cce1d0fd719d",
+      "local_sha256": "03048bae30ab16b7c9e9f51a78482f876edcd712070f50becda5cce1d0fd719d"
+    },
+    "include/simsense/camera.h": {
+      "upstream_sha256": "5b6667edb6e004a5a6237ed70922a67914371af61f7dc8927644d195ddeb9183",
+      "local_sha256": "5b6667edb6e004a5a6237ed70922a67914371af61f7dc8927644d195ddeb9183"
+    },
+    "src/simsense/lrcheck.cu": {
+      "upstream_sha256": "4f07fa61d454ad5dfd4afd5da4a2f529b52615f619795be80701a754238c66ac",
+      "local_sha256": "4f07fa61d454ad5dfd4afd5da4a2f529b52615f619795be80701a754238c66ac"
+    },
+    "src/simsense/cost.cu": {
+      "upstream_sha256": "bf082938af8cf7ba2abc0c6f8e81e066833bc3853aad33f5a007f2cf930200fe",
+      "local_sha256": "bf082938af8cf7ba2abc0c6f8e81e066833bc3853aad33f5a007f2cf930200fe"
+    },
+    "src/simsense/camera.cu": {
+      "upstream_sha256": "97320e80e5614cf31353a40a3dfe6cb5957eef3ddfaa0104031352381d5bdc91",
+      "local_sha256": "97320e80e5614cf31353a40a3dfe6cb5957eef3ddfaa0104031352381d5bdc91"
+    },
+    "src/simsense/filter.cu": {
+      "upstream_sha256": "dc039fed1872ab8a205f2e57de49c19ffad3edbeb68220cf5553e2f605ae1c9d",
+      "local_sha256": "dc039fed1872ab8a205f2e57de49c19ffad3edbeb68220cf5553e2f605ae1c9d"
+    },
+    "src/simsense/aggr.cu": {
+      "upstream_sha256": "0fcafb31a1bd7750b079be577ec10ca76e4d4ffbb18838c2f2e5747d058c5464",
+      "local_sha256": "6753a7f24855c0c2da399fb404d8af5582fb139f2ace0a19df271b9cd1b13f7f"
+    },
+    "src/simsense/csct.cu": {
+      "upstream_sha256": "e43c4bec83cc2a7ef0a15a97fa5a03e720fbda5a91741805a643ffd26c591763",
+      "local_sha256": "9385cb48fd0f94f7f734599c28244b4b7a990954fe29fa0ddbe50463f7909398"
+    },
+    "src/simsense/wta.cu": {
+      "upstream_sha256": "3fb482983be791cc97ef5928aee6733ac45a9d8f4bfe31b415b0ef557dac1308",
+      "local_sha256": "3fb482983be791cc97ef5928aee6733ac45a9d8f4bfe31b415b0ef557dac1308"
+    },
+    "src/simsense/core.cu": {
+      "upstream_sha256": "44b46137a8790d66a06d2e013b345bece8e709b66753416794da9d7e20272f05",
+      "local_sha256": "afb007e7a7dc68ee8e499290c3d653241a5e1dd6a0586723ece7959f7084dd3c"
+    },
+    "assets/tree.ply": {
+      "upstream_sha256": "10a47b4d0de50fbafefbb0e26426091ce9fbd2c2bc62b166b233a37749ea66bb",
+      "local_sha256": "10a47b4d0de50fbafefbb0e26426091ce9fbd2c2bc62b166b233a37749ea66bb"
+    },
+    "src/map_generator.cpp": {
+      "upstream_sha256": null,
+      "origin": "repository collection adapter",
+      "local_sha256": "887144d9718b2c4def3f76b46934cdf216359033b1d58062a90b603e543a36e5"
+    }
+  },
+  "excluded_viewer_and_reference_files": {
+    "readme.md": {
+      "upstream_sha256": "de0f75160d2c63728529e30126e031c6f9811ca01cdee261a44402eaf00635ff",
+      "local_sha256": "912df2596c847bfbc07b066202aaa809577d060a73b8aade61f37114a257efbe"
+    },
+    "package.xml": {
+      "upstream_sha256": "ee8881160a2e44c49e2c4b0920b14713b182c02b5a6ea6c355c64a3c322b5b3d",
+      "local_sha256": "ee8881160a2e44c49e2c4b0920b14713b182c02b5a6ea6c355c64a3c322b5b3d"
+    },
+    "rviz.rviz": {
+      "upstream_sha256": "704ebed74c854fa93731949f175634070e2ef0a6edfc9eaa1a78fa9f0f54e569",
+      "local_sha256": "704ebed74c854fa93731949f175634070e2ef0a6edfc9eaa1a78fa9f0f54e569"
+    },
+    "sim_odom.py": {
+      "upstream_sha256": "03dda0d55811b0db200d3cf884aafdddf2ef8f402b3f71bf12c8a004645da6f1",
+      "local_sha256": "03dda0d55811b0db200d3cf884aafdddf2ef8f402b3f71bf12c8a004645da6f1"
+    },
+    "src/test_simulator.cpp": {
+      "upstream_sha256": "0919dcc364230072770a65988cddd7676f27d0ae2538e98ea7da3719f202e372",
+      "local_sha256": "f22f25f2997f50a7bb6ca383f7887d049644146f7cb4cd6619e7f0229723827d"
+    },
+    "src/test_simulator_cuda.cpp": {
+      "upstream_sha256": "94cf93ea0be171f60d55ed53ef4e967698ad48d3c2604f226a43a7dd6457b2d5",
+      "local_sha256": "d3c886dd6f2a1fd0644998a71f1a103a193e32710c0ce41ef7475ca5b38d9582"
+    },
+    "src/sensor_simulator.cpp": {
+      "upstream_sha256": "2806dcea7457f241a64c241c88334ea1079bbfee2ee64fd92ee6bc9ccb3ac514",
+      "local_sha256": "8efb48f80611743f34002357c4d368f667ea19dcc63df3acbf79a897e244e768"
+    },
+    "include/sensor_simulator.h": {
+      "upstream_sha256": "a36c0a7289443f645892b1468108af7ef353f37538b46aeae3a70b9943251097",
+      "local_sha256": "fc0f1bd4dc420c6752b698da7cf11eb442950ca0e3fe67e4a04198f76602542e"
+    },
+    "img/scene.jpg": {
+      "upstream_sha256": "660250f62efc76d8ca962071cca3a434dba040826d494ae5647e9a5d2bbef2f5",
+      "local_sha256": "660250f62efc76d8ca962071cca3a434dba040826d494ae5647e9a5d2bbef2f5"
+    },
+    "img/depth.jpg": {
+      "upstream_sha256": "408726a7f9b7df20c31793ab5840bebbadd6a6a7816cc623a8d1637518ce1e09",
+      "local_sha256": "408726a7f9b7df20c31793ab5840bebbadd6a6a7816cc623a8d1637518ce1e09"
+    },
+    "img/stereo.jpg": {
+      "upstream_sha256": "b491d8765c43214dc1f64957fcaed17bf08b7a73e22ecca34c42b986f25104dd",
+      "local_sha256": "b491d8765c43214dc1f64957fcaed17bf08b7a73e22ecca34c42b986f25104dd"
+    },
+    "img/forest.png": {
+      "upstream_sha256": "41159361e40b1f58410c84719e73a6599a487919d37ce00f40b617fefa5ebd48",
+      "local_sha256": "41159361e40b1f58410c84719e73a6599a487919d37ce00f40b617fefa5ebd48"
+    },
+    "img/resource.png": {
+      "upstream_sha256": "a6a50eb9d354a2f885401f4d21246e87b7b8dd03e2df19c5c6f48e8f39007e00",
+      "local_sha256": "a6a50eb9d354a2f885401f4d21246e87b7b8dd03e2df19c5c6f48e8f39007e00"
+    },
+    "img/random_maze.png": {
+      "upstream_sha256": "76e8e52f2762236a48813b701595d19054464ffc2c9f6045294d7ca81fd5622d",
+      "local_sha256": "76e8e52f2762236a48813b701595d19054464ffc2c9f6045294d7ca81fd5622d"
+    },
+    "img/perlin3D.png": {
+      "upstream_sha256": "3450f9ab26c6e9399a749b63078ac0cbdf0f18206f6660c2130dd14f2ea7f387",
+      "local_sha256": "3450f9ab26c6e9399a749b63078ac0cbdf0f18206f6660c2130dd14f2ea7f387"
+    },
+    "img/building.png": {
+      "upstream_sha256": "04d52e819fc7d84b7b2120df7c75fa9f451e9a55b9d12cba83ea065a81278bb9",
+      "local_sha256": "04d52e819fc7d84b7b2120df7c75fa9f451e9a55b9d12cba83ea065a81278bb9"
+    },
+    "img/random_forest.png": {
+      "upstream_sha256": "0175b5af63226c54e934dee3f507ca729dc6a124de8cbf7a002afb358fa97e3a",
+      "local_sha256": "0175b5af63226c54e934dee3f507ca729dc6a124de8cbf7a002afb358fa97e3a"
+    },
+    "img/random_room.png": {
+      "upstream_sha256": "3de4e822a9a1c05e2ec99bd6a88115ee0d3ba2eed4689fce3342e72dcdbffa71",
+      "local_sha256": "3de4e822a9a1c05e2ec99bd6a88115ee0d3ba2eed4689fce3342e72dcdbffa71"
+    },
+    "config/config.yaml": {
+      "upstream_sha256": "ab5c770dd1767463bc46c1a8ea9a7d4afff9f937f99c107bb1032de5f478ac09",
+      "local_sha256": "ab5c770dd1767463bc46c1a8ea9a7d4afff9f937f99c107bb1032de5f478ac09"
+    }
+  },
+  "adaptations": [
+    "standalone collector CMake without ROS nodes",
+    "explicit config, refuse overwrite and check CUDA before writing data",
+    "ROS-only include/logging removed; trailing whitespace normalized",
+    "shared simulator extracted from yopo_minco; tree resource moved to assets/",
+    "CPU-only map_generator CLI reuses official Maps; optional CUDA image collector remains separate",
+    "set generated room wall PCL width/height before transformation; fixes PCL 1.12 division by zero without changing wall points"
+  ]
+}

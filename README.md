@@ -22,10 +22,7 @@ Built on [Mdhvince/UAV-Autonomous-control](https://github.com/Mdhvince/UAV-Auton
 
 ## Experiment videos
 
-The videos show the implemented planning and tracking pipelines in MuJoCo. The
-orange curve is the planned trajectory and the blue curve is the actual flight
-path. Convex regions are not drawn in the videos; they are shown separately in
-the FIRI figures below.
+The videos show the implemented planning and tracking pipelines in MuJoCo. 
 
 ### End2End Planner: You Only Plan Once
 
@@ -298,7 +295,7 @@ configs/
 ├── planning/                 Standalone planner experiments
 ├── rl/                       PPO / ACMPC training
 └── yopo/
-    ├── dataset/              Whole-body depth dataset generation
+    ├── dataset/              Official pure-UAV depth collection configuration
     └── train/                Guidance-learning training experiments
 uav_ac/
 ├── main.py                   CLI and interactive task dispatch
