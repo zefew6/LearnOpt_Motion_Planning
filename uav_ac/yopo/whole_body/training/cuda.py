@@ -38,10 +38,12 @@ class TorchGuidanceBatch:
     violations: torch.Tensor
     components: dict
     collision_components: dict
+    radius_dist: torch.Tensor | None = None
 
     def single(self,index):
         return TorchGuidanceBatch(self.costs[index],self.collided[index],self.violations[index],
-            {k:v[index] for k,v in self.components.items()},{k:v[index] for k,v in self.collision_components.items()})
+            {k:v[index] for k,v in self.components.items()},{k:v[index] for k,v in self.collision_components.items()},
+            self.radius_dist[index] if self.radius_dist is not None else None)
 
     def numpy(self):
         from uav_ac.yopo.whole_body.training.oracle import GuidanceBatch
@@ -150,9 +152,17 @@ class TorchGuidance:
         progress=settings.goal_weight*(huber(parallel).sum(-1)+settings.goal_perpendicular_weight*huber(error-parallel).sum(-1)+settings.goal_pose_weight*(huber(yaw_error/.7)+huber((tail[...,0,4:]-goal[...,4:])/.8).sum(-1)))
         if detach_guidance:progress=torch.where(collided,progress.detach(),progress)
         costs=safety+physical+curvature_cost+jerk+acceleration+time+progress
+        # Match official SNAP labels: nearest sampled state to ten uniform times.
+        # Clearance is the minimum across articulated body-sphere surfaces.
+        fractions=torch.linspace(0,1,settings.samples_per_piece,device=self.device,dtype=times.dtype)
+        sample_times=(times[...,None]*fractions).reshape(*times.shape[:-1],-1)
+        sample_times=sample_times+torch.cat((torch.zeros_like(times[...,:1]),times[...,:1]),-1).repeat_interleave(settings.samples_per_piece,-1)
+        label_times=times.sum(-1,keepdim=True)*torch.arange(1,11,device=self.device)/10
+        nearest=(sample_times[...,None,:]-label_times[...,:,None]).abs().argmin(-1)
+        radius_dist=environment.gather(-1,nearest).detach()
         return TorchGuidanceBatch(costs,collided,residual.amax((-2,-1)),
             dict(safety=safety,physical=physical,curvature=curvature_cost,jerk=jerk,acceleration=acceleration,time=time,progress=progress),
-            dict(environment=(environment<=0).any(-1),self=(own<=0).any(-1)))
+            dict(environment=(environment<=0).any(-1),self=(own<=0).any(-1)),radius_dist)
 
 
 class TorchGuidanceOracle:

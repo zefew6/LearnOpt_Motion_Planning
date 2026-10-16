@@ -1,0 +1,22 @@
+# Official ResNet18/YopoHead and training losses, extended to 8-D articulated MINCO.
+profile: official_whole_body_v1
+guidance_profile: yopo_minco_v1
+collision_model: esdf_spheres
+guidance_backend: torch_esdf
+steps: 30000
+train_samples: 0
+train_evaluation_samples: 64
+validation_samples: 128
+batch_size: 16
+candidate_count: 27
+width: 64
+seed: 0
+learning_rate: 0.00015
+sampling: shuffle
+device: cuda:0
+threads: 2
+oracle_map_resolution: 0.05
+evaluation_interval: 500
+checkpoint_interval: 100
+checkpoint_keep: 3
+self_clearance: 0.0

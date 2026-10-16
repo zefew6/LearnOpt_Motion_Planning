@@ -5,6 +5,16 @@ import torch
 from .core import OfficialCore,PROFILE,UPSTREAM_COMMIT
 
 
+def save_checkpoint(path,network,metadata):
+    from uav_ac.yopo.vendor.yopo_minco.config.config import Config
+    path=Path(path);path.mkdir(parents=True,exist_ok=False)
+    weights=path/'weights.pth';torch.save(network.state_dict(),weights)
+    info={**metadata,'profile':PROFILE,'upstream_commit':UPSTREAM_COMMIT,
+          'weights_sha256':hashlib.sha256(weights.read_bytes()).hexdigest(),
+          'official_configuration':Config().snapshot()}
+    (path/'metadata.json').write_text(json.dumps(info,indent=2)+'\n')
+
+
 def load_checkpoint(path,*,device='cpu',velocity=6.):
     path=Path(path)
     try:metadata=json.loads((path/'metadata.json').read_text())

@@ -1,0 +1,10 @@
+# Training defaults from pinned official YOPO/train_yopo.py.
+epochs: 50
+batch_size: 16
+learning_rate: 0.00015
+seed: 0
+device: cuda:0
+workers: 0
+threads: 2
+val_ratio: 0.1
+checkpoint_interval: 5

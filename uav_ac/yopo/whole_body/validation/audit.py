@@ -83,7 +83,7 @@ def audit(dataset_path,*,checkpoint=None,samples=3,seed=23,epsilon=1e-6):
     model=PrimitivePlannerNet(normalization,depth_spec=data.spec)
     if checkpoint:
         model,_=load_checkpoint(checkpoint,expected_robot_hash=data.manifest['robot_sha256'],expected_depth_spec=data.spec)
-        if getattr(model,'profile',None) not in ('primitive_v4','primitive_goal_v5'):raise ValueError('audit requires primitive_v4')
+        if getattr(model,'profile',None) not in ('primitive_v4','primitive_goal_v5','official_whole_body_v1'):raise ValueError('audit requires primitive_v4')
     model.eval();reports=[]
     for obs,priv in records:
         output=model(*tensors([obs],model.normalization,27,'cpu',model.profile,model.spec))

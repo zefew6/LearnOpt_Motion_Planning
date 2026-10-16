@@ -21,6 +21,7 @@ class NetworkOutput:
     parameters: torch.Tensor
     scores: torch.Tensor
     raw_parameters: torch.Tensor | None = None
+    radius: torch.Tensor | None = None
 
 
 def camera_feature_grid(xy,input_shape,feature_shape):
@@ -113,6 +114,9 @@ class PrimitivePlannerNet(nn.Module):
         self.head=nn.Sequential(nn.Conv2d(200,128,1),nn.ReLU(),nn.Conv2d(128,128,1),nn.ReLU())
         self.parameter_head=nn.Conv2d(128,34,1);self.score_head=nn.Conv2d(128,1,1)
         # Keep Conv2d initialization: free terminal outputs must not start identically zero.
+        self._register_geometry(normalization)
+
+    def _register_geometry(self,normalization):
         angles,rotations,xy=geometry(self.depth_spec,self.spec)
         for name,value in {'lower':normalization.joint_lower,'upper':normalization.joint_upper,
             'camera_rotation':self.depth_spec.camera_extrinsics[:3,:3],
@@ -183,14 +187,18 @@ class GoalPrimitivePlannerNet(PrimitivePlannerNet):
         spec=PrimitiveSpec(inner_min=0.,tail_min=0.) if spec is None else spec
         if spec.tail_min!=0. or spec.inner_min!=0.:raise ValueError('goal profile requires zero minimum reach')
         super().__init__(normalization,score_mode=score_mode,width=width,depth_spec=depth_spec,spec=spec)
-        # Project body-origin primitive centres into the physically mounted camera.
-        nominal=(spec.inner_min+spec.inner_max)/2*self.primitive_rotations[:,:,0]
-        optical=(nominal-self.camera_offset)@self.camera_rotation
-        self.sampling_xy.copy_(optical[:,:2]/optical[:,2:3]/self.fov_tangent)
+        self._align_body_grid()
         # Ordinary nonzero weights; sensible forward reach/time biases are shared initial priors only.
         with torch.no_grad():
             self.parameter_head.bias[8]+=1/np.sqrt(3.)
             self.parameter_head.bias[32:34]+=np.log(1.4/1.5)-np.log(.9/2.)
+
+    def _align_body_grid(self):
+        # Project body-origin primitive centres into the physically mounted camera.
+        spec=self.spec
+        nominal=(spec.inner_min+spec.inner_max)/2*self.primitive_rotations[:,:,0]
+        optical=(nominal-self.camera_offset)@self.camera_rotation
+        self.sampling_xy.copy_(optical[:,:2]/optical[:,2:3]/self.fov_tangent)
     def decode(self,raw,state,anchors):
         z=super().decode(raw,state,anchors)
         free=raw[:,:,8:11]
@@ -200,3 +208,48 @@ class GoalPrimitivePlannerNet(PrimitivePlannerNet):
         tail=torch.einsum('bnij,bnj->bni',body[:,None]@primitive[None],body_position)
         inner=z[:,:,:3]-torch.einsum('bij,j->bi',body,self.camera_offset)[:,None]
         return torch.cat((inner,z[:,:,3:8],tail,z[:,:,11:]),dim=-1)
+
+
+class OfficialWholeBodyPlannerNet(GoalPrimitivePlannerNet):
+    """Official ResNet18 + shared YopoHead, extended to articulated MINCO34.
+
+    Depth/mask replace the UAV's one-channel depth. Primitive-frame state has
+    58 features, and a three-way arm embedding conditions each spatial cell.
+    The extra 20 channels predict sampled whole-body environmental clearances;
+    they do not certify a safe corridor or filter candidates at deployment.
+    """
+    profile='official_whole_body_v1'
+
+    def __init__(self,normalization,*,score_mode='ranking',width=64,depth_spec=None,spec=None):
+        from uav_ac.yopo.vendor.yopo_minco.policy.models.backbone import YopoBackbone
+        from uav_ac.yopo.vendor.yopo_minco.policy.models.head import YopoHead
+        nn.Module.__init__(self)
+        if score_mode!='ranking' or width!=64:raise ValueError('official whole-body requires ranking and width 64')
+        self.normalization=normalization;self.score_mode=score_mode;self.width=width
+        self.depth_spec=DepthSpec() if depth_spec is None else depth_spec
+        self.spec=PrimitiveSpec(inner_min=0.,tail_min=0.) if spec is None else spec
+        if self.spec.inner_min!=0. or self.spec.tail_min!=0.:raise ValueError('official whole-body requires zero minimum reach')
+        self._register_geometry(normalization);self._align_body_grid()
+        self.backbone=YopoBackbone(64)
+        self.backbone.cnn.conv1=nn.Conv2d(2,64,7,2,3,bias=False)
+        self.mode_embedding=nn.Embedding(3,8)
+        self.head=YopoHead(64+58+8,34+1+20)
+        with torch.no_grad():
+            self.head.model[-1].bias[8]+=1/np.sqrt(3.)
+            self.head.model[-1].bias[32:34]+=np.log(1.4/1.5)-np.log(.9/2.)
+
+    def forward(self,depth,state,anchors):
+        if depth.shape[1:]!=(2,self.depth_spec.height,self.depth_spec.width) or state.shape!=(len(depth),58) or anchors.shape!=(len(depth),27,34):
+            raise ValueError('official whole-body requires calibrated depth/state and 27 anchors')
+        feature=self.backbone(depth);batch=len(depth)
+        grid=camera_feature_grid(self.sampling_xy[None].expand(batch,-1,-1),depth.shape[-2:],feature.shape[-2:]).reshape(batch,3,3,2)
+        local=nn.functional.grid_sample(feature,grid,align_corners=True,padding_mode='border')
+        encoded=primitive_state(state,self.primitive_rotations).transpose(1,2).reshape(batch,58,3,3)
+        predictions=[]
+        for mode in range(3):
+            condition=self.mode_embedding.weight[mode][None,:,None,None].expand(batch,-1,3,3)
+            predictions.append(self.head(torch.cat((local,encoded,condition),dim=1)))
+        pred=torch.stack(predictions,dim=-1).permute(0,2,3,4,1).reshape(batch,27,55)
+        raw=pred[:,:,:34];score=nn.functional.softplus(pred[:,:,34])
+        radius=torch.cat((torch.sigmoid(pred[:,:,35:45]),.02+.48*torch.sigmoid(pred[:,:,45:55])),dim=-1)
+        return NetworkOutput(self.decode(raw,state,anchors),score,raw,radius)

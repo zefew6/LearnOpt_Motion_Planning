@@ -20,7 +20,10 @@ from uav_ac.yopo.whole_body.data.dataset import PlanningDataset
 from uav_ac.yopo.whole_body.training.oracle import DirectEvaluator
 from uav_ac.yopo.whole_body.training.losses import ranking_loss, augment_observation, guidance_costs, guidance_costs_from_result, score_loss, calibrate_cost_scale
 from uav_ac.yopo.whole_body.training.guidance import MincoGuidanceEvaluator, MincoGuidanceConfig
-from uav_ac.yopo.whole_body.model.network import WholeBodyPlannerNet, PrimitivePlannerNet, GoalPrimitivePlannerNet
+from uav_ac.yopo.whole_body.model.network import WholeBodyPlannerNet, PrimitivePlannerNet, GoalPrimitivePlannerNet, OfficialWholeBodyPlannerNet
+from uav_ac.yopo.vendor.yopo_minco.loss.selection_loss import candidate_loss, radius_loss
+from uav_ac.yopo.vendor.yopo_minco.config.config import Config as OfficialConfig
+from uav_ac.yopo.uav.core import UPSTREAM_COMMIT
 from uav_ac.yopo.whole_body.model.primitives import PrimitiveSpec, primitive_anchors, encode_primitive, make_anchors
 from uav_ac.yopo.whole_body.model.encoding import Normalization, encode_observation
 from uav_ac.yopo.whole_body.model.checkpoint import save_checkpoint, load_checkpoint
@@ -71,8 +74,10 @@ class TrainingConfig:
         if self.collision_model not in ('planning_spheres','exact_geometry','esdf_spheres'):raise ValueError('unknown collision model')
         if not isinstance(self.families,(tuple,list)) or any(f not in ('free','obstacle','low','wall') for f in self.families) or len(set(self.families))!=len(self.families):raise ValueError('invalid curriculum families')
         object.__setattr__(self,'families',tuple(self.families))
-        if self.profile not in ('direct_v3','primitive_v4','primitive_goal_v5'):raise ValueError('unknown training profile')
-        if self.profile in ('primitive_v4','primitive_goal_v5') and self.candidate_count!=27:raise ValueError('primitive_v4 requires 27 candidates')
+        if self.profile not in ('direct_v3','primitive_v4','primitive_goal_v5','official_whole_body_v1'):raise ValueError('unknown training profile')
+        if self.profile in ('primitive_v4','primitive_goal_v5','official_whole_body_v1') and self.candidate_count!=27:raise ValueError('primitive_v4 requires 27 candidates')
+        if self.profile=='official_whole_body_v1' and (self.width!=64 or self.guidance_backend!='torch_esdf' or self.guidance_profile!='yopo_minco_v1'):
+            raise ValueError('official whole-body requires width 64 and torch_esdf / yopo_minco_v1 guidance')
         for name in ('steps','validation_samples','batch_size','width','evaluation_interval','threads','checkpoint_keep'):
             value=getattr(self,name)
             if isinstance(value,bool) or not isinstance(value,int) or value<1:raise ValueError(f'invalid {name}')
@@ -178,9 +183,9 @@ def _evaluate_guidance_worker(task):
 
 
 def tensors(observations,normalization,count,device,profile='direct_v3',primitive_spec=None):
-    if profile=='primitive_goal_v5' and primitive_spec is None:primitive_spec=PrimitiveSpec(inner_min=0.,tail_min=0.)
-    encoded=[encode_primitive(o,normalization,primitive_spec) if profile in ('primitive_v4','primitive_goal_v5') else encode_observation(o,normalization) for o in observations]
-    anchors=np.stack([primitive_anchors(o,normalization,primitive_spec) if profile in ('primitive_v4','primitive_goal_v5') else make_anchors(o,normalization,count=count) for o in observations])
+    if profile in ('primitive_goal_v5','official_whole_body_v1') and primitive_spec is None:primitive_spec=PrimitiveSpec(inner_min=0.,tail_min=0.)
+    encoded=[encode_primitive(o,normalization,primitive_spec) if profile in ('primitive_v4','primitive_goal_v5','official_whole_body_v1') else encode_observation(o,normalization) for o in observations]
+    anchors=np.stack([primitive_anchors(o,normalization,primitive_spec) if profile in ('primitive_v4','primitive_goal_v5','official_whole_body_v1') else make_anchors(o,normalization,count=count) for o in observations])
     return (torch.as_tensor(np.concatenate([e.depth for e in encoded]),device=device),
             torch.as_tensor(np.concatenate([e.state for e in encoded]),device=device),
             torch.as_tensor(anchors,dtype=torch.float32,device=device))
@@ -225,13 +230,14 @@ def train(config,dataset_path,run_dir,*,resume=None,warm_start=None):
     first_oracle=cache.get(samples[0][1]);robot=first_oracle.robot
     normalization=Normalization(tuple(robot.limits.joint_lower),tuple(robot.limits.joint_upper))
     mode='cost' if config.candidate_count==1 else 'ranking'
-    cls={'direct_v3':WholeBodyPlannerNet,'primitive_v4':PrimitivePlannerNet,'primitive_goal_v5':GoalPrimitivePlannerNet}[config.profile]
+    cls={'direct_v3':WholeBodyPlannerNet,'primitive_v4':PrimitivePlannerNet,'primitive_goal_v5':GoalPrimitivePlannerNet,'official_whole_body_v1':OfficialWholeBodyPlannerNet}[config.profile]
     model=cls(normalization,score_mode=mode,width=config.width,depth_spec=data.spec).to(config.device)
     if warm_start is not None:
         model,metadata=load_checkpoint(warm_start,device=config.device,expected_robot_hash=data.manifest['robot_sha256'],expected_depth_spec=data.spec)
         if metadata['profile']!=config.profile or metadata['candidate_count']!=config.candidate_count or model.width!=config.width or model.score_mode!=mode:raise ValueError('warm-start architecture/score mismatch')
         if metadata.get('gripper_gap')!=data.manifest['gripper_gap']:raise ValueError('warm-start gripper mismatch')
-    optimizer=torch.optim.AdamW(model.parameters(),lr=config.learning_rate,weight_decay=.0001)
+    weight_decay=.01 if config.profile=='official_whole_body_v1' else .0001
+    optimizer=torch.optim.AdamW(model.parameters(),lr=config.learning_rate,weight_decay=weight_decay)
     start_step=0;rng=np.random.default_rng(config.seed)
     if resume is not None:
         model,metadata=load_checkpoint(resume,device=config.device,expected_robot_hash=data.manifest['robot_sha256'],expected_depth_spec=data.spec)
@@ -245,7 +251,7 @@ def train(config,dataset_path,run_dir,*,resume=None,warm_start=None):
         if metadata.get('dataset_path')!=str(Path(dataset_path).resolve()) or metadata.get('gripper_gap')!=data.manifest['gripper_gap']:
             raise ValueError('resume dataset/gripper mismatch')
         state=torch.load(Path(resume)/'training_state.pt',map_location='cpu',weights_only=True)
-        optimizer=torch.optim.AdamW(model.parameters(),lr=config.learning_rate,weight_decay=.0001);optimizer.load_state_dict(state['optimizer'])
+        optimizer=torch.optim.AdamW(model.parameters(),lr=config.learning_rate,weight_decay=weight_decay);optimizer.load_state_dict(state['optimizer'])
         torch.set_rng_state(state['torch_rng']);start_step=int(state['step']);rng.bit_generator.state=state['numpy_rng']
         if start_step>=config.steps:raise ValueError('resume steps must extend checkpoint')
         if config.device.startswith('cuda') and 'cuda_rng' in state:torch.cuda.set_rng_state_all(state['cuda_rng'])
@@ -267,6 +273,12 @@ def train(config,dataset_path,run_dir,*,resume=None,warm_start=None):
               'gripper_gap':data.manifest['gripper_gap'],
               'collision_representation':{'backend':config.guidance_backend,'model':config.collision_model,'esdf_resolution_m':config.oracle_map_resolution,
                   'voxel_margin_affects':'safety_cost_only','version':1}}
+    official_settings=OfficialConfig().snapshot()
+    if config.profile=='official_whole_body_v1':
+        metadata['training_source']={'repository':'https://github.com/TJU-Aerial-Robotics/YOPO','commit':UPSTREAM_COMMIT,
+            'architecture':'official ResNet18 + YopoHead, depth/mask + 58 state features + arm modes',
+            'objective':'official candidate generation/ranking/inner regularizer/corridor NLL; articulated MINCO costs',
+            'radius_label':'minimum sampled whole-body sphere surface/environment clearance; no safety certificate'}
     def save(name,step):
         target=run/name;save_checkpoint(target,model,{**metadata,'completed_step':step})
         torch.save({'optimizer':optimizer.state_dict(),'torch_rng':torch.get_rng_state(),
@@ -295,7 +307,7 @@ def train(config,dataset_path,run_dir,*,resume=None,warm_start=None):
             elif executor:
                 physical=output.parameters.detach().cpu().numpy()
                 results=list(executor.map(_evaluate_guidance_worker,[(o,r[1],physical[i]) for i,(o,r) in enumerate(zip(observations,records))]))
-            loss=output.parameters.new_zeros(());raw_cost=[]
+            loss=output.parameters.new_zeros(());raw_cost=[];official_parts=[]
             for i,(observation,(_,priv)) in enumerate(zip(observations,records)):
                 if results is None:
                     oracle=cache.get(priv);costs=guidance_costs(output.parameters[i],observation,oracle,scale=cost_scale);result=oracle.last_result
@@ -304,6 +316,8 @@ def train(config,dataset_path,run_dir,*,resume=None,warm_start=None):
                 else:
                     result=results[i];costs=guidance_costs_from_result(output.parameters[i],result,scale=cost_scale)
                 raw_cost.append(float(result.costs.detach().mean()) if isinstance(result.costs,torch.Tensor) else float(result.costs.mean()))
+                if config.profile=='official_whole_body_v1':
+                    continue  # Aggregate across the complete mixed-map batch below.
                 if mode=='cost':loss=loss+costs.mean()+score_loss(output.scores[i],costs)
                 else:
                     unsafe=torch.as_tensor(result.collided if result.collided is not None else (result.components['environment']>1e-6)|(result.components['self']>1e-6)|(result.components['physical']>1e-6),device=config.device)
@@ -312,6 +326,19 @@ def train(config,dataset_path,run_dir,*,resume=None,warm_start=None):
                     rank,_=ranking_loss(scores,costs[None],unsafe[None])
                     normalized=costs/costs.detach().mean().clamp(min=.001)
                     loss=loss+(normalized*weights).mean()+rank
+            if config.profile=='official_whole_body_v1':
+                # Preserve official batch-wide feasible-inner averaging and CE.
+                costs=torch.stack([r.costs for r in results]);collided=torch.stack([r.collided for r in results])
+                normalized_goal=costs.new_tensor([min(1.,np.linalg.norm(o.goal[:3]-o.start_pva[0,:3])/model.spec.goal_clip) for o in observations])
+                inner=2*torch.sigmoid(output.raw_parameters[:,:,2])-1
+                value,rank,inner_reg=candidate_loss(costs,output.scores,collided,inner,normalized_goal,
+                    rank_weight=official_settings['rank_weight'],inner_reg_weight=official_settings['w_inner_reg'])
+                labels=torch.stack([r.radius_dist for r in results]).reshape(-1,10)
+                corridor=radius_loss(output.radius.reshape(-1,20),labels,
+                    warp_lambda=official_settings['radius_warp_lambda'],over_weight=official_settings['radius_over_weight'])
+                loss=(value+official_settings['w_radius']*corridor)*len(records)
+                official_parts.append({'generation':float((value-official_settings['rank_weight']*rank-official_settings['w_inner_reg']*inner_reg).detach()),
+                    'ranking':float(rank.detach()),'inner_regularizer':float(inner_reg.detach()),'radius_nll':float(corridor.detach())})
             guidance_seconds=time.perf_counter()-guidance_started
             loss=loss/len(records)
             if not torch.isfinite(loss):raise FloatingPointError('nonfinite training loss')
@@ -319,6 +346,7 @@ def train(config,dataset_path,run_dir,*,resume=None,warm_start=None):
             if not torch.isfinite(gradient_norm):raise FloatingPointError('nonfinite training gradient')
             optimizer.step()
             entry={'step':step+1,'loss':float(loss.detach()),'mean_cost':float(np.mean(raw_cost)),'gradient_norm':float(gradient_norm),'learning_rate':lr,'batch_samples':len(records),'step_seconds':time.perf_counter()-step_started,'guidance_seconds':guidance_seconds}
+            if official_parts:entry['official_losses']={key:float(np.mean([p[key] for p in official_parts])) for key in official_parts[0]}
             if (step+1)%config.evaluation_interval==0 or step+1==config.steps:
                 metrics=evaluate(model,val_samples,val_cache,config.candidate_count,config.device);entry['validation']=metrics
                 if checkpoint_priority(metrics)<best_validation:

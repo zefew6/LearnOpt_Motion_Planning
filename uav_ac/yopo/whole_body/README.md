@@ -44,11 +44,58 @@ fixed gripper is not a learned manipulation action. Samples are independent:
 there is no rollout, expert trajectory label, swept-volume certificate or global
 reachability guarantee. Map IDs are assigned wholly to train/validation/test.
 
-The output uses the existing whole-body `manifest.json` and numeric shard schema,
-so the existing guidance trainer and deployment checkpoint contract apply. Use
-`configs/yopo/train/yopo_cuda_large.yaml` for its existing training objective;
-its CUDA device requires a working GPU runtime. Generation alone does not prove
+The output uses the existing whole-body `manifest.json` and numeric shard schema.
+The current official-based training recipe is
+`configs/yopo/train/yopo_manipulator.yaml`; its CUDA device requires a working
+GPU runtime. Generation alone does not prove
 successful neural flight or that the arm has learned coordinated avoidance.
+
+## Official-based whole-body training
+
+`official_whole_body_v1` directly reuses the pinned official ResNet18 and
+`YopoHead`. The backbone takes depth plus validity mask; the shared head takes
+58 current-state/goal features rotated into each primitive frame, plus an arm
+mode embedding. The 3×3 spatial cells and three arm modes yield 27 candidates.
+Each candidate predicts 34 articulated MINCO parameters, a positive score and
+20 clearance mean/scale channels. Roll/pitch follow flatness, and the gripper
+remains fixed. There are no expert trajectory labels.
+
+```bash
+MUJOCO_GL=egl .venv/bin/python -m uav_ac.yopo.whole_body.training \
+  --config configs/yopo/train/yopo_manipulator.yaml \
+  --dataset runs/yopo_whole_body/<collection>/dataset \
+  --run-dir runs/yopo_whole_body/<new-training>
+```
+
+The generator's starter recipe is intentionally tiny; it is for interface checks,
+not a sufficient training dataset. Copy the training YAML into runs and reduce
+steps/evaluation counts and choose `device: cpu` for bounded smoke testing.
+The trainer does not generate more data. Use `--resume <directory>` for compatible
+optimizer/RNG continuation or `--warm-start <directory>` for a fresh optimizer.
+JSONL metrics include generation, ranking, inner-radius and clearance-NLL terms.
+
+Candidate loss and clearance NLL call the **same extracted official functions**
+as pure UAV training. Inner radius maps the whole-body sigmoid to [-1,1], and
+goal distance uses the saved primitive's goal_clip. Geometry-dependent trajectory
+costs extend the official objectives to eight axes, articulated FK/sphere
+environment distances, self-collision, joint limits/rates/accelerations and
+vehicle feasibility. Their whole-body scales and sampled constraints differ
+from the UAV point model. Existing flatness-consistent state shards are retained;
+optional observation augmentation uses the existing explicit settings, rather
+than replacing actual arm poses or depth with UAV random-state augmentation.
+
+The clearance target is the minimum environmental clearance across all robot
+sphere surfaces at the sample nearest each of ten uniform trajectory times.
+It is detached from trajectory gradients, as upstream. This is an approximate
+whole-body clearance predictor, **not a certified safe tube**. Deployment selects
+by score and does not use this head as a collision filter. Contact checks are
+discrete, and near-goal stopping remains disabled in the articulated objective.
+
+These checkpoints use schema 4 and a distinct profile; old direct_v3,
+primitive_v4 and primitive_goal_v5 checkpoints still load through their original
+architectures. Cross-profile resume/warm-start is rejected. Flight presets keep
+their existing trained checkpoint until a new one has been trained and evaluated.
+See [upstream boundary](../vendor/yopo_minco/SOURCE.md).
 
 ## Existing whole-body datasets
 
@@ -82,7 +129,7 @@ desktop is required for the live viewer.
 
 ## Network and primitive contracts
 
-The active profile is `primitive_goal_v5`. It keeps the 3×3 intermediate
+The earlier profile is `primitive_goal_v5`. It keeps the 3×3 intermediate
 primitive alignment described below, uses zero minimum intermediate reach, and
 predicts a free terminal vector in a bounded ball about the body origin. It
 rotates that vector from the primitive frame into the local gravity frame.
@@ -198,8 +245,8 @@ flight configuration is for online testing. See the [online task guide](#online)
 
 ## Guidance objective
 
-All tracked `configs/yopo/train/*.yaml` now select `guidance_profile:
-yopo_minco_v1`. This recipe excludes terminal stopping and initial gyro-matching
+The articulated training recipes select `guidance_profile: yopo_minco_v1`.
+This recipe excludes terminal stopping and initial gyro-matching
 costs. Each training item is one current
 state and depth image. Online replanning is a deployment operation.
 
@@ -222,9 +269,10 @@ or deployment candidate selection.
 
 The point-robot free-ball-chain certificate is not applied to articulated body
 motion. Contact classification uses 17 samples per piece including endpoints;
-it is a discrete whole-body check, not a continuous safety certificate. Safe
-corridor prediction, geodesic guidance, heading-gated speed shaping and the
-optional inner-radius regularizer are outside this four-component baseline.
+it is a discrete whole-body check, not a continuous safety certificate.
+Geodesic guidance and heading-gated speed shaping remain outside the articulated
+trajectory objective. The current official-based network adds inner-radius
+regularization and sampled clearance prediction to this earlier cost baseline.
 The upstream near-goal stopping term is explicitly disabled by user request.
 
 ### Trajectory cost
@@ -330,9 +378,11 @@ Historical acceptance reports retain their original rules and results.
 
 ## CUDA training and recovery
 
-This recipe trains independent single-frame observations, not motion rollouts.
-Every fixed map supplies many different collision-free current
-states and one fixed eight-dimensional goal from XML. Full geometry supplies
+This subsection describes the earlier `cuda_scale_v1` recipe. It trains
+independent single-frame observations, not motion rollouts. Every fixed map
+supplies many different collision-free current states and one fixed
+eight-dimensional goal from XML. The current collector and official-based
+recipe above instead support variable eight-dimensional goals. Full geometry supplies
 training-only whole-body costs/gradients. No expert trajectory is required.
 Start-to-goal global reachability is not certified for every random state.
 
@@ -341,7 +391,8 @@ Start-to-goal global reachability is not certified for every random state.
 The existing `cuda_scale_v1/data/dataset` artifact contains 20,000 frames in
 ten fixed maps: 14,000 train, 4,000 validation, 2,000 test. Its original wall/tree
 geometry is copied into the dataset. The retired generator is no longer available;
-the official collector above produces a separate pure-UAV format.
+the current whole-body collector produces compatible numeric shards from
+official maps. Pure-UAV collection has its separate PNG/CSV format.
 
 These historical frames retain self-occlusion, one fixed eight-dimensional goal,
 and independently sampled current PVA. Existing data/checkpoints are not rebuilt

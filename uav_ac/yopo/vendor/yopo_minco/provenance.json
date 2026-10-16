@@ -7,7 +7,11 @@
     "explicit device from scoped cfg",
     "primitive singleton scoped per config",
     "config loader replaced with scoped PyYAML adapter; derivations unchanged",
-    "remove trailing whitespace and final blank line; no numerical change"
+    "remove trailing whitespace and final blank line; no numerical change",
+    "training dataset/loss/trainer imported from the same pinned commit; numerical trainer methods retained, local orchestration explicit",
+    "Pillow plus integer nearest-neighbour indexing replaces OpenCV; RandomState ShuffleSplit replaces sklearn with identical ordering",
+    "shared scalar PLY reader replaces Open3D; ESDF voxelization, EDT and grid sampling unchanged",
+    "loss_aggregation and _radius_loss extracted as shared functions without numerical change; explicit dataset path and device"
   ],
   "files": {
     "config/traj_opt.yaml": {
@@ -57,6 +61,53 @@
     "config/config.py": {
       "upstream_sha256": "cbfead464a769ef58e3135978dca9bf95a81d37e0eb7ca4a18d56ca1aafbd180",
       "local_sha256": "55190f092d7abedc32fe70759946c9f0c10559021c95c4bf5998bc130414a4c1"
+    },
+    "loss/__init__.py": {
+      "upstream_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "local_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    "loss/feasible_loss.py": {
+      "upstream_sha256": "56154ec34349c3987b9527e37de65034aabce2fd07ba99cf0e8943122e3f462c",
+      "local_sha256": "090f46fa60fc45222d146caf63f53c35362c7b2458d1d696ba5ac67c688308d0"
+    },
+    "loss/guidance_loss.py": {
+      "upstream_sha256": "66d6c1d0d76693ed917b8dc683b0840eef22291cf23e5eee74218189a01b95f0",
+      "local_sha256": "66d6c1d0d76693ed917b8dc683b0840eef22291cf23e5eee74218189a01b95f0"
+    },
+    "loss/loss_function.py": {
+      "upstream_sha256": "261e4225aab86043ff042fa43307f32ef00ec38b05be5d1a92a677283af6a8e8",
+      "local_sha256": "1193461bb1ac332a123f9df27b9294a7000cf5bb8d6210bf4f210c747ec07317"
+    },
+    "loss/safety_loss.py": {
+      "upstream_sha256": "d376ffd913e9176dbc5b37bb702fd7dc904e10ec45b5987c8aa574ba48c6f9f1",
+      "local_sha256": "12dae332e448260726e0e8d5c398141564e1cf25c3632fce4e7812ad9858cc60"
+    },
+    "loss/smoothness_loss.py": {
+      "upstream_sha256": "562f0f9584b70eeaec388d71d2a88e1e309605fcebdced076e615a27683b898c",
+      "local_sha256": "562f0f9584b70eeaec388d71d2a88e1e309605fcebdced076e615a27683b898c"
+    },
+    "policy/yopo_dataset.py": {
+      "upstream_sha256": "8e05c29180c46c28aba9b3153bd5a790360a3b7406d371bd213efa74e7972e34",
+      "local_sha256": "30adba49fc2e2c21496741e00318db87e26b5ebd561fde40b86b02346aa01ad5"
+    },
+    "policy/yopo_trainer.py": {
+      "upstream_sha256": "6f99f3330bd602d96b67359431e85391cd1ac5f2bce4fe6bea15024a1a327ebe",
+      "local_sha256": "de64e8bf81ecf0c590464f4fa01b0b8ab73ce7e71164b446d20186362ba79a97"
+    },
+    "loss/selection_loss.py": {
+      "upstream_sha256": null,
+      "local_sha256": "243f32e3fe3f445424e88e8d2a7cdb3f18a2e86ef668523254ed03d992e5fec0",
+      "derived_from": [
+        "YOPO/policy/yopo_trainer.py::loss_aggregation",
+        "YOPO/policy/yopo_trainer.py::_radius_loss"
+      ]
     }
+  },
+  "entrypoint_defaults": {
+    "upstream_path": "YOPO/train_yopo.py",
+    "epochs": 50,
+    "batch_size": 16,
+    "learning_rate": 0.00015,
+    "seed": 0
   }
 }
